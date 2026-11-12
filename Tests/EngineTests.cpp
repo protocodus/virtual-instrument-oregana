@@ -10,10 +10,12 @@
 // extremes.
 #include "DSP/OreganaEngine.h"
 #include "DSP/OreganaPresets.h"
+#include "DSP/PipeRegulation.h"
 #include "../Tools/PipeMeasure.h"
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <initializer_list>
 #include <memory>
 #include <vector>
@@ -513,6 +515,91 @@ void MechanismIsHeard() {
     Expect(start > -75.0 && blower.Play(1.0).Peak() == 0.0, "MechanismIsHeard", "the blower is heard starting and then leaves an unplayed organ silent, dBFS", start);
 }
 
+// Four pipes stepped together (RunFour) are the bits of four stepped apart:
+// open flues, flues with a chimney or a harmonic pipe's upper half, and reeds,
+// through speech, a sagging wind and the ring after the pallet shuts.
+void FourPipesAreFourPipes() {
+#if defined(OREGANA_FOUR)
+    int rankFirst[kRankCount + 1] = {};
+    for (int r = 0; r < kRankCount; ++r) rankFirst[r + 1] = rankFirst[r] + kDivisionKeys[RankDivision(r)];
+    int compared[3] = {};
+    bool same = true;
+    for (int rank = 0; rank < kRankCount; ++rank) {
+        const int keys[4] = { 15, 27, 44, 63 };
+        std::vector<std::vector<float>> room(8, std::vector<float>(3 * 8192)), sound(8, std::vector<float>(32));
+        FluePipe flue[8];
+        ReedPipe reed[8];
+        bool exists = true, isReed = false;
+        for (int l = 0; l < 8; ++l) {
+            const int key = Min(keys[l % 4], kDivisionKeys[RankDivision(rank)] - 1 - (l % 4));
+            const PipePlan plan = PlanPipe(rank, key);
+            exists = exists && plan.exists;
+            if (!plan.exists) break;
+            isReed = plan.reed;
+            const double tuning = kPipeRegulation[rankFirst[rank] + key].tuning;
+            if (plan.reed) {
+                reed[l].loop = room[static_cast<std::size_t>(l)].data();
+                reed[l].Design(plan.tongue, plan.hz, tuning);
+                reed[l].Clear();
+                reed[l].random = static_cast<std::uint32_t>(77 + l % 4);
+            } else {
+                flue[l].loop = room[static_cast<std::size_t>(l)].data();
+                flue[l].jet = flue[l].loop + 8192;
+                flue[l].upper = flue[l].loop + 2 * 8192;
+                flue[l].Design(plan.flue, plan.hz, tuning);
+                flue[l].Clear();
+                flue[l].random = static_cast<std::uint32_t>(77 + l % 4);
+            }
+        }
+        if (!exists) continue;
+        const int kind = isReed ? 2 : flue[0].upperLength > 0 ? 1 : 0;
+        // A harmonic flute is harmonic from its middle up only: the engine
+        // never steps the two kinds together, and this rank's four are both.
+        bool mixed = false;
+        for (int l = 1; l < 4; ++l) mixed = mixed || (!isReed && (flue[l].upperLength > 0) != (flue[0].upperLength > 0));
+        if (mixed) continue;
+        ++compared[kind];
+        FluePipe* flues[4] = { &flue[4], &flue[5], &flue[6], &flue[7] };
+        ReedPipe* reeds[4] = { &reed[4], &reed[5], &reed[6], &reed[7] };
+        float* out[4] = { sound[4].data(), sound[5].data(), sound[6].data(), sound[7].data() };
+        for (int tick = 0; tick < 1500 && same; ++tick) {
+            const float wind = tick < 600 ? 1.0f : tick < 900 ? 0.55f : tick < 1000 ? 1.3f : 0.0f;
+            const int frames = 1 + (tick * 7) % 32;
+            for (int l = 0; l < 4; ++l) {
+                if (isReed) {
+                    for (ReedPipe* pipe : { &reed[l], &reed[l + 4] }) {
+                        pipe->wind = wind;
+                        pipe->Tick();
+                    }
+                    reed[l].Run(sound[static_cast<std::size_t>(l)].data(), frames);
+                } else {
+                    for (FluePipe* pipe : { &flue[l], &flue[l + 4] }) {
+                        pipe->wind = wind;
+                        pipe->Tick();
+                    }
+                    flue[l].Run(sound[static_cast<std::size_t>(l)].data(), frames);
+                }
+            }
+            if (isReed) ReedPipe::RunFour(reeds, out, frames);
+            else if (kind == 1) FluePipe::RunFour<true>(flues, out, frames);
+            else FluePipe::RunFour<false>(flues, out, frames);
+            for (std::size_t l = 0; l < 4; ++l)
+                same = same && std::memcmp(sound[l].data(), sound[l + 4].data(), static_cast<std::size_t>(frames) * sizeof(float)) == 0;
+        }
+        for (int l = 0; l < 4 && same; ++l)
+            same = isReed ? reed[l].tongue == reed[l + 4].tongue && reed[l].foot == reed[l + 4].foot && reed[l].random == reed[l + 4].random
+                          : flue[l].jetTransit == flue[l + 4].jetTransit && flue[l].foot == flue[l + 4].foot && flue[l].random == flue[l + 4].random
+                                && flue[l].jetAt == flue[l + 4].jetAt;
+        if (!same) {
+            std::printf("  rank %d differs (kind %d)\n", rank, kind);
+            break;
+        }
+    }
+    Expect(same && compared[0] > 10 && compared[1] > 0 && compared[2] > 5, "FourPipesAreFourPipes",
+           "every rank's pipes give the same samples four at a time as one at a time, ranks compared", compared[0] + compared[1] + compared[2]);
+#endif
+}
+
 // When a take first sounds, ms.
 double FirstSound(const Take& take) {
     for (std::size_t i = 0; i < take.left.size(); ++i)
@@ -988,6 +1075,7 @@ int main() {
     NaveLevel();
     Imperfections();
     MechanismIsHeard();
+    FourPipesAreFourPipes();
     EveryKeySounds();
     StopsSlide();
     RegistersSpeakApart();

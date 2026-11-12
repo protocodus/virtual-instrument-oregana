@@ -194,6 +194,13 @@ private:
     // From the pipes to the listener.
     static constexpr int kChunk = FluePipe::kTick;
     std::array<std::array<std::array<float, kChunk>, 2>, kDivisions> bus {};
+    // Each speaking pipe's sound for a chunk, made before any is added up,
+    // and the pipes of each kind that are stepped four at a time.
+    std::vector<float> scratch;
+    std::array<std::vector<FluePipe*>, 2> flueList;
+    std::array<std::vector<float*>, 2> flueSound;
+    std::vector<ReedPipe*> reedList;
+    std::vector<float*> reedSound;
     int untilTick = 0;
     float boxLow[2] {}, boxLowGain = 1.0f, boxHighGain = 1.0f, boxLowTarget = 1.0f, boxHighTarget = 1.0f;
     float dry = 0.0f, wet = 0.0f, dryTarget = 0.0f, wetTarget = 0.0f;

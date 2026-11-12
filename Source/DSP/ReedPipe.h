@@ -134,7 +134,22 @@ struct ReedPipe {
     }
     bool Silent() const { return wind == 0.0f && quiet > 16; }
 
+    // Adds `frames` samples of the pipe's sound to left and right.
     void Process(float* left, float* right, int frames) {
+        float sound[64];
+        for (int done = 0; done < frames;) {
+            const int n = Min(frames - done, 64);
+            Run(sound, n);
+            for (int i = 0; i < n; ++i) {
+                left[done + i] += gainLeft * sound[i];
+                right[done + i] += gainRight * sound[i];
+            }
+            done += n;
+        }
+    }
+
+    // `frames` samples of the pipe's sound, before its gains.
+    void Run(float* out, int frames) {
         float* const loopBuffer = loop;
         int at = loopAt;
         float apIn = allpassIn, apOut = allpassOut, lpOut = lowpassOut;
@@ -181,9 +196,7 @@ struct ReedPipe {
             y += v;
 
             // What the open end does not reflect, it radiates.
-            const float radiated = arrived - lpOut;
-            left[i] += gainLeft * radiated;
-            right[i] += gainRight * radiated;
+            out[i] = arrived - lpOut;
         }
         loopAt = at;
         allpassIn = apIn;
@@ -196,6 +209,85 @@ struct ReedPipe {
         foot = pressure;
         random = seed;
     }
+
+#if defined(OREGANA_FOUR)
+    // Run for four pipes at once, lane for lane the same arithmetic.
+    static void RunFour(ReedPipe* const pipe[4], float* const out[4], int frames) {
+#define OREGANA_LANES(field) Float4 { pipe[0]->field, pipe[1]->field, pipe[2]->field, pipe[3]->field }
+        const Float4 allpassC = OREGANA_LANES(allpass), lowpassC = OREGANA_LANES(lowpass), loopGainC = OREGANA_LANES(loopGain);
+        const Float4 massC = OREGANA_LANES(mass), impedanceC = OREGANA_LANES(impedance), stiffnessC = OREGANA_LANES(stiffness);
+        const Float4 dampingC = OREGANA_LANES(damping), closingC = OREGANA_LANES(closing), landingC = OREGANA_LANES(landing);
+        const Float4 landingLossC = OREGANA_LANES(landingLoss), flowC = OREGANA_LANES(flow), curveC = OREGANA_LANES(curve);
+        const Float4 noiseC = OREGANA_LANES(noise), drainC = OREGANA_LANES(drain);
+        const Float4 target = OREGANA_LANES(wind), rise = OREGANA_LANES(attack), fall = OREGANA_LANES(release);
+        Float4 apIn = OREGANA_LANES(allpassIn), apOut = OREGANA_LANES(allpassOut), lpOut = OREGANA_LANES(lowpassOut);
+        Float4 y = OREGANA_LANES(tongue), v = OREGANA_LANES(speed), inMass = OREGANA_LANES(massFlow), p = OREGANA_LANES(shallot);
+        Float4 pressure = OREGANA_LANES(foot);
+#undef OREGANA_LANES
+        const Float4 zero = Four(0.0f);
+        float* loopBuffer[4];
+        int at[4], loopSize[4];
+        UInt4 seed = { pipe[0]->random, pipe[1]->random, pipe[2]->random, pipe[3]->random };
+        for (int l = 0; l < 4; ++l) {
+            loopBuffer[l] = pipe[l]->loop;
+            at[l] = pipe[l]->loopAt;
+            loopSize[l] = pipe[l]->loopLength;
+        }
+        for (int i = 0; i < frames; ++i) {
+            const Float4 x = { loopBuffer[0][at[0]], loopBuffer[1][at[1]], loopBuffer[2][at[2]], loopBuffer[3][at[3]] };
+            const Float4 ap = allpassC * (x - apOut) + apIn;
+            apIn = x;
+            apOut = ap;
+            lpOut += lowpassC * (ap - lpOut);
+            const Float4 returning = loopGainC * lpOut;
+
+            const Float4 held = inMass + massC * p;
+            const Float4 p0 = impedanceC * (2.0f * returning - held);
+            const Float4 open = Choose(y > zero, y * y / (y + curveC), zero);
+            const Float4 white = NextNoise(seed);
+            const Float4 k = flowC * open * (1.0f + noiseC * white);
+            const Float4 across = pressure - p0;
+            const Float4 kz = k * k * impedanceC;
+            const Float4 size = 0.5f * (Sqrt(kz * kz + 4.0f * k * k * Abs(across)) - kz);
+            const Float4 through = Choose(across < zero, -size, size);
+            p = p0 + impedanceC * through;
+            const Float4 gap = target - pressure;
+            pressure += gap * Choose(gap > zero, rise, fall) - drainC * through;
+            pressure = Choose(pressure < zero, zero, pressure);
+            inMass = held + massC * p;
+            const Float4 leaving = p - returning;
+            for (int l = 0; l < 4; ++l) {
+                loopBuffer[l][at[l]] = leaving[l];
+                if (++at[l] == loopSize[l]) at[l] = 0;
+            }
+
+            Float4 pull = stiffnessC * (1.0f - y) - dampingC * v - stiffnessC * closingC * (pressure - p);
+            const Float4 face = landingC - landingLossC * v;
+            pull = Choose(y < zero, pull - y * Choose(zero > face, zero, face), pull);
+            v += pull;
+            y += v;
+
+            const Float4 radiated = ap - lpOut;
+            out[0][i] = radiated[0];
+            out[1][i] = radiated[1];
+            out[2][i] = radiated[2];
+            out[3][i] = radiated[3];
+        }
+        for (int l = 0; l < 4; ++l) {
+            ReedPipe& r = *pipe[l];
+            r.loopAt = at[l];
+            r.allpassIn = apIn[l];
+            r.allpassOut = apOut[l];
+            r.lowpassOut = lpOut[l];
+            r.tongue = y[l];
+            r.speed = v[l];
+            r.massFlow = inMass[l];
+            r.shallot = p[l];
+            r.foot = pressure[l];
+            r.random = seed[l];
+        }
+    }
+#endif
 };
 
 } // namespace oregana

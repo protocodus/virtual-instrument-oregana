@@ -212,6 +212,11 @@ Engine::Engine() {
     reeds.resize(static_cast<std::size_t>(reedCount));
     active.reserve(static_cast<std::size_t>(kPipeCount));
     pending.reserve(static_cast<std::size_t>(4 * kPipeCount));
+    scratch.assign(static_cast<std::size_t>(kPipeCount) * kChunk, 0.0f);
+    for (auto& list : flueList) list.reserve(flues.size());
+    for (auto& list : flueSound) list.reserve(flues.size());
+    reedList.reserve(reeds.size());
+    reedSound.reserve(reeds.size());
     float* next = arena.data();
     for (Slot& s : slots) {
         if (s.index < 0) continue;
@@ -806,20 +811,67 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
         for (auto& channel : division)
             for (int i = 0; i < frames; ++i) channel[static_cast<std::size_t>(i)] = 0.0f;
     // The pipes already speaking, then those whose wind arrives within
-    // these frames, each from its own sample on.
-    const auto process = [&](const Slot& s, int from) {
-        if (s.resting) return;
+    // these frames, each from its own sample on. Each pipe's sound is made
+    // first, four pipes of a kind at a time where there are four, and then
+    // added to its division in the list's order.
+    const auto add = [&](const Slot& s, const float* sound, int from) {
         float* const busLeft = bus[s.division][0].data() + from;
         float* const busRight = bus[s.division][1].data() + from;
-        if (s.reed) reeds[static_cast<std::size_t>(s.index)].Process(busLeft, busRight, frames - from);
-        else flues[static_cast<std::size_t>(s.index)].Process(busLeft, busRight, frames - from);
+        const float gainLeft = s.reed ? reeds[static_cast<std::size_t>(s.index)].gainLeft : flues[static_cast<std::size_t>(s.index)].gainLeft;
+        const float gainRight = s.reed ? reeds[static_cast<std::size_t>(s.index)].gainRight : flues[static_cast<std::size_t>(s.index)].gainRight;
+        for (int i = 0; i < frames - from; ++i) {
+            busLeft[i] += gainLeft * sound[i];
+            busRight[i] += gainRight * sound[i];
+        }
     };
-    for (std::size_t i = 0, count = active.size(); i < count; ++i) process(slots[static_cast<std::size_t>(active[i])], 0);
+    // Open flues, flues with a pipe beyond a junction, and reeds.
+    for (auto& list : flueList) list.clear();
+    for (auto& list : flueSound) list.clear();
+    reedList.clear();
+    reedSound.clear();
+    const std::size_t count = active.size();
+    for (std::size_t j = 0; j < count; ++j) {
+        const Slot& s = slots[static_cast<std::size_t>(active[j])];
+        if (s.resting) continue;
+        float* const sound = scratch.data() + j * kChunk;
+        if (s.reed) {
+            reedList.push_back(&reeds[static_cast<std::size_t>(s.index)]);
+            reedSound.push_back(sound);
+        } else {
+            FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
+            const std::size_t kind = pipe.upperLength > 0 ? 1 : 0;
+            flueList[kind].push_back(&pipe);
+            flueSound[kind].push_back(sound);
+        }
+    }
+    for (std::size_t kind = 0; kind < 2; ++kind) {
+        std::size_t done = 0;
+#if defined(OREGANA_FOUR)
+        for (; done + 4 <= flueList[kind].size(); done += 4) {
+            if (kind == 0) FluePipe::RunFour<false>(flueList[kind].data() + done, flueSound[kind].data() + done, frames);
+            else FluePipe::RunFour<true>(flueList[kind].data() + done, flueSound[kind].data() + done, frames);
+        }
+#endif
+        for (; done < flueList[kind].size(); ++done) flueList[kind][done]->Run(flueSound[kind][done], frames);
+    }
+    std::size_t done = 0;
+#if defined(OREGANA_FOUR)
+    for (; done + 4 <= reedList.size(); done += 4) ReedPipe::RunFour(reedList.data() + done, reedSound.data() + done, frames);
+#endif
+    for (; done < reedList.size(); ++done) reedList[done]->Run(reedSound[done], frames);
+    for (std::size_t j = 0; j < count; ++j) {
+        const Slot& s = slots[static_cast<std::size_t>(active[j])];
+        if (!s.resting) add(s, scratch.data() + j * kChunk, 0);
+    }
     std::size_t arrived = 0;
     for (; arrived < pending.size() && pending[arrived].due < now + static_cast<std::uint64_t>(frames); ++arrived) {
         const Pending arriving = pending[arrived];
         if (!Take(arriving.slot, arriving.share)) continue;
-        process(slots[static_cast<std::size_t>(arriving.slot)], static_cast<int>(arriving.due - now));
+        const Slot& s = slots[static_cast<std::size_t>(arriving.slot)];
+        const int from = static_cast<int>(arriving.due - now);
+        if (s.reed) reeds[static_cast<std::size_t>(s.index)].Run(scratch.data(), frames - from);
+        else flues[static_cast<std::size_t>(s.index)].Run(scratch.data(), frames - from);
+        add(s, scratch.data(), from);
     }
     pending.erase(pending.begin(), pending.begin() + static_cast<std::ptrdiff_t>(arrived));
     now += static_cast<std::uint64_t>(frames);

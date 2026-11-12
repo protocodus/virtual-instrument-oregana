@@ -328,6 +328,20 @@ struct FluePipe {
 
     // Adds `frames` samples of the pipe's sound to left and right.
     void Process(float* left, float* right, int frames) {
+        float sound[64];
+        for (int done = 0; done < frames;) {
+            const int n = Min(frames - done, 64);
+            Run(sound, n);
+            for (int i = 0; i < n; ++i) {
+                left[done + i] += gainLeft * sound[i];
+                right[done + i] += gainRight * sound[i];
+            }
+            done += n;
+        }
+    }
+
+    // `frames` samples of the pipe's sound, before its gains.
+    void Run(float* out, int frames) {
         float* const loopBuffer = loop;
         float* const jetBuffer = jet;
         float* const upperBuffer = upper;
@@ -390,8 +404,7 @@ struct FluePipe {
             const float flow = returned + leaving;
             radOut = radiation * (radOut + flow - radIn);
             radIn = flow;
-            left[i] += gainLeft * radOut;
-            right[i] += gainRight * radOut;
+            out[i] = radOut;
             transit += jetStep;
         }
         loopAt = at;
@@ -412,6 +425,136 @@ struct FluePipe {
         jetTransit = Clamp(transit, 0.0f, jetLongest);
         random = seed;
     }
+
+#if defined(OREGANA_FOUR)
+    // Run for four pipes at once, lane for lane the same arithmetic. `Upper`:
+    // all four have a pipe beyond a junction, else none has.
+    template <bool Upper>
+    static void RunFour(FluePipe* const pipe[4], float* const out[4], int frames) {
+#define OREGANA_LANES(field) Float4 { pipe[0]->field, pipe[1]->field, pipe[2]->field, pipe[3]->field }
+        const Float4 allpassC = OREGANA_LANES(allpass), lowpassC = OREGANA_LANES(lowpass), loopGainC = OREGANA_LANES(loopGain);
+        const Float4 dcPoleC = OREGANA_LANES(dcPole), jetLowpassC = OREGANA_LANES(jetLowpass), jetGainC = OREGANA_LANES(jetGain);
+        const Float4 offsetC = OREGANA_LANES(offset), sourceC = OREGANA_LANES(source), noiseC = OREGANA_LANES(noise);
+        const Float4 puffC = OREGANA_LANES(puff), shedC = OREGANA_LANES(shed), radiationC = OREGANA_LANES(radiation);
+        const Float4 upFromBelowC = OREGANA_LANES(upFromBelow), upFromAboveC = OREGANA_LANES(upFromAbove);
+        const Float4 downFromBelowC = OREGANA_LANES(downFromBelow), downFromAboveC = OREGANA_LANES(downFromAbove);
+        const Float4 upperLowpassC = OREGANA_LANES(upperLowpass), upperGainC = OREGANA_LANES(upperGain), upperAllpassC = OREGANA_LANES(upperAllpass);
+        const Float4 target = OREGANA_LANES(wind), rise = OREGANA_LANES(attack), fall = OREGANA_LANES(release);
+        Float4 upperLp = OREGANA_LANES(upperOut), upperApIn = OREGANA_LANES(upperAllpassIn), upperApOut = OREGANA_LANES(upperAllpassOut);
+        Float4 apIn = OREGANA_LANES(allpassIn), apOut = OREGANA_LANES(allpassOut), lpOut = OREGANA_LANES(lowpassOut);
+        Float4 blockIn = OREGANA_LANES(dcIn), blockOut = OREGANA_LANES(dcOut), jetLp = OREGANA_LANES(jetOut);
+        Float4 radIn = OREGANA_LANES(radiationIn), radOut = OREGANA_LANES(radiationOut), pressure = OREGANA_LANES(foot);
+#undef OREGANA_LANES
+        const Float4 zero = Four(0.0f), one = Four(1.0f);
+        float* loopBuffer[4];
+        float* jetBuffer[4];
+        float* upperBuffer[4];
+        int at[4], upperRead[4], loopSize[4], upperTrip[4];
+        for (int l = 0; l < 4; ++l) {
+            loopBuffer[l] = pipe[l]->loop;
+            jetBuffer[l] = pipe[l]->jet;
+            upperBuffer[l] = pipe[l]->upper;
+            at[l] = pipe[l]->loopAt;
+            upperRead[l] = pipe[l]->upperAt;
+            loopSize[l] = pipe[l]->loopLength;
+            upperTrip[l] = pipe[l]->upperLength;
+        }
+        Int4 jetWrite = { pipe[0]->jetAt, pipe[1]->jetAt, pipe[2]->jetAt, pipe[3]->jetAt };
+        const Int4 jetCount = { pipe[0]->jetLength, pipe[1]->jetLength, pipe[2]->jetLength, pipe[3]->jetLength };
+        const Float4 jetSize = ToFloat(jetCount);
+        Float4 transit = { pipe[0]->jetTransit, pipe[1]->jetTransit, pipe[2]->jetTransit, pipe[3]->jetTransit };
+        const Float4 step = { pipe[0]->jetStep, pipe[1]->jetStep, pipe[2]->jetStep, pipe[3]->jetStep };
+        UInt4 seed = { pipe[0]->random, pipe[1]->random, pipe[2]->random, pipe[3]->random };
+        for (int i = 0; i < frames; ++i) {
+            const Float4 gap = target - pressure;
+            const Int4 filling = gap > zero;
+            pressure += gap * Choose(filling, rise, fall);
+
+            const Float4 x = { loopBuffer[0][at[0]], loopBuffer[1][at[1]], loopBuffer[2][at[2]], loopBuffer[3][at[3]] };
+            const Float4 ap = allpassC * (x - apOut) + apIn;
+            apIn = x;
+            apOut = ap;
+            Float4 turned = ap;
+            if (Upper) {
+                const Float4 stored = { upperBuffer[0][upperRead[0]], upperBuffer[1][upperRead[1]], upperBuffer[2][upperRead[2]],
+                                        upperBuffer[3][upperRead[3]] };
+                const Float4 back = upperAllpassC * (stored - upperApOut) + upperApIn;
+                upperApIn = stored;
+                upperApOut = back;
+                upperLp += upperLowpassC * (upFromBelowC * ap + upFromAboveC * back - upperLp);
+                const Float4 up = -upperGainC * upperLp;
+                for (int l = 0; l < 4; ++l) {
+                    upperBuffer[l][upperRead[l]] = up[l];
+                    if (++upperRead[l] == upperTrip[l]) upperRead[l] = 0;
+                }
+                turned = downFromBelowC * ap + downFromAboveC * back;
+            }
+            lpOut += lowpassC * (turned - lpOut);
+            const Float4 passed = loopGainC * lpOut;
+            const Float4 returned = passed - blockIn + dcPoleC * blockOut;
+            blockIn = passed;
+            blockOut = returned;
+
+            for (int l = 0; l < 4; ++l) jetBuffer[l][jetWrite[l]] = returned[l];
+            Float4 read = ToFloat(jetWrite) - transit;
+            read = Choose(read < zero, read + jetSize, read);
+            // A read just under 0 rounds up to the buffer's length as a float.
+            Int4 older = Truncated(read);
+            older &= ~(older >= jetCount);
+            Int4 newer = older + 1;
+            newer &= ~(newer == jetCount);
+            const Float4 between = read - ToFloat(older);
+            const Float4 early = { jetBuffer[0][older[0]], jetBuffer[1][older[1]], jetBuffer[2][older[2]], jetBuffer[3][older[3]] };
+            const Float4 late = { jetBuffer[0][newer[0]], jetBuffer[1][newer[1]], jetBuffer[2][newer[2]], jetBuffer[3][newer[3]] };
+            const Float4 deflection = early + between * (late - early);
+            jetWrite += 1;
+            jetWrite &= ~(jetWrite == jetCount);
+            transit += step;
+            const Float4 white = NextNoise(seed);
+            jetLp += jetLowpassC * (deflection - jetLp);
+
+            const Float4 turbulence = noiseC * white;
+            const Float4 swing = jetGainC * jetLp + offsetC + turbulence;
+            const Float4 swing2 = swing * swing;
+            const Float4 shape = Choose(swing > Four(3.0f), one,
+                                        Choose(swing < Four(-3.0f), -one, swing * (27.0f + swing2) / (27.0f + 9.0f * swing2)));
+            const Float4 blown = -sourceC * pressure * shape + Choose(filling, puffC * gap * pressure, zero);
+            const Float4 leaving = returned + blown - shedC * Abs(returned) * returned;
+            for (int l = 0; l < 4; ++l) {
+                loopBuffer[l][at[l]] = leaving[l];
+                if (++at[l] == loopSize[l]) at[l] = 0;
+            }
+
+            const Float4 flow = returned + leaving;
+            radOut = radiationC * (radOut + flow - radIn);
+            radIn = flow;
+            out[0][i] = radOut[0];
+            out[1][i] = radOut[1];
+            out[2][i] = radOut[2];
+            out[3][i] = radOut[3];
+        }
+        for (int l = 0; l < 4; ++l) {
+            FluePipe& p = *pipe[l];
+            p.loopAt = at[l];
+            p.jetAt = jetWrite[l];
+            p.upperAt = upperRead[l];
+            p.upperOut = upperLp[l];
+            p.upperAllpassIn = upperApIn[l];
+            p.upperAllpassOut = upperApOut[l];
+            p.allpassIn = apIn[l];
+            p.allpassOut = apOut[l];
+            p.lowpassOut = lpOut[l];
+            p.dcIn = blockIn[l];
+            p.dcOut = blockOut[l];
+            p.jetOut = jetLp[l];
+            p.radiationIn = radIn[l];
+            p.radiationOut = radOut[l];
+            p.foot = pressure[l];
+            p.jetTransit = Clamp(transit[l], 0.0f, p.jetLongest);
+            p.random = seed[l];
+        }
+    }
+#endif
 
 private:
     double attackSeconds = 0.003;

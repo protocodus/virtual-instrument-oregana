@@ -25,6 +25,14 @@ if(OREGANA_ENABLE_SANITIZERS)
     add_link_options(-fsanitize=address,undefined,float-cast-overflow)
 endif()
 
+if(NOT MSVC)
+    # The Rack toolchain never joins a multiply and an add into one rounding.
+    # Neither does this build, so that a pipe's tuning and level
+    # (PipeRegulation.h) are the same numbers on every processor, and four
+    # pipes stepped together are the bits of four stepped apart.
+    add_compile_options(-ffp-contract=off)
+endif()
+
 set(OREGANA_DSP_SOURCES Source/DSP/OreganaEngine.cpp)
 set(OREGANA_DSP_HEADERS
     Source/DSP/DspMath.h
