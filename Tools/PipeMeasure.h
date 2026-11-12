@@ -7,6 +7,9 @@
 #include <cstddef>
 #include <vector>
 
+#include "DSP/DspMath.h"
+#include "DSP/Stops.h"
+
 namespace oregana::measure {
 
 constexpr double kTwoPi = 6.283185307179586;
@@ -44,24 +47,44 @@ inline double Hz(const std::vector<float>& x, std::size_t from, std::size_t end,
 inline double CoarseHz(const std::vector<float>& x, std::size_t from, std::size_t end, double guess, double rate) {
     const auto shortest = static_cast<std::size_t>(rate / (guess * 2.8)), longest = static_cast<std::size_t>(rate / guess * 2.8);
     if (from + 3 * longest > end) return guess;
-    const std::size_t span = end - from - longest;
-    double best = -1.0, energy = 0.0;
-    std::size_t bestLag = static_cast<std::size_t>(rate / guess);
-    for (std::size_t i = 0; i < span; ++i) energy += static_cast<double>(x[from + i]) * x[from + i];
-    for (std::size_t lag = shortest; lag <= longest; ++lag) {
+    // A treble pipe's period is a few samples and seldom a whole number of
+    // them, and a reed's match peaks sharply: whole lags alone favour
+    // whichever multiple of the period lands nearest a sample. Smoothed to
+    // little more than the fundamental, each peak is broad enough to read
+    // off the parabola through it.
+    std::vector<double> y(end - from);
+    const double smooth = 1.0 - std::exp(-kTwoPi * Min(1.5 * guess, 0.4 * rate) / rate);
+    double one = 0.0, two = 0.0;
+    for (std::size_t i = 0; i < y.size(); ++i) {
+        one += smooth * (static_cast<double>(x[from + i]) - one);
+        two += smooth * (one - two);
+        y[i] = two;
+    }
+    const std::size_t span = y.size() - longest - 1;
+    double energy = 0.0;
+    for (std::size_t i = 0; i < span; ++i) energy += y[i] * y[i];
+    std::vector<double> match(longest + 2, 0.0);
+    for (std::size_t lag = shortest > 1 ? shortest - 1 : 1; lag <= longest + 1; ++lag) {
         double sum = 0.0, other = 0.0;
         for (std::size_t i = 0; i < span; ++i) {
-            sum += static_cast<double>(x[from + i]) * x[from + i + lag];
-            other += static_cast<double>(x[from + i + lag]) * x[from + i + lag];
+            sum += y[i] * y[i + lag];
+            other += y[i + lag] * y[i + lag];
         }
-        const double match = sum / std::sqrt(energy * other + 1e-30);
-        // The first lag that matches nearly as well as any: a period, not its multiple.
-        if (match > best + 0.02) {
-            best = match;
-            bestLag = lag;
+        match[lag] = sum / std::sqrt(energy * other + 1e-30);
+    }
+    // The first peak that matches nearly as well as any: a period, not its multiple.
+    double best = -1.0, bestLag = rate / guess;
+    for (std::size_t lag = Max<std::size_t>(shortest, 2); lag <= longest; ++lag) {
+        const double before = match[lag - 1], here = match[lag], after = match[lag + 1];
+        if (here < before || here <= after) continue;
+        const double shift = 0.5 * (before - after) / (before - 2.0 * here + after);
+        const double peak = here - 0.25 * (before - after) * shift;
+        if (peak > best + 0.02) {
+            best = peak;
+            bestLag = static_cast<double>(lag) + shift;
         }
     }
-    return rate / static_cast<double>(bestLag);
+    return rate / bestLag;
 }
 
 inline double Rms(const std::vector<float>& x, std::size_t from, std::size_t end) {
@@ -82,6 +105,43 @@ inline double SpeechSeconds(const std::vector<float>& x, double hz, double stead
             return static_cast<double>(i) / rate;
     }
     return static_cast<double>(x.size()) / rate;
+}
+
+// A planned pipe alone at a steady wind, from silence, at unity gain.
+inline std::vector<float> Sound(const PipePlan& plan, double tuning, std::size_t frames, double wind = 1.0) {
+    std::vector<float> left(frames, 0.0f), right(frames, 0.0f), loop, jet, upper;
+    FluePipe flue;
+    ReedPipe reed;
+    if (plan.reed) {
+        reed.Design(plan.tongue, plan.hz, tuning);
+        loop.assign(static_cast<std::size_t>(reed.loopLength), 0.0f);
+        reed.loop = loop.data();
+        reed.Clear();
+        reed.gainLeft = 1.0f;
+        reed.wind = static_cast<float>(wind);
+    } else {
+        flue.Design(plan.flue, plan.hz, tuning);
+        loop.assign(static_cast<std::size_t>(flue.loopLength), 0.0f);
+        jet.assign(static_cast<std::size_t>(flue.jetLength), 0.0f);
+        upper.assign(static_cast<std::size_t>(flue.upperLength), 0.0f);
+        flue.loop = loop.data();
+        flue.jet = jet.data();
+        flue.upper = upper.data();
+        flue.Clear();
+        flue.gainLeft = 1.0f;
+        flue.wind = static_cast<float>(wind);
+    }
+    for (std::size_t done = 0; done < frames; done += FluePipe::kTick) {
+        const int n = static_cast<int>(Min<std::size_t>(FluePipe::kTick, frames - done));
+        if (plan.reed) {
+            reed.Tick();
+            reed.Process(&left[done], &right[done], n);
+        } else {
+            flue.Tick();
+            flue.Process(&left[done], &right[done], n);
+        }
+    }
+    return left;
 }
 
 } // namespace oregana::measure

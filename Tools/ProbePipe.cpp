@@ -52,6 +52,9 @@ int main(int argc, char** argv) {
         else if (key == "tongue") tongue.tongue = value;
         else if (key == "boot") tongue.boot = value;
         else if (key == "corner") flue.corner = value;
+        else if (key == "chimney") flue.chimney = value;
+        else if (key == "chimneyLength") flue.chimneyLength = value;
+        else if (key == "harmonic") flue.harmonic = value;
         else if (key == "speech") flue.speech = tongue.speech = value;
         else if (key == "cone") tongue.cone = value != 0.0;
         else if (key == "length") tongue.length = value;
@@ -65,7 +68,7 @@ int main(int argc, char** argv) {
     if (seconds <= 0.0) seconds = Max(1.0, 400.0 / hz);
     const auto frames = static_cast<std::size_t>(seconds * kPipeRate);
     const auto offAt = off > 0.0 ? static_cast<std::size_t>(off * kPipeRate) : frames;
-    std::vector<float> left(frames, 0.0f), right(frames, 0.0f), loop, jet;
+    std::vector<float> left(frames, 0.0f), right(frames, 0.0f), loop, jet, upper;
 
     FluePipe f;
     ReedPipe r;
@@ -82,8 +85,10 @@ int main(int argc, char** argv) {
         f.Design(flue, hz, tuning);
         loop.assign(static_cast<std::size_t>(f.loopLength), 0.0f);
         jet.assign(static_cast<std::size_t>(f.jetLength), 0.0f);
+        upper.assign(static_cast<std::size_t>(f.upperLength), 0.0f);
         f.loop = loop.data();
         f.jet = jet.data();
+        f.upper = upper.data();
         f.Clear();
         f.gainLeft = 1.0f;
         f.wind = static_cast<float>(wind);

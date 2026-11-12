@@ -101,10 +101,12 @@ struct ReedPipe {
         damping = static_cast<float>(wt / v.tongueQ);
         closing = static_cast<float>(v.closing);
         // The shallot's face is some thirty times stiffer than the tongue,
-        // as far as the step allows, and takes up most of a landing.
-        const double hard = Min(30.0 * wt * wt, 1.0);
+        // as far as the step allows: a face stiffer than 0.3 per step squared
+        // (a tongue above 760 Hz) is over within three samples, and the
+        // period then locks to whole samples.
+        const double hard = Min(30.0 * wt * wt, 0.3);
         landing = static_cast<float>(hard);
-        landingLoss = static_cast<float>(0.6 * std::sqrt(hard));
+        landingLoss = static_cast<float>(1.2 * hard / wt);
         flow = static_cast<float>(v.flow);
         curve = static_cast<float>(v.curve);
         noise = static_cast<float>(v.noise);
@@ -169,7 +171,12 @@ struct ReedPipe {
             if (++at == loopLength) at = 0;
 
             float pull = stiffness * (1.0f - y) - damping * v - stiffness * closing * (pressure - p);
-            if (y < 0.0f) pull -= landing * y + landingLoss * v;
+            // The face pushes back by how far the tongue has sunk into it,
+            // harder while it sinks and less as it leaves, and takes up most
+            // of a landing (Hunt and Crossley, 1975): a loss that grows from
+            // nothing at the touch. One that set in at once stepped the pitch
+            // by up to 7 cents at c4 as the tuning moved; this holds 0.3.
+            if (y < 0.0f) pull -= y * Max(0.0f, landing - landingLoss * v);
             v += pull;
             y += v;
 
