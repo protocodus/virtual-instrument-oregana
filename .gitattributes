@@ -1,0 +1,5 @@
+# Keep generated numeric/source hashes reproducible on Windows and Unix.
+* text=auto eol=lf
+*.wav -text
+*.mid -text
+*.png -text
