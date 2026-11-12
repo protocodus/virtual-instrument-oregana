@@ -54,6 +54,8 @@ enum Control : int {
     kRoomSize,                      // the church's size against the one modelled: its reflections' and echoes' spacing
     kDecayBass,                     // the reverberation time in the bass against the middle's
     kDecayTreble,                   // and at the top of the range (Nave.h)
+    kKeyboard,                      // the manual a single keyboard plays (OreganaInstrument.h): Hauptwerk, Positiv or Recit
+    kPedalMode,                     // and what of it plays the Pedal: kPedalOff, kPedalBass or kPedalSplit
     kControlCount
 };
 
@@ -63,6 +65,13 @@ constexpr int kCouplerCount = 6;
 // reservoir runs down as the pipes take it), the electric blower, or a
 // calcant treading the bellows (OreganaEngine.cpp).
 enum WindSupply : int { kWindOff, kWindBlower, kWindBellows, kWindSupplies };
+
+// How a front end with one keyboard reaches the Pedal (OreganaInstrument.h):
+// not at all, with the lowest key held (an organ's automatic pedal), or with
+// every key below kSplitNote, which then plays nothing else. The engine's own
+// MIDI has a channel for each division and takes no notice.
+enum PedalMode : int { kPedalOff, kPedalBass, kPedalSplit, kPedalModes };
+constexpr int kSplitNote = 48;   // c: the Pedal keeps its organ octave C to H and all below it
 
 enum class Curve { kLinear, kLog, kStepped };
 
@@ -127,6 +136,9 @@ constexpr std::array<ControlInfo, kControlCount> MakeControlInfo() {
         // than in the middle.
         { "decay_bass", "Decay Bass", 0.5, 2.0, 1.3, 0, Curve::kLog, "" },
         { "decay_treble", "Decay Treble", 0.1, 0.6, 0.2, 0, Curve::kLinear, "" },
+        { "keyboard", "Keyboard", 0.0, 2.0, 0.0, 3, Curve::kStepped, "" },
+        { "pedal_keys", "Pedal Keys", 0.0, static_cast<double>(kPedalModes - 1), static_cast<double>(kPedalBass), kPedalModes,
+          Curve::kStepped, "" },
     };
     for (int i = kStopCount; i < kControlCount; ++i) info[static_cast<std::size_t>(i)] = rest[i - kStopCount];
     return info;

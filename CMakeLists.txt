@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(Oregana VERSION 0.2.0 LANGUAGES CXX)
+project(Oregana VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,6 +33,7 @@ set(OREGANA_DSP_HEADERS
     Source/DSP/Nave.h
     Source/DSP/OreganaControls.h
     Source/DSP/OreganaEngine.h
+    Source/DSP/OreganaInstrument.h
     Source/DSP/OreganaPresets.h
     Source/DSP/OutputStage.h
     Source/DSP/PipeRegulation.h
@@ -56,7 +57,8 @@ target_compile_options(OreganaDSP PRIVATE ${OREGANA_WARNINGS})
 # The Rack Extension toolchain is C++17 with -fno-builtin. Compiling the
 # shipping engine that way here keeps Source/DSP portable for a Rack adapter.
 if(NOT MSVC)
-    add_library(OreganaDSPCxx17 OBJECT ${OREGANA_DSP_SOURCES})
+    # Tests/InstrumentTests.cpp is there for the header-only playing layer.
+    add_library(OreganaDSPCxx17 OBJECT ${OREGANA_DSP_SOURCES} Tests/InstrumentTests.cpp)
     target_include_directories(OreganaDSPCxx17 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Source")
     set_target_properties(OreganaDSPCxx17 PROPERTIES
         CXX_STANDARD 17
@@ -109,6 +111,13 @@ if(BUILD_TESTING)
     target_compile_options(OreganaEngineTests PRIVATE ${OREGANA_WARNINGS})
     add_test(NAME Oregana.Engine COMMAND OreganaEngineTests)
     set_tests_properties(Oregana.Engine PROPERTIES TIMEOUT 600)
+
+    # The playing layer the front ends share (OreganaInstrument.h).
+    add_executable(OreganaInstrumentTests Tests/InstrumentTests.cpp)
+    target_link_libraries(OreganaInstrumentTests PRIVATE OreganaDSP)
+    target_compile_options(OreganaInstrumentTests PRIVATE ${OREGANA_WARNINGS})
+    add_test(NAME Oregana.Instrument COMMAND OreganaInstrumentTests)
+    set_tests_properties(Oregana.Instrument PROPERTIES TIMEOUT 600)
 
     # The committed regulation table is what sounding every pipe afresh gives.
     add_test(NAME Oregana.PipeRegulation

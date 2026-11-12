@@ -33,6 +33,10 @@ parameter matrix and the generated README parts).
   factory registrations). Never rename or reuse a control or stop id, and
   append new controls at the end: saved sessions and Rack patches recall by
   them.
+- A front end with one keyboard or a rate other than 48 kHz plays through
+  `Source/DSP/OreganaInstrument.h` (the keyboard's manual and Pedal keys, the
+  mod wheel as the roller, expression as the swell pedal, the resampler).
+  Playing behaviour belongs there or in the engine, never in one front end.
 - When a plug-in is added, its `BUNDLE_ID` and CLAP id are
   `cz.protocodus.oregana`, and they and its plug-in codes never change once a
   build reaches users: hosts recall sessions by them.
@@ -225,7 +229,7 @@ cmake --build build-dsp --parallel 2
 ctest --test-dir build-dsp -L unit --output-on-failure
 ```
 
-Every test is `Oregana.<Suite>`: `Engine`, `PipeRegulation`, `DspFuzzReplay`
+Every test is `Oregana.<Suite>`: `Engine`, `Instrument`, `PipeRegulation`, `DspFuzzReplay`
 and `DemoMidiSources` (`unit`), `AudioDemos` (`audio`), `DspFuzz` (`fuzz`,
 with `-DOREGANA_BUILD_FUZZER=ON` and Clang) and `CpuBudget` (`perf`, Release
 without sanitizers only). There is no `ParameterMatrix` or `ParameterReach`

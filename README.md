@@ -41,6 +41,20 @@ and plenty.
 
 ## Version history
 
+### 0.3.0 — 2026-11-12 — one keyboard, any sample rate
+
+- **A playing layer for front ends** (`OreganaInstrument.h`): one keyboard
+  plays the manual the new **Keyboard** control names, and the Pedal as the
+  new **Pedal Keys** control says: off, the lowest key held (as loaded), or
+  every key below c. The mod wheel is the crescendo roller and expression the
+  swell pedal.
+- **Any host rate from 44.1 to 192 kHz.** The organ still runs at 48 kHz;
+  off that rate its output is resampled, which adds 32 engine samples of
+  latency.
+- **Fixed:** a pipe that spoke before a new Tuning, Voicing, Pitch,
+  Temperament or Temperature had reached it lost its key's touch and was
+  counted into its channel's load at its old size.
+
 ### 0.2.0 — 2026-11-12 — the organ as a machine, a new church, 88 keys
 
 - **The keyboards are a piano's 88 keys** (A0 to C8) and the Pedal runs from
@@ -228,6 +242,18 @@ organ sounds:
 A new size or width fades in over 50 ms from the sound already in the
 church, so nothing clicks and the tail's pitch does not bend. It is a voiced
 church of the size such an organ stands in, not a model of a building.
+
+**One keyboard.** The engine has a keyboard for each division, on MIDI
+channels 1 to 4. A front end with one stream of notes plays through
+`OreganaInstrument.h`: every key plays the manual Keyboard names, and Pedal
+Keys gives the Pedal nothing, the lowest key held up to g1 (an automatic
+pedal, as loaded), or every key below c, which then plays no manual. A key
+moves with either control while it is held. The mod wheel turns the crescendo
+roller, as far as the further of it and the Crescendo control, and expression
+closes the swell box on top of the Swell control. At 48 kHz the engine's
+samples go out untouched; at any other rate from 44.1 to 192 kHz they pass a
+64-tap windowed sinc, flat to 18 kHz at 44.1 kHz and to 20 kHz above 48 kHz
+with its images 80 dB down, by design and not yet measured.
 
 **Imperfections.** An organ is thousands of hand-made pipes in an unheated
 building. Each of these controls turns one such thing from none to plenty,

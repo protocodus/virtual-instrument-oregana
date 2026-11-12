@@ -860,6 +860,16 @@ void ResetPlaysAsNew() {
     bench.organ->Reset();
     const Take again = play();
     Expect(first.left == again.left && first.right == again.right, "ResetPlaysAsNew", "after Reset the organ plays as a new one does", 0.0);
+
+    // And while the pipes wait to be remade for a new tuning: one that
+    // speaks first is the same pipe as one remade in its turn.
+    bench.Set(kTuning, 0.8);
+    bench.organ->Reset();
+    const Take waiting = play();
+    bench.Play(0.3);
+    bench.organ->Reset();
+    const Take remade = play();
+    Expect(waiting.left == remade.left && waiting.right == remade.right, "ResetPlaysAsNew", "and with a new tuning still reaching the pipes", 0.0);
 }
 
 void ExtremesStayFinite() {

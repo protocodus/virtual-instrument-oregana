@@ -469,7 +469,12 @@ void Engine::UpdateChannel(int division, int key, int late) {
     float taken = 0.0f;
     for (int rank = firstRank; rank < endRank; ++rank) {
         const int index = kRankFirst[static_cast<std::size_t>(rank)] + key;
-        if (speaks(rank, index)) taken += slots[static_cast<std::size_t>(index)].air;
+        if (!speaks(rank, index)) continue;
+        // A silent pipe made for an earlier tuning is remade here and not
+        // when its wind arrives: the wind it takes is part of the load.
+        Slot& s = slots[static_cast<std::size_t>(index)];
+        if (!s.active && s.epoch != epoch) Design(index);
+        taken += s.air;
     }
     const float load = taken / fullAir[d][k];
     robbed[d][k] = 1.0f / (1.0f + kRobbing * load * load);
@@ -508,9 +513,10 @@ bool Engine::Take(int index, float given) {
     Slot& s = slots[static_cast<std::size_t>(index)];
     const bool starting = s.share == 0.0f && given > 0.0f;
     s.share = given;
+    // Made first: a pipe's making sets its speech for an ordinary touch.
+    if (starting && !s.active && s.epoch != epoch) Design(index);
     if (starting && !s.reed) flues[static_cast<std::size_t>(s.index)].SetTouch(touch[s.key]);
     if (s.active || !starting) return false;
-    if (s.epoch != epoch) Design(index);
     const float wind = given * opening[s.rank] * pressure[s.division] * robbed[s.division][s.key];
     if (s.reed) {
         ReedPipe& pipe = reeds[static_cast<std::size_t>(s.index)];
