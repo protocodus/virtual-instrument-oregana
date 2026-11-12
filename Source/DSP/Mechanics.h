@@ -5,8 +5,10 @@
 // A tracker action knocks: the key meets its bed and the pallet is pulled
 // open, the pallet slaps back on its leather when the key rises, and a stop
 // knob drags its slider across the chest. Each is a struck piece of wood,
-// two decaying modes. Under them the blower hums in its room and the wind
-// hisses from every joint of the chests, as long as the organ is on.
+// two decaying modes. Under them the blower hums in its room while it runs
+// and the wind hisses from every joint of the chests while they hold any;
+// on hand-pumped wind there is no hum, and a bellows lands with a thud of
+// boards and leather each time the calcant treads the next one.
 //
 // None of it is measured. The modes are those of small wooden parts (a few
 // hundred hertz, over in a few milliseconds), the levels are set by the
@@ -29,6 +31,7 @@ struct KnockKind {
 inline constexpr KnockKind kKeyDown { { 380.0, 1150.0 }, { 0.012, 0.005 }, 1.0 };
 inline constexpr KnockKind kKeyUp { { 250.0, 700.0 }, { 0.015, 0.006 }, 0.6 };
 inline constexpr KnockKind kStopKnob { { 120.0, 420.0 }, { 0.04, 0.015 }, 2.0 };
+inline constexpr KnockKind kBellowsTurn { { 62.0, 175.0 }, { 0.09, 0.035 }, 3.0 };
 
 class Knocks {
 public:
@@ -95,7 +98,7 @@ public:
         sides[0].random = 0x1234567u;
         sides[1].random = 0x89ABCDEu;
     }
-    void Process(float level, float& left, float& right) {
+    void Process(float hum, float hiss, float& left, float& right) {
         float* const out[2] = { &left, &right };
         for (int c = 0; c < 2; ++c) {
             Side& s = sides[c];
@@ -104,7 +107,7 @@ public:
             s.hum2 += kHumPole * (s.hum - s.hum2);
             s.low += kHissLow * (white - s.low);
             s.high += kHissHigh * (white - s.high);
-            *out[c] += level * (kHum * s.hum2 + kHiss * (s.high - s.low));
+            *out[c] += hum * kHum * s.hum2 + hiss * kHiss * (s.high - s.low);
         }
     }
 

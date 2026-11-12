@@ -3,87 +3,114 @@
 // The church the organ stands in, heard from the nave.
 //
 // First the reflections a listener gets before the church as a whole
-// answers, by image sources: the organ on a west gallery 8 m up and 2 m from
-// the wall behind it, a nave 14 m wide and 18 m to the vault, the listener on
-// its axis 18 m from the organ. Then the reverberant field, a sixteen-line
-// feedback delay network (Jot and Chaigne, AES 90, 1991) with a Householder
-// matrix, as in Respira's Room.h: each line loses what its length costs of
-// the decay asked for, more towards the treble, as stone, people and above
-// all the air of a large space take it; four Schroeder allpasses make the
-// field dense from its start, and each line's length drifts a tenth of a
-// millisecond at its own slow rate, so no mode of the network stands still
-// under a held chord. The two ears' fields come from orthogonal readouts of
-// the lines.
+// answers, by image sources up to the third order: the organ on a west
+// gallery 8 m up and 2 m from the wall behind it, a nave 14 m wide and 18 m
+// to the vault, the listener seated on its axis 18 m from the organ. A
+// reflection from one side reaches the far ear later and weaker. Then the
+// reverberant field, a feedback delay network of thirty-two lines (Jot and
+// Chaigne, AES 90, 1991) mixed by a Hadamard matrix, so that every line
+// feeds every other alike and the echoes multiply from the first pass. Each
+// line loses what its length costs of the decay asked for: Decay in the
+// middle of the range, Decay Bass times that below 250 Hz, and less from
+// 2 kHz up, where the air of a large space takes it, down to Decay Treble
+// of it at the very top. Four Schroeder allpasses make the field dense from
+// its start, and each line's length drifts a tenth of a millisecond at its
+// own slow rate, so no mode of the network stands still under a held chord.
+// The two ears' fields are read from two halves of the lines.
+//
+// Church Size stretches every path: the reflections' delays and the lines'
+// lengths. A new size or width is faded in over 50 ms from the same stored
+// sound, read at the new distances, so turning the knob neither clicks nor
+// bends the pitch of what is ringing; the decay's changes glide in 5 ms.
 //
 // It is a voiced church of the size a three-manual organ stands in, not a
 // model of any one building: the reflections follow from the dimensions
-// above, the decay is the player's (Decay), and the surfaces' reflection
-// factors are estimates (0.9 stone, 0.7 a ribbed vault, 0.6 a floor of pews).
-// It runs at the pipes' rate.
+// above, the decay is the player's, and the surfaces' reflection factors are
+// estimates (0.9 stone, 0.7 a ribbed vault, 0.6 a floor of pews). It runs at
+// the pipes' rate. It is a large object (4 MB of delay lines).
 
 #include "DspMath.h"
 
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 
 namespace oregana {
 
 class Nave {
 public:
-    // Line lengths spread geometrically over 47 to 199 ms, each a prime
-    // number of samples: 1.76 s of delay in all, a mode every 0.57 Hz.
-    static constexpr int kLines = 16;
+    // Line lengths at Church Size 1, spread geometrically over 42 to 331 ms,
+    // each a prime number of samples: 4.5 s of delay in all, a mode every
+    // 0.22 Hz. At Size 2 the longest is 0.66 s, which the buffer holds.
+    static constexpr int kLines = 32;
     static constexpr std::array<int, kLines> kLineSamples { {
-        2251, 2477, 2731, 3011, 3313, 3643, 4019, 4423, 4871, 5351, 5903, 6491, 7159, 7879, 8677, 9551 } };
-    static constexpr int kLineSize = 16384;
-    // Each line's sign of the input, and of its share of the side readout:
-    // rows of a Hadamard matrix, orthogonal to each other and to the sum.
-    static constexpr std::array<float, kLines> kInputSign { { 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1, 1, 1, -1, -1 } };
-    static constexpr std::array<float, kLines> kSideSign { { 1, -1, -1, 1, -1, 1, 1, -1, 1, -1, -1, 1, -1, 1, 1, -1 } };
+        2017, 2161, 2309, 2467, 2633, 2819, 3011, 3217, 3449, 3673, 3929, 4201, 4493, 4799, 5147, 5479,
+        5857, 6263, 6689, 7151, 7643, 8171, 8731, 9337, 10007, 10663, 11399, 12197, 13033, 13921, 14879, 15901 } };
+    static constexpr int kLineSize = 32768;
     // The drift: 0.1 ms each way, at 0.07 to 0.5 Hz spread over the lines.
     // A tail's pitch moves by under half a cent.
     static constexpr double kDriftSamples = 4.8, kSlowestDrift = 0.07, kFastestDrift = 0.5;
-    static constexpr int kTurn = 32;   // samples between the drift's steps
+    static constexpr int kTurn = 32;   // samples between the drift's and the decay's steps
     static constexpr std::array<int, 4> kDiffuserSamples { { 101, 179, 283, 397 } };
     static constexpr int kDiffuserSize = 512;
     static constexpr float kDiffuserGain = 0.6f;
 
-    // Each reflection: samples after the direct sound (the path's excess over
-    // 19.24 m at 343 m/s), level against it (1/r, times the surface's factor)
-    // and how it falls on the two ears.
-    struct Reflection { int samples; float left, right; };
-    static constexpr std::array<Reflection, 7> kReflections { {
-        { 136, 0.571f, 0.571f },    // the floor: 20.21 m
-        { 530, 0.752f, 0.752f },    // the wall behind the organ: 23.03 m
-        { 637, 0.728f, 0.30f },     // the left wall: 23.80 m
-        { 641, 0.30f, 0.728f },     // the right wall
-        { 1825, 0.417f, 0.417f },   // the vault: 32.28 m
-        { 2062, 0.459f, 0.19f },    // both walls, the left one last: 33.97 m
-        { 2069, 0.19f, 0.459f },    // and the right one last
-    } };
-    static constexpr int kEarlySize = 4096;
+    // The church, m: see the head of the file.
+    static constexpr double kNaveWide = 14.0, kToListener = 18.0, kFromWall = 2.0, kSoundSpeed = 343.0;
+    // How far above the listener's ears the organ and its images in the
+    // floor and the vault stand, how many surfaces each has met, and what
+    // those leave of the sound: the organ itself, its image in the floor, in
+    // the vault, in the vault by way of the floor and in the floor by way of
+    // the vault.
+    struct Height { double rise; int order; double factor; };
+    static constexpr std::array<Height, 5> kHeights { { { 6.8, 0, 1.0 }, { 9.2, 1, 0.6 }, { 26.8, 1, 0.7 }, { 42.8, 2, 0.42 }, { 29.2, 2, 0.42 } } };
+    static constexpr double kWallFactor = 0.9;
+    static constexpr int kMostOrder = 3, kMostReflections = 40;
+    // A reflection from the side reaches the far ear up to 0.63 ms late, a
+    // head's width at the speed of sound.
+    static constexpr double kHeadSamples = 30.0;
+    static constexpr int kEarlySize = 16384;
     // The air and the people take the treble off a reflection and off what
     // enters the reverberant field: one-poles at 5 and 6 kHz, voiced.
     static constexpr double kEarlyCorner = 5000.0, kLateCorner = 6000.0;
-    // At 1 the reflections above come to 1.7 times a plenum chord's own
-    // level and the field, at a decay of 4.5 s, to 5.3 times: what 19 m from
-    // the organ gives in a church where the two are equal at 4 m. Both are
-    // scaled alike so that together they are as strong as the chord itself,
-    // and Room then mixes the organ and the church at one loudness
-    // (Oregana.Engine's NaveLevel).
-    static constexpr float kEarlyGain = 0.18f, kLateGain = 0.18f;
+    // Where the decay's bass begins, and where its treble is fitted: at
+    // 4 kHz the field has lost a sixth of what Decay Treble takes at the
+    // top, so that as shipped it rings 0.6 of the Decay there and a third of
+    // it at 8 kHz, about what the air of a large church leaves.
+    static constexpr double kBassCorner = 250.0, kTrebleFit = 4000.0, kTrebleShare = 0.17;
+    // The reflections come to 2.2 times a plenum chord's own level. The
+    // field at a decay of 4.5 s and Size 1 is set to 4.8 times it: what
+    // 19.2 m from the organ gives in a church where the two are equal at
+    // 4 m, an estimate. Both are then scaled alike so that together they are
+    // as strong as the chord itself, and Room mixes the organ and the church
+    // at one loudness (Oregana.Engine's NaveLevel). A longer decay or a
+    // smaller church makes the field louder, as it does in a building.
+    static constexpr float kEarlyGain = 0.2f, kLateGain = 0.13f;
+    static constexpr int kFadeSamples = 2400;
 
-    // `rt60` is the time the field takes to fall 60 dB at low frequencies;
-    // it falls steadily faster towards the top, `trebleShare` of it at half
-    // the rate (each line's one-pole: its gain is the line's decay at 0 Hz
-    // and there).
-    void Set(double rt60, double trebleShare) {
+    // `rt60` is the time the field takes to fall 60 dB in the middle of the
+    // range; below kBassCorner it takes `bass` times that, and at the very
+    // top `treble` of it. `size` stretches the church against the one above,
+    // and `width` is how far apart the two ears hear: 0 one field for both,
+    // 1 two fields with nothing in common, as ears (or microphones) a head
+    // apart have above a few hundred hertz.
+    void Set(double rt60, double bass, double treble, double size, double width) {
+        const double k = std::tan(kPi * kBassCorner / kPipeRate), fit = std::tan(kPi * kTrebleFit / kPipeRate);
         for (std::size_t i = 0; i < kLines; ++i) {
-            const double seconds = kLineSamples[i] / kPipeRate;
-            const double low = std::pow(10.0, -3.0 * seconds / rt60), high = std::pow(10.0, -3.0 * seconds / (rt60 * trebleShare));
-            linePole[i] = static_cast<float>((low - high) / (low + high));
-            lineGain[i] = static_cast<float>(low) * (1.0f - linePole[i]);
+            const double cost = -3.0 * size * kLineSamples[i] / (kPipeRate * rt60), mid = std::pow(10.0, cost);
+            // A first-order shelf: `low` squared at 0 Hz, 1 at the top.
+            const double low = std::sqrt(std::pow(10.0, cost * (1.0 / bass - 1.0)));
+            const double a0 = 1.0 + k / low;
+            // And one that is 1 at 0 Hz and `top` at the top, its corner put
+            // where it gives the line's share of the loss at kTrebleFit: a
+            // long line's corner is lower than a short one's, and the field
+            // decays alike in all of them there too.
+            const double top = std::pow(10.0, cost * (1.0 / treble - 1.0)), at = std::pow(top, kTrebleShare);
+            const double corner = fit * std::sqrt((at * at - top * top) / (1.0 - at * at));
+            wanted[i] = { static_cast<float>(mid * (1.0 + k * low) / a0), static_cast<float>(mid * (k * low - 1.0) / a0),
+                          static_cast<float>((k / low - 1.0) / a0), static_cast<float>((top + corner) / (1.0 + corner)),
+                          static_cast<float>((corner - top) / (1.0 + corner)), static_cast<float>((corner - 1.0) / (1.0 + corner)) };
             // The lines' drift rates interleave across their lengths, so
             // neighbours do not move together.
             const double share = static_cast<double>((i * 7u) % kLines) / (kLines - 1);
@@ -93,20 +120,23 @@ public:
         }
         earlyPole = static_cast<float>(std::exp(-kTwoPi * kEarlyCorner / kPipeRate));
         latePole = static_cast<float>(std::exp(-kTwoPi * kLateCorner / kPipeRate));
-    }
-
-    // 0: both ears hear one field. 1: two fields with nothing in common, as
-    // ears (or microphones) a head apart do above a few hundred hertz.
-    void SetWidth(double width) {
         const double rho = 1.0 - Clamp(width, 0.0, 1.0);
         lateMid = static_cast<float>(std::sqrt(0.5 * (1.0 + rho)));
         lateSide = static_cast<float>(std::sqrt(0.5 * (1.0 - rho)));
+        asked = { size, Clamp(width, 0.0, 1.0) };
+        // A silent church has nothing to fade or glide.
+        if (resting) {
+            loss = wanted;
+            Build(shapes[1], asked);
+            fade = 1.0f;
+        }
     }
 
     void Clear() {
         for (std::size_t i = 0; i < kLines; ++i) {
             lineBuffer[i].fill(0.0f);
-            lineLow[i] = 0.0f;
+            airIn[i] = airOut[i] = shelfOut[i] = 0.0f;
+            loss[i] = wanted[i];
             // Each line starts its drift at its own phase, the golden angle apart.
             driftCos[i] = std::cos(2.399963229728653 * static_cast<double>(i));
             driftSin[i] = std::sin(2.399963229728653 * static_cast<double>(i));
@@ -118,6 +148,8 @@ public:
         write = 0;
         untilTurn = 0;
         earlyLeft = earlyRight = late = 0.0f;
+        Build(shapes[1], asked);
+        fade = 1.0f;
         resting = true;
         quietFor = 0;
     }
@@ -134,34 +166,43 @@ public:
             resting = false;
         }
         if (untilTurn == 0) {
-            TurnDrift();
+            Turn();
             untilTurn = kTurn;
         }
         --untilTurn;
+        if (fade >= 1.0f && (asked.size != shapes[1].size || asked.width != shapes[1].width)) {
+            shapes[0] = shapes[1];
+            Build(shapes[1], asked);
+            fade = 0.0f;
+        }
+        const bool fading = fade < 1.0f;
 
         std::array<float, kLines> out;
-        float sum = 0.0f;
         for (std::size_t i = 0; i < kLines; ++i) {
             offset[i] += offsetStep[i];
-            float read = static_cast<float>(write - kLineSamples[i]) - offset[i];
-            if (read < 0.0f) read += static_cast<float>(kLineSize);
-            const int at = static_cast<int>(read);
-            const float between = read - static_cast<float>(at);
-            const auto& buffer = lineBuffer[i];
-            const float older = buffer[static_cast<std::size_t>(at & (kLineSize - 1))];
-            const float newer = buffer[static_cast<std::size_t>((at + 1) & (kLineSize - 1))];
-            lineLow[i] = lineGain[i] * (older + between * (newer - older)) + linePole[i] * lineLow[i];
-            out[i] = lineLow[i];
-            sum += out[i];
+            float heard = Line(i, shapes[1].length[i]);
+            if (fading) {
+                const float before = Line(i, shapes[0].length[i]);
+                heard = before + fade * (heard - before);
+            }
+            const Loss& l = loss[i];
+            const float air = l.t0 * heard + l.t1 * airIn[i] - l.ta * airOut[i];
+            out[i] = l.b0 * air + l.b1 * airOut[i] - l.a1 * shelfOut[i];
+            airIn[i] = heard;
+            airOut[i] = air;
+            shelfOut[i] = out[i];
         }
 
         const float input = 0.5f * (left + right);
         earlyBuffer[static_cast<std::size_t>(write & (kEarlySize - 1))] = input;
         float reflectedLeft = 0.0f, reflectedRight = 0.0f;
-        for (const Reflection& r : kReflections) {
-            const float x = earlyBuffer[static_cast<std::size_t>((write - r.samples) & (kEarlySize - 1))];
-            reflectedLeft += r.left * x;
-            reflectedRight += r.right * x;
+        Reflect(shapes[1], reflectedLeft, reflectedRight);
+        if (fading) {
+            float beforeLeft = 0.0f, beforeRight = 0.0f;
+            Reflect(shapes[0], beforeLeft, beforeRight);
+            reflectedLeft = beforeLeft + fade * (reflectedLeft - beforeLeft);
+            reflectedRight = beforeRight + fade * (reflectedRight - beforeRight);
+            fade += 1.0f / kFadeSamples;
         }
         earlyLeft = reflectedLeft + earlyPole * (earlyLeft - reflectedLeft);
         earlyRight = reflectedRight + earlyPole * (earlyRight - reflectedRight);
@@ -176,18 +217,22 @@ public:
             spread = delayed - kDiffuserGain * v;
         }
 
-        const float feedback = 2.0f / kLines * sum;
-        float side = 0.0f;
+        // The left ear reads the even lines and the right ear the odd ones.
+        float even = 0.0f, odd = 0.0f;
+        for (std::size_t i = 0; i < kLines; i += 2) {
+            even += out[i];
+            odd += out[i + 1];
+        }
+        Mix(out);
         bool quiet = left == 0.0f && right == 0.0f;
         for (std::size_t i = 0; i < kLines; ++i) {
-            const float in = Settled(out[i] - feedback + kInputSign[i] * spread);
+            const float in = Settled(kMixGain * out[i] + (((kInputSigns >> i) & 1u) ? -spread : spread));
             lineBuffer[i][static_cast<std::size_t>(write & (kLineSize - 1))] = in;
             quiet = quiet && in == 0.0f;
-            side += kSideSign[i] * out[i];
         }
         write = (write + 1) & (kLineSize - 1);
 
-        const float mid = kLateGain * lateMid * sum, apart = kLateGain * lateSide * side;
+        const float mid = kLateGain * lateMid * (even + odd), apart = kLateGain * lateSide * (even - odd);
         roomLeft = kEarlyGain * earlyLeft + mid + apart;
         roomRight = kEarlyGain * earlyRight + mid - apart;
 
@@ -197,19 +242,98 @@ public:
         if (quietFor >= kLineSize) {
             resting = true;
             quietFor = 0;
-            lineLow.fill(0.0f);
+            airIn.fill(0.0f);
+            airOut.fill(0.0f);
+            shelfOut.fill(0.0f);
             earlyLeft = earlyRight = late = 0.0f;
         }
     }
 
 private:
+    static constexpr float kMixGain = 0.17677669f;   // 1 / sqrt(kLines): the Hadamard matrix loses nothing
+    // The sound enters half the lines turned over, in no order the matrix
+    // would gather into one line: a set bit is a line that takes it so.
+    static constexpr std::uint32_t kInputSigns = 0xA3C596E1u;
+
+    struct Reflection { int left, right; float leftGain, rightGain; };   // samples after the direct sound and level against it, each ear
+    // The church at one size and width: where its reflections fall and how
+    // long its lines are.
+    struct Shape {
+        double size = 0.0, width = 0.0;
+        std::array<Reflection, kMostReflections> reflections {};
+        int count = 0;
+        std::array<float, kLines> length {};
+    };
+    struct Asked { double size = 1.0, width = 1.0; };
+    // A line's two shelves: the bass's, with the line's gain in it, and the air's.
+    struct Loss { float b0 = 0.0f, b1 = 0.0f, a1 = 0.0f, t0 = 0.0f, t1 = 0.0f, ta = 0.0f; };
+
     // What a buffer stores: silence below the smallest normal float.
     // Subnormals would otherwise circulate for ever, and the room never rest.
     static float Settled(float x) { return Abs(x) < 1.1754944e-38f ? 0.0f : x; }
 
+    // The images of the organ in the side walls (up to two each way), the
+    // wall behind it, the floor and the vault, by the path each one's sound
+    // travels against the direct one's.
+    static void Build(Shape& shape, const Asked& asked) {
+        shape.size = asked.size;
+        shape.width = asked.width;
+        shape.count = 0;
+        const double direct = std::sqrt(kToListener * kToListener + kHeights[0].rise * kHeights[0].rise);
+        for (int side = -2; side <= 2; ++side)
+            for (int behind = 0; behind <= 1; ++behind)
+                for (const Height& height : kHeights) {
+                    const int walls = (side < 0 ? -side : side) + behind, order = walls + height.order;
+                    if (order == 0 || order > kMostOrder) continue;
+                    const double across = kNaveWide * side, along = kToListener + 2.0 * kFromWall * behind;
+                    const double path = std::sqrt(across * across + along * along + height.rise * height.rise);
+                    const double level = direct / path * std::pow(kWallFactor, walls) * height.factor;
+                    const double samples = (path - direct) * asked.size / kSoundSpeed * kPipeRate;
+                    // How far to one side it arrives from: the far ear hears
+                    // it later and weaker.
+                    const double aside = asked.width * across / path, far = aside < 0.0 ? -aside : aside;
+                    const int near = static_cast<int>(samples + 0.5), late = static_cast<int>(samples + kHeadSamples * far + 0.5);
+                    const auto strong = static_cast<float>(level), weak = static_cast<float>(level * (1.0 - far));
+                    shape.reflections[static_cast<std::size_t>(shape.count++)] =
+                        aside < 0.0 ? Reflection { near, late, strong, weak } : Reflection { late, near, weak, strong };
+                }
+        for (std::size_t i = 0; i < kLines; ++i) shape.length[i] = static_cast<float>(asked.size * kLineSamples[i]);
+    }
+
+    float Line(std::size_t i, float length) const {
+        float read = static_cast<float>(write) - length - offset[i];
+        if (read < 0.0f) read += static_cast<float>(kLineSize);
+        const int at = static_cast<int>(read);
+        const float between = read - static_cast<float>(at);
+        const auto& buffer = lineBuffer[i];
+        const float older = buffer[static_cast<std::size_t>(at & (kLineSize - 1))];
+        const float newer = buffer[static_cast<std::size_t>((at + 1) & (kLineSize - 1))];
+        return older + between * (newer - older);
+    }
+
+    void Reflect(const Shape& shape, float& left, float& right) const {
+        for (int i = 0; i < shape.count; ++i) {
+            const Reflection& r = shape.reflections[static_cast<std::size_t>(i)];
+            left += r.leftGain * earlyBuffer[static_cast<std::size_t>((write - r.left) & (kEarlySize - 1))];
+            right += r.rightGain * earlyBuffer[static_cast<std::size_t>((write - r.right) & (kEarlySize - 1))];
+        }
+    }
+
+    // The fast Walsh-Hadamard transform, unscaled.
+    static void Mix(std::array<float, kLines>& v) {
+        for (std::size_t span = 1; span < kLines; span *= 2)
+            for (std::size_t first = 0; first < kLines; first += 2 * span)
+                for (std::size_t i = first; i < first + span; ++i) {
+                    const float a = v[i], b = v[i + span];
+                    v[i] = a + b;
+                    v[i + span] = a - b;
+                }
+    }
+
     // The drifts' phasors turn by one step, kept at length 1 by a first-order
-    // correction, and each line's offset ramps to its new place over the step.
-    void TurnDrift() {
+    // correction, and each line's offset ramps to its new place over the
+    // step; each line's loss moves a quarter of the way to the one asked for.
+    void Turn() {
         for (std::size_t i = 0; i < kLines; ++i) {
             const double c = driftCos[i] * turnCos[i] - driftSin[i] * turnSin[i];
             const double s = driftSin[i] * turnCos[i] + driftCos[i] * turnSin[i];
@@ -217,14 +341,28 @@ private:
             driftCos[i] = c * norm;
             driftSin[i] = s * norm;
             offsetStep[i] = (static_cast<float>(kDriftSamples * driftSin[i]) - offset[i]) * (1.0f / kTurn);
+            Loss& l = loss[i];
+            const Loss& to = wanted[i];
+            l.b0 += 0.25f * (to.b0 - l.b0);
+            l.b1 += 0.25f * (to.b1 - l.b1);
+            l.a1 += 0.25f * (to.a1 - l.a1);
+            l.t0 += 0.25f * (to.t0 - l.t0);
+            l.t1 += 0.25f * (to.t1 - l.t1);
+            l.ta += 0.25f * (to.ta - l.ta);
         }
     }
 
     std::array<std::array<float, kLineSize>, kLines> lineBuffer {};
-    std::array<float, kLines> lineGain {}, linePole {}, lineLow {}, offset {}, offsetStep {};
+    std::array<Loss, kLines> loss {}, wanted {};
+    std::array<float, kLines> airIn {}, airOut {}, shelfOut {}, offset {}, offsetStep {};
     std::array<double, kLines> driftCos {}, driftSin {}, turnCos {}, turnSin {};
     std::array<std::array<float, kDiffuserSize>, 4> diffuserBuffer {};
     std::array<float, kEarlySize> earlyBuffer {};
+    // The shape fading out and the one heard; `fade` is how far the second
+    // has come in, 1 when it is all there is.
+    std::array<Shape, 2> shapes {};
+    Asked asked;
+    float fade = 1.0f;
     int write = 0, untilTurn = 0;
     float earlyPole = 0.0f, latePole = 0.0f, earlyLeft = 0.0f, earlyRight = 0.0f, late = 0.0f;
     float lateMid = 0.7071f, lateSide = 0.7071f;

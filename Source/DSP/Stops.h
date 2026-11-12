@@ -30,9 +30,14 @@
 
 namespace oregana {
 
-constexpr int kManualKeys = 61;   // C to c4, MIDI 36 to 96
-constexpr int kPedalKeys = 32;    // C to g1, MIDI 36 to 67
-constexpr int kFirstNote = 36;
+// The keys are a piano's, so that every key of a controller keyboard sounds
+// at its own pitch: an organ's own compass is C to c4 on the manuals and C to
+// g1 on the Pedal (MIDI 36 to 96 and 36 to 67), and the keys beyond it are no
+// organ's. A rank runs on to them as it stands, with the limits PlanPipe gives.
+constexpr int kFirstNote = 21;
+constexpr int kManualKeys = 88;   // A0 to C8, MIDI 21 to 108
+constexpr int kPedalKeys = 47;    // A0 to g1, MIDI 21 to 67
+constexpr int kOrganC = 36;       // the organ's own lowest key, which the ranks' octaves count from
 
 enum Division { kHauptwerk, kPositiv, kRecit, kPedal, kDivisions };
 constexpr int kDivisionKeys[kDivisions] = { kManualKeys, kManualKeys, kManualKeys, kPedalKeys };
@@ -60,7 +65,7 @@ struct RankSpec {
     float harmonics[6];   // pitch against the 8' in each octave of the keys: C, c0, c1, c2, c3, and c4
     float scale;          // halftones wider than the family's own scale
     float level;          // dB against the Hauptwerk's Octave 8'
-    int firstKey;         // the lowest key with a pipe
+    int firstKey;         // the lowest key with a pipe, in keys above C; 0 for a rank of the whole compass
     float cents;          // tuned off its pitch at c1 and below, for a rank that beats
 };
 
@@ -248,8 +253,11 @@ constexpr int kPipeCount = RankFirstPipe(kRankCount);
 // The smallest pipe an organ builder makes sounds about 8.4 kHz (the top of
 // a 2' rank); a rank that would pass it repeats an octave lower. The flue
 // model's own limit is the same: above it a period is under six samples and
-// the pipe no longer speaks reliably (ProbePipe, 8.9 to 11.2 kHz).
-constexpr double kSmallestPipeHz = 8400.0;
+// the pipe no longer speaks reliably (ProbePipe, 8.9 to 11.2 kHz). A reed's
+// tongue is not made above the top of an 8' (c4, 2093 Hz): its rank repeats
+// from there. And no pipe is longer than the 32' C's (16.4 Hz): below it a
+// rank has none.
+constexpr double kSmallestPipeHz = 8400.0, kSmallestReedHz = 2100.0, kLargestPipeHz = 16.0;
 
 namespace detail {
 
@@ -362,22 +370,25 @@ struct PipePlan {
 inline PipePlan PlanPipe(int rank, int key) {
     const RankSpec& spec = kRanks[rank];
     PipePlan plan;
-    if (key < spec.firstKey || key >= kDivisionKeys[RankDivision(rank)]) return plan;
-    plan.exists = true;
+    const int fromC = kFirstNote + key - kOrganC;
+    if (key < 0 || key >= kDivisionKeys[RankDivision(rank)] || (spec.firstKey > 0 && fromC < spec.firstKey)) return plan;
     const double note = 440.0 * std::pow(2.0, (kFirstNote + key - 69) / 12.0);
     // A beating rank is tuned by its beats, not by cents: above c1 the tuner
     // lets them quicken with the square root of the pitch only, or the top
     // would flutter.
     const double beating = spec.cents * std::sqrt(Min(1.0, 261.63 / note));
-    plan.pitch = spec.harmonics[key / 12] * std::pow(2.0, beating / 1200.0);
-    while (note * plan.pitch > kSmallestPipeHz) plan.pitch *= 0.5;
+    plan.reed = IsReed(spec.family);
+    // The keys below C take the lowest octave's pitches and those above c4 the highest's.
+    plan.pitch = spec.harmonics[Clamp(fromC / 12, 0, 5)] * std::pow(2.0, beating / 1200.0);
+    while (note * plan.pitch > (plan.reed ? kSmallestReedHz : kSmallestPipeHz)) plan.pitch *= 0.5;
+    if (note * plan.pitch < kLargestPipeHz) return plan;
+    plan.exists = true;
     plan.hz = note * plan.pitch;
 
     // Octaves above 8' C, where the families' voicings are given.
     const double octaves = std::log2(plan.hz / 65.406);
     const double t = Clamp(octaves / 6.0, -0.34, 1.17);
     const auto at = [t](double low, double high) { return low + t * (high - low); };
-    plan.reed = IsReed(spec.family);
     if (plan.reed) {
         const detail::ReedFamily& f = detail::Reed(spec.family);
         ReedVoicing& v = plan.tongue;

@@ -1,14 +1,17 @@
 # Oregana
 
 Oregana is a physically modelled church organ: 51 stops on three manuals and
-pedal, 3,618 pipes, each one simulated as a pipe taking wind. A flue pipe is a
+pedal, 5,130 pipes, each one simulated as a pipe taking wind. A flue pipe is a
 jet of air driving an air column and a reed pipe a brass tongue beating under
 a resonator; the wind comes from bellows that sag and bounce, the third
 manual stands in a swell box, and a church answers. It plays from one soft
 stopped flute to full organ with 32' reeds, and it can be as well kept or as
 worn as you like: controls set how far the pipes have drifted out of tune, how
 unevenly they are voiced, how unsteady the wind is, and how many pipes are
-dead, pallets hang or channels leak. This repository holds the JUCE-free C++17
+dead, pallets hang or channels leak. The machine around the pipes is there
+too: stops that slide and can be left half drawn, couplers with lost motion, a
+blower that can be switched off under a held chord, or a calcant treading the
+bellows. This repository holds the JUCE-free C++17
 engine, its tools and its tests. It is a first pass: there is no plug-in and
 no release yet.
 
@@ -37,6 +40,32 @@ of them, and one phrase with the imperfection controls at none, as loaded
 and plenty.
 
 ## Version history
+
+### 0.2.0 — 2026-11-12 — the organ as a machine, a new church, 88 keys
+
+- **The keyboards are a piano's 88 keys** (A0 to C8) and the Pedal runs from
+  the same A to g1; every key sounds at its own pitch. The organ grew from
+  3,618 to 5,130 pipes. Keys and `PipeHz` now take MIDI note numbers.
+- **The crescendo roller is smooth.** It turns to where the wheel is in up to
+  0.8 s, each stop it adds slides on, and a wheel resting on a stage's edge
+  moves nothing.
+- **Stops slide and can stay half drawn.** A stop control is continuous: a
+  knob takes 0.1 to 0.2 s of travel, each its own, and a slider left part way
+  starves its pipes, which sound flat and soft.
+- **Couplers have lost motion**, by Action: a coupled manual speaks a few
+  milliseconds late, each key by its own amount and later for a slow key.
+  The divisions stand at their own depths in the case, the Recit last.
+- **Wind Supply**: the blower can be switched off (the reservoir runs down
+  and the pipes go flat and die) and on again, or a calcant treads the
+  bellows, with a dip and a thud at each changeover. **Wind Pressure** runs
+  the organ from half to one and a half times the pressure it was voiced on.
+- **A new church**: 33 early reflections and a field of 32 delay lines, with
+  Church Size, Decay Bass and Decay Treble beside Decay (now 1 to 12 s),
+  Room and Width. All of them can be turned while the organ sounds.
+- The Blower control is now called Wind Noise. A session's saved control ids
+  are unchanged, and five controls are added at the end.
+- Every pipe's own share of each imperfection is new, so 0.1.0's renders do
+  not repeat; the registrations' Volume trims were read again.
 
 ### 0.1.0 — 2026-11-12 — first pass: the engine, 51 stops and the demos
 
@@ -68,8 +97,18 @@ instrument.
 | Recit (III), enclosed | Principal 8', Voce umana 8', Flute harmonique 8', Gambe 8', Voix celeste 8', Flute octaviante 4', Octavin 2', Plein jeu IV, Basson 16', Trompette 8', Basson-Hautbois 8', Clairon 4', Tremulant |
 | Pedal | Untersatz 32', Principal 16', Subbass 16', Octave 8', Gedackt 8', Octave 4', Nachthorn 2', Mixtur IV, Contraposaune 32', Posaune 16', Trompete 8', Cornet 2' |
 
-Couplers: II/I, III/I, III/II, I/P, II/P, III/P. The manuals have 61 keys
-(C to c4) and the Pedal 32 (C to g1). The 51 stops draw 69 ranks.
+Couplers: II/I, III/I, III/II, I/P, II/P, III/P. The 51 stops draw 69 ranks.
+
+**The keys.** An organ's manuals have 61 keys (C to c4) and its Pedal 32 (C
+to g1). Here every manual has a piano's 88 keys, A0 to C8 (MIDI 21 to 108),
+and the Pedal runs from the same A up to g1 (MIDI 21 to 67), so any key a
+player tries first answers at its own pitch. The keys outside C to c4 are no
+organ's: they are the same ranks carried on by their builders' rules. Below
+C the pipes go on growing, down to a 32' pipe and no further, so a 16' stop
+has no pipe below the piano's C1 and a 32' Pedal stop none below C. Above c4
+a rank goes on until its pipes would be too small to make (flues above
+8.4 kHz, reeds above 2.1 kHz) and then repeats an octave lower, as a mixture
+does.
 
 **Flue pipes** (`FluePipe.h`). The air column is a travelling-wave loop: a
 delay, the open end's reflection with its radiation loss, the mouth's end
@@ -119,23 +158,73 @@ tremulant each. These constants are voiced to written accounts of such
 winding, not measured on an organ.
 
 **Keys and stops** (`OreganaEngine.cpp`). MIDI channels 1 to 4 play the
-Hauptwerk, Positiv, Recit and Pedal (notes 36 up). Velocity is how fast the
-key opens the pallet, which a tracker action passes on to the pipes' speech:
-it changes the attack, never the level, and there is no sustaining pedal. CC1
-is a crescendo roller that adds 45 stops and couplers in order to whatever is
-drawn; CC11 is the swell pedal, whose shutters take 8 dB of the Recit's bass
-and 24 dB of its treble when shut. Each pipe is heard from where it stands:
-the keys alternate between the two sides of each chest, the Pedal in the
-towers, and each pipe's sound arrives up to 12 ms after its pallet opens,
-by its row on the chest. All 3,618 pipes exist all the time, and only those
+Hauptwerk, Positiv, Recit and Pedal. Velocity is how fast the key opens the
+pallet, which a tracker action passes on to the pipes' speech: it changes
+the attack, never the level, and there is no sustaining pedal. CC11 is the
+swell pedal, whose shutters take 8 dB of the Recit's bass and 24 dB of its
+treble when shut. Each pipe is heard from where it stands: the keys
+alternate between the two sides of each chest, the Pedal in the towers, the
+Positiv at the front of the case, the Hauptwerk half a metre behind it, the
+Pedal a metre and a half and the Recit's box three metres, so each pipe's
+sound arrives 6 to 20 ms after its pallet opens and the Recit about 8 ms
+after the Positiv. All 5,130 pipes exist all the time, and only those
 speaking or ringing cost anything.
 
-**The church** (`Nave.h`). Seven early reflections by image sources of an
-organ on a west gallery in a nave 14 m wide and 18 m high, heard 18 m away,
-then a reverberant field of sixteen delay lines whose decay is the player's
-(1.5 to 9 s, shorter towards the treble). Room moves the listener from the
-pipes to far down the nave at one loudness. It is a voiced church of the size
-such an organ stands in, not a model of a building.
+**The machine.** What a sampled organ cannot do, because here the pipes are
+driven by the wind they are given:
+
+- *The crescendo roller* (CC1, the mod wheel) adds 45 stops and couplers in
+  order to whatever is drawn. The roller turns to where the wheel is at a
+  roller's speed, the whole way in 0.8 s; each stop it reaches slides on
+  like any other, and a stage that has come on stays until the wheel is 0.4
+  of a stage back below it. Thrown from one flute to full organ, the level
+  rises by 18 dB with no step larger than 2.2 dB in 25 ms.
+- *Stops slide.* A stop is a slider under its rank with a hole for each
+  pipe. A knob takes 0.1 to 0.2 s to travel, each knob its own time, and the
+  pipes get more wind as the holes line up. A stop control anywhere between
+  in and drawn leaves the slider there: at half, the Octave 8' gets 0.63 of
+  its wind and sounds 26 cents flat and 5 dB down, as a half-drawn stop does.
+- *Couplers have lost motion.* With Action at 0 a coupled manual's pallets
+  open with the key. A worn action takes up its slack first: 7 to 21 ms at
+  an ordinary stroke with Action at 1, each key and coupler its own share
+  (7 ms on c1), longer for a slow key and shorter for a fast one, and a
+  quarter of that as loaded.
+- *The wind supply.* With the blower running the reservoir is kept full.
+  Switched off, the organ plays on what is in store, a second and a half of
+  full organ or some ten seconds of one stop; then the pressure falls and
+  every held pipe goes flat, weakens and stops. Switched on, the blower
+  comes up in about a second and the held pipes speak again. On Bellows a
+  calcant treads instead: the pressure droops a little as each bellows
+  sinks, and the next takes over with a dip of 3 % and a thud (a full chord
+  empties one about every 7 s). He treads only while the organ is played,
+  and there is no blower hum.
+- *Wind Pressure* runs the whole organ from half to one and a half times
+  the pressure it was voiced on. On half, the Octave 8' is 30 cents flat and
+  soft; on one and a half it is 24 cents sharp and loud.
+
+None of these figures is measured on an organ. The times, the slack and the
+supply's sizes are estimates from written accounts of such actions and
+winding; the pitch and level figures are what the pipe models then do.
+
+**The church** (`Nave.h`). First 33 reflections by image sources, up to the
+third order, of an organ on a west gallery in a nave 14 m wide and 18 m
+high, heard 18 m away; one from the side reaches the far ear later and
+weaker. Then a reverberant field of 32 delay lines mixed by a Hadamard
+matrix. The player has six controls, and all of them can be turned while the
+organ sounds:
+
+| Control | What it does | As loaded |
+| --- | --- | --- |
+| Room | the listener, from at the pipes to far down the nave, at one loudness | 0.6 |
+| Church Size | every path's length against the church above: the reflections' spacing and the field's density, from half to twice | 1 |
+| Decay | the time the field takes to fall 60 dB in the middle of the range, 1 to 12 s | 4.5 s |
+| Decay Bass | the decay below 250 Hz against that, from half to twice | 1.3 |
+| Decay Treble | the decay at the very top against it, 0.1 to 0.6: the air's share | 0.2, which leaves 2.7 s at 4 kHz |
+| Width | from one field for both ears to the organ's breadth and two fields a head apart | 0.8 |
+
+A new size or width fades in over 50 ms from the sound already in the
+church, so nothing clicks and the tail's pitch does not bend. It is a voiced
+church of the size such an organ stands in, not a model of a building.
 
 **Imperfections.** An organ is thousands of hand-made pipes in an unheated
 building. Each of these controls turns one such thing from none to plenty,
@@ -147,8 +236,8 @@ and each pipe keeps its own share of it whatever is played:
 | Temperature | flue pipes follow the air, 2.95 cents a degree, and reeds do not, so the reeds go out against the flues | 0: the 20 C the organ was tuned at |
 | Voicing | every pipe off its rank's level (up to 3 dB), speech, chiff and wind noise | 0.3 |
 | Wind | how far the reservoirs' sag, dip and bounce reach the pipes, with a slow unrest of the pressure | 0.5: as modelled |
-| Blower | the blower's hum and the chests' hiss | 0.2 |
-| Action | the knocks of keys, pallets and stop knobs | 0.25 |
+| Wind Noise | the blower's hum, the chests' hiss and the bellows' thud | 0.2 |
+| Action | how worn the action is: the knocks of keys, pallets and stop knobs, and the couplers' lost motion | 0.25 |
 | Dead Pipes | pipes that do not speak, up to one in sixteen | none |
 | Ciphers | pallets that hang part open when their key is let go, up to one key in 25: the note whines on until its stops go in or all sound is cut | none |
 | Runnings | wind leaking into the channel a whole tone away, whose pipes whisper along, up to one channel in twelve | none |
@@ -158,6 +247,11 @@ Kirnberger III, Vallotti, quarter-comma meantone) are the tuner's. The
 blower's and action's noises are estimates, added at the output; they never
 drive a pipe.
 
+No two ranks of one key speak alike, even on a well-kept organ: on c1 as
+loaded, eight ranks of three divisions are heard 6 to 19 ms after the key,
+each at its own moment, between 1.5 cents flat and 1.1 sharp, and take 13
+to 57 ms to speak (`RegistersSpeakApart` in the engine suite prints them).
+
 **Output.** The engine runs at 48 kHz, the rate its pipes are tuned at, and
 ends in the portfolio's shared peak limiter at -1.5 dBFS, which full organ
 does not reach on the demos. The factory registrations carry a Volume trim so
@@ -165,16 +259,23 @@ that a single stop is not 18 dB below full organ when it is loaded.
 
 ## Known gaps
 
-- **No plug-in, no Rack Extension, no CI, no release.** This first pass is
-  the engine, its tools and tests; the generated README parts (screenshot,
-  demo table, downloads) wait for a main build.
+- **No plug-in, no Rack Extension, no CI, no release.** This is the engine,
+  its tools and tests; the generated README parts (screenshot, demo table,
+  downloads) wait for a main build.
 - **CPU is above the portfolio's 10 % target for large registrations.** One
-  256-frame block takes at most 2 % of a core on a single stop, 15 % on the
-  Plenum demo (198 pipes) and 39 % on the Tutti demo (468 pipes); sixteen
-  keys of full organ take 66 %. Development container, GCC 13, Release, one
+  256-frame block takes at most 4 % of a core on a single stop, 14 % on the
+  Plenum demo (198 pipes) and 37 % on the Tutti demo (468 pipes); sixteen
+  keys of full organ take 60 %. Development container, GCC 13, Release, one
   thread. The plan is in
   [Docs/plans/cpu-optimisation-2026-11-12.md](Docs/plans/cpu-optimisation-2026-11-12.md).
 - **48 kHz only.** A front end at another rate has to convert.
+- **The keys outside C to c4 are no organ's** (How it works, The keys). A
+  16' manual stop drawn alone is silent on A0 to B0, and a 32' Pedal stop
+  below C.
+- **A stop drawn under a held key has no coupler lag**: the lost motion is
+  taken up when a key goes down, not when a slider opens.
+- **The bass decay is a little under what Decay Bass asks**: at 2 an 80 Hz
+  tail lasts 1.9 times as long, at 0.5 it lasts 0.59 of it.
 - **No parameter matrix and no parameter-reach test yet** (U4, U11). The
   engine suite checks the extremes of every control together and the fuzz
   target writes any value to any control. Pitch, Temperament, Tuning,

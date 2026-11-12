@@ -7,10 +7,12 @@
 //       time it took.
 //   RenderOregana --levels
 //       each factory preset on a reference chord (C, c0, g0, c1, e1, g1, c2
-//       on the Hauptwerk's keys and C on the Pedal's, held 4 s) at Volume 0:
-//       the level of its last second, and the whole decibels of Volume that
-//       bring it to -25 dBFS RMS, which a soft preset carries
-//       (OreganaPresets.h). A preset already above that plays at 0.
+//       on the Hauptwerk's keys and C on the Pedal's, held 4 s) at Volume 0,
+//       on C, D, E flat, F and G: the mean power of its last three seconds,
+//       and the whole decibels of Volume that bring it to -25 dBFS RMS, which
+//       a soft preset carries (OreganaPresets.h). A preset already above that
+//       plays at 0. One chord alone reads a few stops decibels off, as their
+//       steady tones meet their own reflections in the church.
 //   RenderOregana --list
 #include "DSP/OreganaPresets.h"
 #include "OreganaVoice.h"
@@ -53,23 +55,29 @@ demos::detail::Demo Play(const Controls& controls, const std::vector<demos::Midi
 }
 
 int Levels() {
-    std::vector<demos::MidiEvent> chord;
-    const auto add = [&](double seconds, int status, int note, int velocity) {
-        chord.push_back({ seconds, { static_cast<std::uint8_t>(status), static_cast<std::uint8_t>(note), static_cast<std::uint8_t>(velocity) }, 3 });
-    };
-    for (int note : { 36, 48, 55, 60, 64, 67, 72 }) add(0.0, 0x90, note, 80);
-    add(0.0, 0x93, 36, 80);
-    for (int note : { 36, 48, 55, 60, 64, 67, 72 }) add(4.0, 0x80, note, 0);
-    add(4.0, 0x83, 36, 0);
     std::printf("%-18s %8s %8s %6s %6s\n", "preset", "RMS dB", "peak dB", "pipes", "Volume");
     for (const Preset& preset : kPresets) {
         Controls controls = preset.ToControls();
         controls[kVolume] = 0.0;
         int pipes = 0;
-        const auto demo = Play(controls, chord, 4.0, &pipes);
-        const double rms = Db(Rms(demo, 3 * 48000, 4 * 48000));
-        std::printf("%-18s %8.1f %8.1f %6d %6.0f\n", preset.name, rms, demos::detail::Dbfs(demo.peak), pipes,
-                    0.0 + Clamp(std::round(-25.0 - rms), 0.0, 24.0));
+        double power = 0.0, peak = 0.0;
+        const int steps[] = { 0, 2, 3, 5, 7 };
+        for (const int up : steps) {
+            std::vector<demos::MidiEvent> chord;
+            const auto add = [&](double seconds, int status, int note, int velocity) {
+                chord.push_back({ seconds, { static_cast<std::uint8_t>(status), static_cast<std::uint8_t>(note + up), static_cast<std::uint8_t>(velocity) }, 3 });
+            };
+            for (int note : { 36, 48, 55, 60, 64, 67, 72 }) add(0.0, 0x90, note, 80);
+            add(0.0, 0x93, 36, 80);
+            for (int note : { 36, 48, 55, 60, 64, 67, 72 }) add(4.0, 0x80, note, 0);
+            add(4.0, 0x83, 36, 0);
+            const auto demo = Play(controls, chord, 4.0, &pipes);
+            const double rms = Rms(demo, 1 * 48000, 4 * 48000);
+            power += rms * rms / std::size(steps);
+            peak = Max(peak, static_cast<double>(demo.peak));
+        }
+        const double rms = Db(std::sqrt(power));
+        std::printf("%-18s %8.1f %8.1f %6d %6.0f\n", preset.name, rms, demos::detail::Dbfs(peak), pipes, 0.0 + Clamp(std::round(-25.0 - rms), 0.0, 24.0));
     }
     return 0;
 }

@@ -43,25 +43,25 @@ constexpr Preset Registration(const char* name, std::initializer_list<int> drawn
 // can be heard beside full organ without reaching for the level: at Volume 0
 // every preset has the organ's own dynamics, 18 dB from the Gedackt to the
 // Tutti on one chord. The trims are the whole decibels RenderOregana --levels
-// reads, which bring each preset to -25 dBFS RMS on that chord or leave it
-// where it is above that.
+// reads, which bring each preset to -25 dBFS RMS on that chord in five keys
+// or leave it where it is above that.
 inline constexpr std::array<Preset, 17> kPresets { {
     Registration("Principal 8", { kHwOctave8, kPedSubbass16, kPedOctave8 }, { { kVolume, 6.0 } }),
-    Registration("Gedackt 8", { kPosGedackt8, kCouplerPosHw, kPedSubbass16 }, { { kVolume, 11.0 } }),
-    Registration("Flutes 8 and 4", { kHwRohrfloete8, kHwSpitzfloete4, kPedSubbass16, kPedGedackt8 }, { { kVolume, 8.0 } }),
-    Registration("Flute harmonique", { kRecFluteHarmonique8, kCouplerRecHw, kPedSubbass16, kPedGedackt8 }, { { kVolume, 7.0 } }),
-    Registration("Voix celeste", { kRecGambe8, kRecVoixCeleste8, kCouplerRecHw, kPedSubbass16 }, { { kVolume, 9.0 } }),
-    Registration("Voce umana", { kRecPrincipal8, kRecVoceUmana8, kCouplerRecHw, kPedSubbass16, kPedOctave8 }, { { kVolume, 5.0 } }),
-    Registration("Cornet", { kHwCornet, kHwRohrfloete8, kPedSubbass16, kPedOctave8 }, { { kVolume, 8.0 } }),
+    Registration("Gedackt 8", { kPosGedackt8, kCouplerPosHw, kPedSubbass16 }, { { kVolume, 12.0 } }),
+    Registration("Flutes 8 and 4", { kHwRohrfloete8, kHwSpitzfloete4, kPedSubbass16, kPedGedackt8 }, { { kVolume, 10.0 } }),
+    Registration("Flute harmonique", { kRecFluteHarmonique8, kCouplerRecHw, kPedSubbass16, kPedGedackt8 }, { { kVolume, 9.0 } }),
+    Registration("Voix celeste", { kRecGambe8, kRecVoixCeleste8, kCouplerRecHw, kPedSubbass16 }, { { kVolume, 11.0 } }),
+    Registration("Voce umana", { kRecPrincipal8, kRecVoceUmana8, kCouplerRecHw, kPedSubbass16, kPedOctave8 }, { { kVolume, 8.0 } }),
+    Registration("Cornet", { kHwCornet, kHwRohrfloete8, kPedSubbass16, kPedOctave8 }, { { kVolume, 7.0 } }),
     Registration("Jeu de tierce", { kPosGedackt8, kPosRohrfloete4, kPosNasat223, kPosOctave2, kPosTerz135, kCouplerPosHw,
-                                    kPedSubbass16, kPedGedackt8 }, { { kVolume, 8.0 } }),
+                                    kPedSubbass16, kPedGedackt8 }, { { kVolume, 9.0 } }),
     Registration("Krummhorn", { kPosKrummhorn8, kPosGedackt8, kTremulantPos, kCouplerPosHw, kPedSubbass16, kPedGedackt8 },
                  { { kVolume, 8.0 } }),
-    Registration("Vox humana", { kPosVoxHumana8, kPosGedackt8, kTremulantPos, kCouplerPosHw, kPedSubbass16 }, { { kVolume, 10.0 } }),
-    Registration("Hautbois", { kRecHautbois8, kRecFluteHarmonique8, kCouplerRecHw, kPedSubbass16, kPedGedackt8 }, { { kVolume, 7.0 } }),
-    Registration("Trompete", { kHwTrompete8, kHwOctave8, kHwOctave4, kPedPrincipal16, kPedOctave8, kPedTrompete8 }, { { kVolume, 1.0 } }),
+    Registration("Vox humana", { kPosVoxHumana8, kPosGedackt8, kTremulantPos, kCouplerPosHw, kPedSubbass16 }, { { kVolume, 11.0 } }),
+    Registration("Hautbois", { kRecHautbois8, kRecFluteHarmonique8, kCouplerRecHw, kPedSubbass16, kPedGedackt8 }, { { kVolume, 8.0 } }),
+    Registration("Trompete", { kHwTrompete8, kHwOctave8, kHwOctave4, kPedPrincipal16, kPedOctave8, kPedTrompete8 }, { { kVolume, 2.0 } }),
     Registration("Principal Chorus", { kHwOctave8, kHwOctave4, kHwSuperoctave2, kPedPrincipal16, kPedOctave8, kPedOctave4 },
-                 { { kVolume, 3.0 } }),
+                 { { kVolume, 4.0 } }),
     Registration("Plenum", { kHwPrincipal16, kHwOctave8, kHwOctave4, kHwQuinte223, kHwSuperoctave2, kHwMixtur,
                              kPosGedackt8, kPosPrincipal4, kPosOctave2, kPosCimbel, kCouplerPosHw,
                              kPedPrincipal16, kPedOctave8, kPedOctave4, kPedMixtur, kPedPosaune16 }),
@@ -70,7 +70,7 @@ inline constexpr std::array<Preset, 17> kPresets { {
                                 kPedPrincipal16, kPedOctave8, kPedPosaune16, kPedTrompete8 }),
     Registration("Full Swell", { kRecPrincipal8, kRecFluteHarmonique8, kRecGambe8, kRecFluteOctaviante4, kRecOctavin2,
                                  kRecPleinJeu, kRecBasson16, kRecTrompette8, kRecHautbois8, kRecClairon4, kCouplerRecHw,
-                                 kPedSubbass16, kPedPrincipal16, kPedOctave8, kCouplerRecPed }, { { kVolume, 2.0 }, { kSwell, 0.5 } }),
+                                 kPedSubbass16, kPedPrincipal16, kPedOctave8, kCouplerRecPed }, { { kVolume, 5.0 }, { kSwell, 0.5 } }),
     Registration("Tutti", { kHwPrincipal16, kHwOctave8, kHwGamba8, kHwRohrfloete8, kHwOctave4, kHwSpitzfloete4, kHwQuinte223,
                             kHwSuperoctave2, kHwCornet, kHwMixtur, kHwScharff, kHwTrompete16, kHwTrompete8,
                             kPosGedackt8, kPosPrincipal4, kPosRohrfloete4, kPosOctave2, kPosQuinte113, kPosCimbel, kPosDulcian16,

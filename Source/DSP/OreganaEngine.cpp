@@ -22,6 +22,11 @@ constexpr float kMaster = 0.012f;
 // begun together, pipes whose harmonics coincide would add as one pulse, 8 dB
 // above what a real organ's give.
 constexpr double kRowMetres = 0.12, kOffRowMetres = 1.5;
+// And each division at its own depth in the case: the Positiv at the front,
+// the Hauptwerk behind the front pipes, the Pedal in its towers and the
+// Recit's box at the back. Estimates of a case some three metres deep, kept
+// small for the Hauptwerk, which a player hears his own keys through.
+constexpr double kDivisionMetres[kDivisions] = { 0.5, 0.0, 3.0, 1.5 };
 
 // The flattest a pipe is ever made against its regulated pitch (a1 at 415 Hz
 // in meantone, a cold church and the worst drift come to 0.907), and what its
@@ -39,12 +44,50 @@ constexpr WindSpec kWinding[kDivisions] = {
 // keys from C up for a manual, and on an octave from C for the Pedal.
 constexpr int kFullChord[] = { 0, 7, 12, 16, 19, 24, 28, 31 };
 constexpr int kFullPedal[] = { 0, 12 };
+constexpr int kKeyOfC = kOrganC - kFirstNote;
 // The pressure's slow unrest: 0.3 % RMS as modelled (Wind at 0.5), noise
 // through two one-poles at 1 Hz, whose output is 0.0186 RMS.
 constexpr double kUnrest = 0.16, kUnrestPole = 0.0042;
 // A channel's pipes share one pallet: with every stop drawn each gets 3 %
 // less pressure than a stop alone, falling with the square of the wind taken.
 constexpr float kRobbing = 0.03f;
+
+// The wind's supply. The blower fills a reservoir whose weights hold the
+// pressure for as long as there is wind in it; the pipes and the leaks take
+// it out again. With the blower switched off the organ plays on what is in
+// store, a second and a half of full organ or some ten seconds of one stop,
+// and then the plate comes down on its last quarter and the pressure with it:
+// every pipe goes flat, weakens and stops, the large ones last. Switched on
+// again, the blower takes about a second to come up to speed and fill it.
+// On the bellows a calcant treads: the wind is always there, its pressure
+// falls a little as each bellows sinks (the more the livelier the wind), and
+// when one is nearly down the next takes over with a thud and a dip the
+// reservoirs bounce on. He treads only while the organ is played. All of it
+// is estimated from accounts of such winding, none of it measured.
+constexpr double kSpinUp = kStepSeconds / 1.2, kSpinDown = kStepSeconds / 1.5;
+constexpr double kFill = 3.0 * kStepSeconds, kLeak = kStepSeconds / 12.0, kDrain = kStepSeconds / 1.5;
+constexpr double kKnee = 0.25;
+constexpr double kBellowsLeak = 0.02 * kStepSeconds, kBellowsDrain = 0.117 * kStepSeconds;
+constexpr double kChangeover = 0.3, kWedge = 0.04, kChangeDip = 0.03;
+
+// A stop's slider takes 0.15 s to cross, each a little more or less. Its
+// holes over the pipes' feet are an orifice in series with each foot's own,
+// twice its area when the stop is full out: the foot gets 1 / (1 + (r / x)^2)
+// of the channel's pressure with the slider x of the way, against 1 / (1 + r^2)
+// full out, r = 0.5. So a stop half drawn leaves its pipes 0.63 of the wind.
+constexpr double kSliderSeconds = 0.15;
+constexpr float kSliderNarrow = 0.5f;
+
+// The crescendo roller's whole travel takes 0.8 s however fast the wheel is
+// thrown, and a stage it has added goes off again 0.4 of a stage lower than
+// it came on: a wheel resting on a stage's edge does not chatter.
+constexpr double kRollerStep = kStepSeconds / 0.8, kStageBack = 0.4;
+
+// A coupler's lost motion at Action 1: the key it pulls starts 16 ms behind
+// an ordinary stroke, half as much to half as much again from key to key,
+// and in step with how slowly the key is pressed (an estimate of a worn
+// tracker action; a tight one has a millisecond or two).
+constexpr double kCouplerSeconds = 0.016;
 
 // The swell box: shut, its walls and shutters take 8 dB of the bass and 24 dB
 // of the treble, split at 500 Hz (an estimate of a well-built box, not a
@@ -57,9 +100,6 @@ constexpr float kGainStep = 0.001f;   // output gains glide in about 20 ms
 // the wind noise sits at -50 dBFS RMS, at the pipes (estimates).
 constexpr double kKnockLevel = 0.012, kBlowerLevel = 0.22;
 constexpr float kPresenceRise = 0.00222f, kPresenceFall = 0.000333f;   // 0.3 s and 2 s
-
-// The church's decay towards the treble (Nave.h): a fifth of the time at 24 kHz.
-constexpr double kTrebleShare = 0.2;
 
 constexpr double kDeadShare = 0.0625, kCipherShare = 0.04, kRunningShare = 0.083;
 
@@ -95,15 +135,21 @@ double Unit(int place, int what) {
 }
 // -1..1, mostly near 0.
 double Spread(int place, int what) { return Unit(place, what) + Unit(place, what + 64) - 1.0; }
-enum What { kDrift = 1, kLevel, kSpeech, kChiff, kNoise, kDead, kCipher, kCipherLeak, kRunning, kRunningLeak, kOffRow };
+enum What { kDrift = 1, kLevel, kSpeech, kChiff, kNoise, kDead, kCipher, kCipherLeak, kRunning, kRunningLeak, kOffRow, kSlack, kSlider };
+// A pipe's and a key's place for those: by rank or division and note, so that
+// neither changes its character if the compass ever does.
+int PipePlace(int rank, int key) { return rank * 128 + kFirstNote + key; }
+int KeyPlace(int division, int key) { return division * 128 + kFirstNote + key; }
 
 // Where a pipe stands across the organ's front, -1 left .. 1 right: the keys
 // alternate between the two sides of a chest, the largest pipes outermost.
 // The Hauptwerk fills the case, the Positiv and the Recit its middle, and the
 // Pedal stands in the two towers.
 double Stand(int division, int key) {
-    const double side = (key & 1) ? 1.0 : -1.0;
-    const double bass = 1.0 - static_cast<double>(key) / (kDivisionKeys[division] - 1);
+    const int note = kFirstNote + key;
+    const double side = (note & 1) ? 1.0 : -1.0;
+    // The keys beyond an organ's own compass stand with its outermost.
+    const double bass = 1.0 - Clamp((note - kOrganC) / (division == kPedal ? 31.0 : 60.0), 0.0, 1.0);
     switch (division) {
     case kPositiv: return side * (0.1 + 0.4 * bass);
     case kRecit: return side * (0.1 + 0.5 * bass);
@@ -136,7 +182,8 @@ Engine::Engine() {
             const PipePlan plan = PlanPipe(rank, key);
             if (!plan.exists) continue;
             s.reed = plan.reed;
-            const double metres = kRowMetres * (rank - kDivisionRank[static_cast<std::size_t>(division)]) + kOffRowMetres * Unit(index, kOffRow);
+            const double metres = kDivisionMetres[division] + kRowMetres * (rank - kDivisionRank[static_cast<std::size_t>(division)])
+                + kOffRowMetres * Unit(PipePlace(rank, key), kOffRow);
             s.delay = static_cast<std::uint16_t>(std::lround(metres / kSoundSpeed * kPipeRate));
             const double tuning = kPipeRegulation[index].tuning;
             if (plan.reed) {
@@ -183,10 +230,12 @@ Engine::Engine() {
             for (int key = 0; key < kDivisionKeys[d]; ++key)
                 fullAir[static_cast<std::size_t>(d)][static_cast<std::size_t>(key)]
                     += slots[static_cast<std::size_t>(kRankFirst[static_cast<std::size_t>(rank)] + key)].air;
-        if (d == kPedal) for (int key : kFullPedal) fullWind[static_cast<std::size_t>(d)] += fullAir[static_cast<std::size_t>(d)][static_cast<std::size_t>(key)];
-        else for (int key : kFullChord) fullWind[static_cast<std::size_t>(d)] += fullAir[static_cast<std::size_t>(d)][static_cast<std::size_t>(key)];
+        if (d == kPedal) for (int key : kFullPedal) fullWind[static_cast<std::size_t>(d)] += fullAir[static_cast<std::size_t>(d)][static_cast<std::size_t>(kKeyOfC + key)];
+        else for (int key : kFullChord) fullWind[static_cast<std::size_t>(d)] += fullAir[static_cast<std::size_t>(d)][static_cast<std::size_t>(kKeyOfC + key)];
         reservoirs[static_cast<std::size_t>(d)].Design(kWinding[d], kStepSeconds);
     }
+    for (int i = 0; i < kStopCount; ++i)
+        sliderStep[static_cast<std::size_t>(i)] = static_cast<float>(kStepSeconds / (kSliderSeconds * (0.7 + 0.6 * Unit(i, kSlider))));
     output.Prepare(kPipeRate);
     Apply(controls, true);
     Reset();
@@ -195,11 +244,12 @@ Engine::Engine() {
 void Engine::Reset() {
     for (std::size_t i = 0; i < slots.size(); ++i) {
         Slot& s = slots[i];
-        s.active = false;
+        s.active = s.resting = false;
         s.offered = s.share = 0.0f;
+        s.lastDue = 0;
         if (s.index < 0) continue;
         // Each pipe's turbulence is its own.
-        const std::uint32_t seed = Hash(static_cast<std::uint32_t>(i) + 0x51ED270Bu) | 1u;
+        const std::uint32_t seed = Hash(static_cast<std::uint32_t>(PipePlace(s.rank, s.key)) + 0x51ED270Bu) | 1u;
         if (s.reed) {
             reeds[static_cast<std::size_t>(s.index)].Clear();
             reeds[static_cast<std::size_t>(s.index)].random = seed;
@@ -231,13 +281,25 @@ void Engine::Reset() {
     boxHighGain = boxHighTarget;
     dry = dryTarget;
     wet = wetTarget;
-    presence = blower = 0.0f;
+    presence = hum = hiss = 0.0f;
     knocks.Clear();
     windNoise.Clear();
     nave.Clear();
     output.Reset();
     diag = Diagnostics {};
     for (double& p : diag.pressure) p = 1.0;
+
+    // The organ as the controls have it, and as if they had for a while: the
+    // roller where it is turned to, the sliders across, the wind up or gone.
+    roller = crescendo;
+    stage = static_cast<int>(roller * kCrescendoStages);
+    diag.stage = stage;
+    Register();
+    for (int i = 0; i < kStopCount; ++i) SetSlider(i, sliderTarget[static_cast<std::size_t>(i)]);
+    const int supply = static_cast<int>(controls[kWindSupply]);
+    spin = supply == kWindBlower ? 1.0 : 0.0;
+    stock = supply == kWindOff ? 0.0 : 1.0;
+    diag.supply = stock;
 }
 
 void Engine::SetControls(const Controls& next) {
@@ -254,13 +316,16 @@ void Engine::Apply(const Controls& before, bool all) {
         stale = kPipeCount;
     }
 
-    bool registration = all || changed(kCrescendo) || changed(kDeadPipes) || changed(kRunnings) || changed(kCiphers);
+    bool registration = all || changed(kDeadPipes) || changed(kRunnings) || changed(kCiphers);
     int knobs = 0;
     for (int i = 0; i < kStopCount + kCouplerCount; ++i) {
         if (!changed(i)) continue;
         registration = true;
-        // A combination's knobs go together: three knocks tell as many.
-        if (!all && controls[kAction] > 0.0 && knobs++ < 3) knocks.Strike(kStopKnob, kKnockLevel * controls[kAction], 0.0);
+        // A knob knocks as it is drawn or put in, not while it is held part
+        // of the way. A combination's knobs go together: three knocks tell
+        // as many.
+        if (!all && (controls[i] >= 0.5) != (before[i] >= 0.5) && controls[kAction] > 0.0 && knobs++ < 3)
+            knocks.Strike(kStopKnob, kKnockLevel * controls[kAction], 0.0);
     }
     if (changed(kCrescendo)) crescendo = controls[kCrescendo];
     if (changed(kSwell)) SetSwell(controls[kSwell]);
@@ -268,15 +333,15 @@ void Engine::Apply(const Controls& before, bool all) {
         // A pallet that is no longer one to hang closes.
         for (int d = 0; d < kDivisions; ++d)
             for (int key = 0; key < kDivisionKeys[d]; ++key)
-                if (Unit(d * 64 + key, kCipher) >= kCipherShare * controls[kCiphers])
+                if (Unit(KeyPlace(d, key), kCipher) >= kCipherShare * controls[kCiphers])
                     hang[static_cast<std::size_t>(d)][static_cast<std::size_t>(key)] = 0.0f;
     }
 
     if (changed(kTremulantRate))
         for (Tremulant& t : tremulants) t.Design(controls[kTremulantRate], kStepSeconds);
-    if (changed(kDecay)) nave.Set(controls[kDecay], kTrebleShare);
+    if (changed(kDecay) || changed(kDecayBass) || changed(kDecayTreble) || changed(kRoomSize) || changed(kWidth))
+        nave.Set(controls[kDecay], controls[kDecayBass], controls[kDecayTreble], controls[kRoomSize], controls[kWidth]);
     if (changed(kWidth)) {
-        nave.SetWidth(controls[kWidth]);
         for (int d = 0; d < kDivisions; ++d)
             for (int key = 0; key < kDivisionKeys[d]; ++key) {
                 const double angle = 0.25 * kPi * (1.0 + 0.7 * controls[kWidth] * Stand(d, key));
@@ -302,29 +367,42 @@ void Engine::SetSwell(double position) {
 }
 
 void Engine::SetCrescendo(double position) {
-    const double before = crescendo;
     crescendo = position == position ? Clamp(position, 0.0, 1.0) : 0.0;
-    if (std::lround(crescendo * kCrescendoStages) != std::lround(before * kCrescendoStages)) Register();
 }
 
-// What is drawn, by hand and by the roller, and what every key then gives.
+// What the knobs and the roller want drawn, and what every key then gives.
+// The sliders follow in their own time (Tick).
 void Engine::Register() {
-    for (int i = 0; i < kStopCount; ++i) stopDrawn[static_cast<std::size_t>(i)] = controls[i] >= 0.5;
+    for (int i = 0; i < kStopCount; ++i) sliderTarget[static_cast<std::size_t>(i)] = static_cast<float>(controls[i]);
     for (int i = 0; i < kCouplerCount; ++i) coupled[static_cast<std::size_t>(i)] = controls[kCouplerPosHw + i] >= 0.5;
-    const int stage = static_cast<int>(std::lround(crescendo * kCrescendoStages));
     for (int i = 0; i < stage; ++i) {
-        if (kCrescendoOrder[i] < kStopCount) stopDrawn[static_cast<std::size_t>(kCrescendoOrder[i])] = true;
+        if (kCrescendoOrder[i] < kStopCount) sliderTarget[static_cast<std::size_t>(kCrescendoOrder[i])] = 1.0f;
         else coupled[static_cast<std::size_t>(kCrescendoOrder[i] - kCouplerPosHw)] = true;
     }
-    for (int i = 0; i < kStopCount; ++i)
-        for (int r = 0; r < kStops[i].ranks; ++r)
-            rankDrawn[static_cast<std::size_t>(kStops[i].firstRank + r)] = stopDrawn[static_cast<std::size_t>(i)];
     for (int key = 0; key < kManualKeys; ++key) UpdateKey(key);
 }
 
+// A stop's slider at `position`: the wind it leaves its pipes, and, as it
+// opens or shuts, which pipes of the open channels take wind at all.
+void Engine::SetSlider(int stop, float position) {
+    const auto i = static_cast<std::size_t>(stop);
+    const bool was = slider[i] > 0.0f, is = position > 0.0f;
+    slider[i] = position;
+    const float narrow = is ? kSliderNarrow / position : 0.0f;
+    const float through = is ? (1.0f + kSliderNarrow * kSliderNarrow) / (1.0f + narrow * narrow) : 0.0f;
+    for (int r = 0; r < kStops[stop].ranks; ++r) {
+        opening[static_cast<std::size_t>(kStops[stop].firstRank + r)] = through;
+        rankOpen[static_cast<std::size_t>(kStops[stop].firstRank + r)] = is;
+    }
+    if (was != is)
+        for (int key = 0; key < kDivisionKeys[kStops[stop].division]; ++key) UpdateChannel(kStops[stop].division, key);
+}
+
 // Which pallets key `key` holds open across the divisions: its own, and
-// through the couplers, which pull one another's keys as a tracker action's do.
-void Engine::UpdateKey(int key) {
+// through the couplers, which pull one another's keys as a tracker action's
+// do. A key just `struck` pulls the coupled ones late, by each coupler's lost
+// motion on the way.
+void Engine::UpdateKey(int key, bool struck) {
     const auto k = static_cast<std::size_t>(key);
     const bool pedal = key < kPedalKeys && played[kPedal][k];
     bool pulled[kDivisions];
@@ -332,28 +410,49 @@ void Engine::UpdateKey(int key) {
     pulled[kPositiv] = played[kPositiv][k] || (coupled[0] && pulled[kHauptwerk]) || (coupled[4] && pedal);
     pulled[kRecit] = played[kRecit][k] || (coupled[1] && pulled[kHauptwerk]) || (coupled[2] && pulled[kPositiv]) || (coupled[5] && pedal);
     pulled[kPedal] = pedal;
+
+    int late[kDivisions] = {};
+    if (struck && controls[kAction] > 0.0) {
+        const auto lost = [&](int coupler) {
+            return static_cast<int>(kCouplerSeconds * kPipeRate * controls[kAction]
+                                    * (0.5 + Unit(coupler * 128 + kFirstNote + key, kSlack)) * touch[k]);
+        };
+        // By the quickest way the pull comes: a key's own division is not late.
+        const int never = 1 << 20;
+        const auto soonest = [&](int division, std::initializer_list<int> ways) {
+            int least = played[static_cast<std::size_t>(division)][k] ? 0 : never;
+            for (int way : ways) least = Min(least, way);
+            late[division] = least == never ? 0 : least;
+        };
+        soonest(kHauptwerk, { coupled[3] && pedal ? lost(3) : never });
+        soonest(kPositiv, { coupled[0] && pulled[kHauptwerk] ? late[kHauptwerk] + lost(0) : never, coupled[4] && pedal ? lost(4) : never });
+        soonest(kRecit, { coupled[1] && pulled[kHauptwerk] ? late[kHauptwerk] + lost(1) : never,
+                          coupled[2] && pulled[kPositiv] ? late[kPositiv] + lost(2) : never, coupled[5] && pedal ? lost(5) : never });
+    }
+
+    bool opened[kDivisions] = {};
     for (int d = 0; d < kDivisions; ++d) {
         if (key >= kDivisionKeys[d] || pulled[d] == open[static_cast<std::size_t>(d)][k]) continue;
-        open[static_cast<std::size_t>(d)][k] = pulled[d];
+        open[static_cast<std::size_t>(d)][k] = opened[d] = pulled[d];
         // A pallet that hangs is pulled free by its key, and hangs again
         // when the key lets it go.
-        const int place = d * 64 + key;
+        const int place = KeyPlace(d, key);
         const bool hangs = !pulled[d] && Unit(place, kCipher) < kCipherShare * controls[kCiphers];
         hang[static_cast<std::size_t>(d)][k] = hangs ? static_cast<float>(0.35 + 0.55 * Unit(place, kCipherLeak)) : 0.0f;
     }
     for (int d = 0; d < kDivisions; ++d)
         for (int near : { key - 2, key, key + 2 })
-            if (near >= 0 && near < kDivisionKeys[d]) UpdateChannel(d, near);
+            if (near >= 0 && near < kDivisionKeys[d]) UpdateChannel(d, near, near == key && opened[d] ? late[d] : 0);
 }
 
 // The wind one key's channel holds, and which of its pipes take it.
-void Engine::UpdateChannel(int division, int key) {
+void Engine::UpdateChannel(int division, int key, int late) {
     const auto d = static_cast<std::size_t>(division), k = static_cast<std::size_t>(key);
     float wind = open[d][k] ? 1.0f : hang[d][k];
     if (!open[d][k] && controls[kRunnings] > 0.0) {
         for (int near : { key - 2, key + 2 }) {
             if (near < 0 || near >= kDivisionKeys[division] || !open[d][static_cast<std::size_t>(near)]) continue;
-            const int place = division * 64 + Min(key, near);
+            const int place = KeyPlace(division, Min(key, near));
             if (Unit(place, kRunning) < kRunningShare * controls[kRunnings])
                 wind = Max(wind, static_cast<float>(0.35 + 0.3 * Unit(place, kRunningLeak)));
         }
@@ -363,8 +462,8 @@ void Engine::UpdateChannel(int division, int key) {
     const double dead = kDeadShare * controls[kDeadPipes];
     const int firstRank = kDivisionRank[d], endRank = kDivisionRank[d + 1];
     const auto speaks = [&](int rank, int index) {
-        return rankDrawn[static_cast<std::size_t>(rank)] && slots[static_cast<std::size_t>(index)].index >= 0
-            && !(dead > 0.0 && Unit(index, kDead) < dead);
+        return rankOpen[static_cast<std::size_t>(rank)] && slots[static_cast<std::size_t>(index)].index >= 0
+            && !(dead > 0.0 && Unit(PipePlace(rank, key), kDead) < dead);
     };
     float taken = 0.0f;
     for (int rank = firstRank; rank < endRank; ++rank) {
@@ -375,13 +474,14 @@ void Engine::UpdateChannel(int division, int key) {
     robbed[d][k] = 1.0f / (1.0f + kRobbing * load * load);
     for (int rank = firstRank; rank < endRank; ++rank) {
         const int index = kRankFirst[static_cast<std::size_t>(rank)] + key;
-        if (slots[static_cast<std::size_t>(index)].index >= 0) Offer(index, speaks(rank, index) ? wind : 0.0f);
+        if (slots[static_cast<std::size_t>(index)].index >= 0) Offer(index, speaks(rank, index) ? wind : 0.0f, late);
     }
 }
 
 // A pallet gives a pipe its share of the wind, or takes it away: heard when
-// the sound has come from where the pipe stands.
-void Engine::Offer(int index, float given) {
+// the sound has come from where the pipe stands, `late` samples later for a
+// pallet a coupler pulls.
+void Engine::Offer(int index, float given, int late) {
     Slot& s = slots[static_cast<std::size_t>(index)];
     if (given == s.offered) return;
     s.offered = given;
@@ -391,7 +491,10 @@ void Engine::Offer(int index, float given) {
     }
     // Kept in the order the wind arrives, so that pipes begin in that order
     // however the frames are asked for.
-    const std::uint64_t due = now + s.delay;
+    // Wind is never taken away before it was given: a key let go within its
+    // coupler's lost motion would otherwise leave the pipe sounding.
+    const std::uint64_t due = Max(now + s.delay + static_cast<std::uint64_t>(late), s.lastDue);
+    s.lastDue = due;
     auto at = pending.end();
     while (at != pending.begin() && (at - 1)->due > due) --at;
     pending.insert(at, { index, due, given });
@@ -407,7 +510,7 @@ bool Engine::Take(int index, float given) {
     if (starting && !s.reed) flues[static_cast<std::size_t>(s.index)].SetTouch(touch[s.key]);
     if (s.active || !starting) return false;
     if (s.epoch != epoch) Design(index);
-    const float wind = given * pressure[s.division] * robbed[s.division][s.key];
+    const float wind = given * opening[s.rank] * pressure[s.division] * robbed[s.division][s.key];
     if (s.reed) {
         ReedPipe& pipe = reeds[static_cast<std::size_t>(s.index)];
         pipe.Clear();
@@ -428,15 +531,15 @@ bool Engine::Take(int index, float given) {
 // tongue sets its pitch and is no warmer or cooler for the air; the small
 // pull of its resonator, which is, is left out.
 double Engine::Cents(const Slot& s) const {
-    const int index = kRankFirst[s.rank] + s.key;
     const auto& temperament = kTemperaments[static_cast<std::size_t>(controls[kTemperament])];
-    double cents = 1200.0 * std::log2(controls[kPitch] / 440.0) + temperament.cents[s.key % 12u]
-        + controls[kTuning] * (s.reed ? 20.0 : 10.0) * Spread(index, kDrift);
+    double cents = 1200.0 * std::log2(controls[kPitch] / 440.0) + temperament.cents[static_cast<unsigned>(kFirstNote + s.key) % 12u]
+        + controls[kTuning] * (s.reed ? 20.0 : 10.0) * Spread(PipePlace(s.rank, s.key), kDrift);
     if (!s.reed) cents += 2.95 * controls[kTemperature];
     return cents;
 }
 
-double Engine::PipeHz(int rank, int key) const {
+double Engine::PipeHz(int rank, int note) const {
+    const int key = note - kFirstNote;
     if (rank < 0 || rank >= kRankCount || key < 0 || key >= kDivisionKeys[RankDivision(rank)]) return 0.0;
     const Slot& s = slots[static_cast<std::size_t>(kRankFirst[static_cast<std::size_t>(rank)] + key)];
     return s.index < 0 ? 0.0 : PlanPipe(rank, key).hz * std::pow(2.0, Cents(s) / 1200.0);
@@ -448,9 +551,10 @@ void Engine::Design(int index) {
     Slot& s = slots[static_cast<std::size_t>(index)];
     PipePlan plan = PlanPipe(s.rank, s.key);
     const PipeRegulated& regulated = kPipeRegulation[index];
+    const int place = PipePlace(s.rank, s.key);
     const double voicing = controls[kVoicing];
-    const double speech = std::pow(2.0, 0.6 * voicing * Spread(index, kSpeech));
-    const double noise = 1.0 + 0.5 * voicing * Spread(index, kNoise);
+    const double speech = std::pow(2.0, 0.6 * voicing * Spread(place, kSpeech));
+    const double noise = 1.0 + 0.5 * voicing * Spread(place, kNoise);
     double ratio = std::pow(2.0, Cents(s) / 1200.0);
     ratio = Max(ratio, kLowestRatio);
     if (s.reed) {
@@ -462,12 +566,12 @@ void Engine::Design(int index) {
     } else {
         plan.flue.speech *= speech;
         plan.flue.noise *= noise;
-        plan.flue.chiff *= 1.0 + 0.6 * voicing * Spread(index, kChiff);
+        plan.flue.chiff *= 1.0 + 0.6 * voicing * Spread(place, kChiff);
         FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
         pipe.Design(plan.flue, plan.hz * ratio, regulated.tuning);
         s.air = static_cast<float>(pipe.air);
     }
-    s.gain = kMaster * static_cast<float>(plan.level * std::pow(10.0, 3.0 * voicing * Spread(index, kLevel) / 20.0)) / regulated.rms;
+    s.gain = kMaster * static_cast<float>(plan.level * std::pow(10.0, 3.0 * voicing * Spread(place, kLevel) / 20.0)) / regulated.rms;
     s.epoch = epoch;
 }
 
@@ -488,9 +592,9 @@ void Engine::Midi(const std::uint8_t* bytes, int size) {
     const int data = bytes[1] & 0x7F, value = bytes[2] & 0x7F;
     const int division = channel < kDivisions ? channel : kHauptwerk;
     if (status == 0x90 && value > 0) {
-        KeyDown(division, data - kFirstNote, value);
+        KeyDown(division, data, value);
     } else if (status == 0x80 || status == 0x90) {
-        KeyUp(division, data - kFirstNote);
+        KeyUp(division, data);
     } else if (status == 0xB0) {
         if (data == 1) SetCrescendo(value / 127.0);
         else if (data == 11) SetSwell(value / 127.0);
@@ -499,7 +603,8 @@ void Engine::Midi(const std::uint8_t* bytes, int size) {
     }
 }
 
-void Engine::KeyDown(int division, int key, int velocity) {
+void Engine::KeyDown(int division, int note, int velocity) {
+    const int key = note - kFirstNote;
     if (division < 0 || division >= kDivisions || key < 0 || key >= kDivisionKeys[division]) return;
     const auto d = static_cast<std::size_t>(division), k = static_cast<std::size_t>(key);
     if (played[d][k]) return;
@@ -510,10 +615,11 @@ void Engine::KeyDown(int division, int key, int velocity) {
     touch[k] = static_cast<float>(1.5 - stroke);
     if (controls[kAction] > 0.0)
         knocks.Strike(kKeyDown, kKnockLevel * controls[kAction] * (0.4 + stroke), controls[kWidth] * Stand(division, key));
-    UpdateKey(key);
+    UpdateKey(key, true);
 }
 
-void Engine::KeyUp(int division, int key) {
+void Engine::KeyUp(int division, int note) {
+    const int key = note - kFirstNote;
     if (division < 0 || division >= kDivisions || key < 0 || key >= kDivisionKeys[division]) return;
     const auto d = static_cast<std::size_t>(division), k = static_cast<std::size_t>(key);
     if (!played[d][k]) return;
@@ -534,15 +640,61 @@ void Engine::AllSoundOff() {
         for (int key = 0; key < kDivisionKeys[d]; ++key) UpdateChannel(d, key);
 }
 
-// Every kTick samples: the wind, each speaking pipe's share of it, and the
-// pipes that have rung out.
+// Every kTick samples: the roller and the sliders, the wind, each speaking
+// pipe's share of it, and the pipes that have rung out.
 void Engine::Tick() {
+    if (roller != crescendo) {
+        const double gap = crescendo - roller;
+        roller = Abs(gap) <= kRollerStep ? crescendo : roller + (gap > 0.0 ? kRollerStep : -kRollerStep);
+        const double at = roller * kCrescendoStages;
+        int next = stage;
+        while (next < kCrescendoStages && at >= next + 1) ++next;
+        while (next > 0 && at < next - kStageBack) --next;
+        if (next != stage) {
+            stage = diag.stage = next;
+            Register();
+        }
+    }
+    for (int i = 0; i < kStopCount; ++i) {
+        const float at = slider[static_cast<std::size_t>(i)], target = sliderTarget[static_cast<std::size_t>(i)];
+        const float step = sliderStep[static_cast<std::size_t>(i)];
+        if (at != target) SetSlider(i, at < target ? Min(at + step, target) : Max(at - step, target));
+    }
+
     const double live = 2.0 * controls[kWind], depth = 0.01 * controls[kTremulantDepth];
+
+    // The supply (kSpinUp and below): what it holds for every division.
+    const int supply = static_cast<int>(controls[kWindSupply]);
+    double taken = 0.0, full = 0.0;
+    for (std::size_t d = 0; d < kDivisions; ++d) {
+        taken += demand[d];
+        full += fullWind[d];
+    }
+    const double load = taken / full;
+    spin += supply == kWindBlower ? kSpinUp * (1.0 - spin) : -kSpinDown * spin;
+    if (spin < 1.0e-6) spin = 0.0;
+    if (supply == kWindBellows) {
+        if (load > 0.0) stock -= kBellowsLeak + kBellowsDrain * load;
+        if (stock < kChangeover) {
+            stock = 1.0;
+            // The fresh bellows starts where the spent one's droop left the
+            // wind, less the dip, and the reservoirs bring it back.
+            for (Reservoir& reservoir : reservoirs) reservoir.pressure -= kWedge * (1.0 - kChangeover) + kChangeDip;
+            if (controls[kBlower] > 0.0) knocks.Strike(kBellowsTurn, kKnockLevel * controls[kBlower], 0.0);
+        }
+    } else {
+        stock = Clamp(stock + kFill * spin * spin * (1.0 - stock) - kLeak - kDrain * load, 0.0, 1.0);
+    }
+    double head = Min(1.0, stock / kKnee);
+    if (supply == kWindBellows) head *= 1.0 - kWedge * live * (1.0 - stock);
+    head *= controls[kPressure];
+    diag.supply = head;
+
     for (std::size_t d = 0; d < kDivisions; ++d) {
         reservoirs[d].Step(demand[d] / fullWind[d]);
         unrestSlow[d] += kUnrestPole * (NextNoise(unrestRandom) - unrestSlow[d]);
         unrest[d] += kUnrestPole * (unrestSlow[d] - unrest[d]);
-        double p = 1.0 + live * (reservoirs[d].pressure - 1.0 + kUnrest * unrest[d]);
+        double p = head * (1.0 + live * (reservoirs[d].pressure - 1.0 + kUnrest * unrest[d]));
         if (d == kPositiv) p *= tremulants[0].Step(controls[kTremulantPos] >= 0.5, depth);
         if (d == kRecit) p *= tremulants[1].Step(controls[kTremulantRec] >= 0.5, depth);
         pressure[d] = static_cast<float>(Max(p, 0.0));
@@ -551,38 +703,50 @@ void Engine::Tick() {
         demand[d] = 0.0;
     }
 
+    std::size_t speaking = 0;
     for (std::size_t i = 0; i < active.size();) {
         Slot& s = slots[static_cast<std::size_t>(active[i])];
-        const float wind = s.share * pressure[s.division] * robbed[s.division][s.key];
-        bool silent;
-        if (s.reed) {
-            ReedPipe& pipe = reeds[static_cast<std::size_t>(s.index)];
-            pipe.wind = wind;
-            pipe.Tick();
-            demand[s.division] += pipe.air * Sqrt(static_cast<double>(pipe.foot));
-            silent = pipe.Silent();
-        } else {
-            FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
-            pipe.wind = wind;
-            pipe.Tick();
-            demand[s.division] += pipe.air * Sqrt(static_cast<double>(pipe.foot));
-            silent = pipe.Silent();
+        const float wind = s.share * opening[s.rank] * pressure[s.division] * robbed[s.division][s.key];
+        bool silent = s.resting && wind == 0.0f;
+        if (!silent) {
+            s.resting = false;
+            if (s.reed) {
+                ReedPipe& pipe = reeds[static_cast<std::size_t>(s.index)];
+                pipe.wind = wind;
+                pipe.Tick();
+                demand[s.division] += pipe.air * Sqrt(static_cast<double>(pipe.foot));
+                silent = pipe.Silent();
+                if (silent && s.share > 0.0f) pipe.Clear();
+            } else {
+                FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
+                pipe.wind = wind;
+                pipe.Tick();
+                demand[s.division] += pipe.air * Sqrt(static_cast<double>(pipe.foot));
+                silent = pipe.Silent();
+                if (silent && s.share > 0.0f) pipe.Clear();
+            }
         }
-        if (silent) {
+        // A silent pipe whose key is still held (the wind has gone) waits
+        // for it, cleared; any other has rung out.
+        s.resting = silent && s.share > 0.0f;
+        if (silent && !s.resting) {
             s.active = false;
             active[i] = active.back();
             active.pop_back();
         } else {
+            if (!s.resting) ++speaking;
             ++i;
         }
     }
-    const std::size_t speaking = active.size();
     diag.pipes = static_cast<int>(speaking);
 
-    // The blower is heard while the organ is played and a little after.
+    // The wind is heard while the organ is played and a little after: the
+    // blower's hum as it turns, the chests' hiss as they hold pressure.
     presence += (speaking > 0 ? kPresenceRise * (1.0f - presence) : -kPresenceFall * presence);
     if (speaking == 0 && presence < 1.0e-4f) presence = 0.0f;
-    blower = static_cast<float>(kBlowerLevel * controls[kBlower]) * presence;
+    const float noise = static_cast<float>(kBlowerLevel * controls[kBlower]) * presence;
+    hum = noise * static_cast<float>(spin);
+    hiss = noise * static_cast<float>(Min(head, 1.5));
     for (float& low : boxLow)
         if (Abs(low) < 1.0e-20f) low = 0.0f;
 
@@ -605,6 +769,7 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
     // The pipes already speaking, then those whose wind arrives within
     // these frames, each from its own sample on.
     const auto process = [&](const Slot& s, int from) {
+        if (s.resting) return;
         float* const busLeft = bus[s.division][0].data() + from;
         float* const busRight = bus[s.division][1].data() + from;
         if (s.reed) reeds[static_cast<std::size_t>(s.index)].Process(busLeft, busRight, frames - from);
@@ -631,7 +796,7 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
                 + boxLowGain * boxLow[c] + boxHighGain * (enclosed - boxLow[c]);
         }
         knocks.Process(sound[0], sound[1]);
-        if (blower > 0.0f) windNoise.Process(blower, sound[0], sound[1]);
+        if (hum > 0.0f || hiss > 0.0f) windNoise.Process(hum, hiss, sound[0], sound[1]);
         float roomLeft, roomRight;
         nave.Process(sound[0], sound[1], roomLeft, roomRight);
         dry += kGainStep * (dryTarget - dry);

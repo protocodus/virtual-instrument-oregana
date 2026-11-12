@@ -21,7 +21,7 @@
 namespace oregana {
 
 enum Control : int {
-    kFirstStop = 0,                 // kStopCount stop knobs: 0 in, 1 drawn
+    kFirstStop = 0,                 // kStopCount stop knobs: 0 in .. 1 drawn, and anywhere between for a stop half drawn
     kCouplerPosHw = kStopCount,     // Positiv to Hauptwerk (II/I)
     kCouplerRecHw,                  // Recit to Hauptwerk (III/I)
     kCouplerRecPos,                 // Recit to Positiv (III/II)
@@ -40,19 +40,29 @@ enum Control : int {
     kTemperature,                   // the church's air against the 20 C the organ was tuned at, C: flues follow it, reeds do not
     kVoicing,                       // how unevenly the pipes of a rank are voiced: 0 all alike .. 1 roughly
     kWind,                          // how live the wind is: 0 a steady supply .. 0.5 as modelled (Wind.h) .. 1 twice as unsteady
-    kBlower,                        // the blower's hum and the chests' hiss, against an estimate
-    kAction,                        // the keys', pallets' and stop knobs' knocks, against an estimate
+    kBlower,                        // the wind's noise: the blower's hum, the chests' hiss and the bellows' thud, against an estimate
+    kAction,                        // how worn the action is: its knocks, against an estimate, and the couplers' lost motion
     kDeadPipes,                     // pipes that no longer speak: 0 none .. 1 one in sixteen
     kCiphers,                       // pallets that hang open when their key is let go: 0 none .. 1 one key in twenty-five
     kRunnings,                      // wind leaking from a key's channel into its neighbour's: 0 none .. 1 one channel in twelve
     kVolume,                        // output level, dB
     kRoom,                          // where the listener is: 0 at the pipes (no church) .. 1 far down the nave (only the church)
-    kDecay,                         // the church's reverberation time at low frequencies, s
+    kDecay,                         // the church's reverberation time in the middle of the range, s
     kWidth,                         // 0 one ear .. 1 the organ's breadth and the church around both ears
+    kWindSupply,                    // kWindOff, kWindBlower or kWindBellows
+    kPressure,                      // the wind's pressure against the one the pipes were voiced on
+    kRoomSize,                      // the church's size against the one modelled: its reflections' and echoes' spacing
+    kDecayBass,                     // the reverberation time in the bass against the middle's
+    kDecayTreble,                   // and at the top of the range (Nave.h)
     kControlCount
 };
 
 constexpr int kCouplerCount = 6;
+
+// What gives the organ its wind: nothing (the blower switched off: the
+// reservoir runs down as the pipes take it), the electric blower, or a
+// calcant treading the bellows (OreganaEngine.cpp).
+enum WindSupply : int { kWindOff, kWindBlower, kWindBellows, kWindSupplies };
 
 enum class Curve { kLinear, kLog, kStepped };
 
@@ -70,7 +80,7 @@ namespace detail {
 constexpr std::array<ControlInfo, kControlCount> MakeControlInfo() {
     std::array<ControlInfo, kControlCount> info {};
     for (int i = 0; i < kStopCount; ++i)
-        info[static_cast<std::size_t>(i)] = { kStops[i].id, kStops[i].name, 0.0, 1.0, 0.0, 2, Curve::kStepped, "" };
+        info[static_cast<std::size_t>(i)] = { kStops[i].id, kStops[i].name, 0.0, 1.0, 0.0, 0, Curve::kLinear, "" };
     const ControlInfo rest[] = {
         { "coupler_pos_hw", "Positiv to Hauptwerk", 0.0, 1.0, 0.0, 2, Curve::kStepped, "" },
         { "coupler_rec_hw", "Recit to Hauptwerk", 0.0, 1.0, 0.0, 2, Curve::kStepped, "" },
@@ -96,15 +106,25 @@ constexpr std::array<ControlInfo, kControlCount> MakeControlInfo() {
         { "temperature", "Temperature", -10.0, 10.0, 0.0, 0, Curve::kLinear, "C" },
         { "voicing", "Voicing", 0.0, 1.0, 0.3, 0, Curve::kLinear, "" },
         { "wind", "Wind", 0.0, 1.0, 0.5, 0, Curve::kLinear, "" },
-        { "blower", "Blower", 0.0, 1.0, 0.2, 0, Curve::kLinear, "" },
+        { "blower", "Wind Noise", 0.0, 1.0, 0.2, 0, Curve::kLinear, "" },
         { "action", "Action", 0.0, 1.0, 0.25, 0, Curve::kLinear, "" },
         { "dead_pipes", "Dead Pipes", 0.0, 1.0, 0.0, 0, Curve::kLinear, "" },
         { "ciphers", "Ciphers", 0.0, 1.0, 0.0, 0, Curve::kLinear, "" },
         { "runnings", "Runnings", 0.0, 1.0, 0.0, 0, Curve::kLinear, "" },
         { "volume", "Volume", -24.0, 24.0, 0.0, 0, Curve::kLinear, "dB" },
         { "room", "Room", 0.0, 1.0, 0.6, 0, Curve::kLinear, "" },
-        { "decay", "Decay", 1.5, 9.0, 4.5, 0, Curve::kLog, "s" },
+        { "decay", "Decay", 1.0, 12.0, 4.5, 0, Curve::kLog, "s" },
         { "width", "Width", 0.0, 1.0, 0.8, 0, Curve::kLinear, "" },
+        { "wind_supply", "Wind Supply", 0.0, static_cast<double>(kWindSupplies - 1), static_cast<double>(kWindBlower), kWindSupplies,
+          Curve::kStepped, "" },
+        // Half the voiced pressure, where the pipes still speak, flat and
+        // soft, to half as much again, where they are sharp and loud.
+        { "pressure", "Wind Pressure", 0.5, 1.5, 1.0, 0, Curve::kLinear, "" },
+        { "room_size", "Church Size", 0.5, 2.0, 1.0, 0, Curve::kLog, "" },
+        // Voiced: stone gives the bass back, and a church rings longer there
+        // than in the middle.
+        { "decay_bass", "Decay Bass", 0.5, 2.0, 1.3, 0, Curve::kLog, "" },
+        { "decay_treble", "Decay Treble", 0.1, 0.6, 0.2, 0, Curve::kLinear, "" },
     };
     for (int i = kStopCount; i < kControlCount; ++i) info[static_cast<std::size_t>(i)] = rest[i - kStopCount];
     return info;

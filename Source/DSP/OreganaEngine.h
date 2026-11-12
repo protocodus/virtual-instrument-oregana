@@ -2,28 +2,38 @@
 
 // Oregana: a physically modelled church organ.
 //
-// Every pipe of every stop is there all the time, 3,618 of them (Stops.h): a
+// Every pipe of every stop is there all the time, 5,130 of them (Stops.h): a
 // flue pipe is a jet driving an air column, a reed pipe a tongue beating on a
 // shallot under a resonator (FluePipe.h, ReedPipe.h). A key opens its pallet
 // and the pipes of the drawn stops on its channel take wind and speak as
 // their voicing lets them; nothing here is an oscillator, an envelope or a
-// sample. The wind comes from one reservoir for each division, which sags
-// and bounces as the pipes draw on it (Wind.h), the Recit stands in a swell
-// box, and the church answers (Nave.h).
+// sample. The wind comes from a blower or a calcant's bellows, or from
+// neither (OreganaEngine.cpp), through one reservoir for each division, which
+// sags and bounces as the pipes draw on it (Wind.h), the Recit stands in a
+// swell box, and the church answers (Nave.h).
 //
 // MIDI (Midi)
-//   channel 1  Hauptwerk (I), C to c4 on notes 36 to 96
+//   channel 1  Hauptwerk (I), notes 21 to 108: an organ's C to c4 is 36 to 96
 //   channel 2  Positiv (II)
 //   channel 3  Recit (III), enclosed
-//   channel 4  Pedal, C to g1 on notes 36 to 67
+//   channel 4  Pedal, notes 21 to 67: an organ's C to g1 is 36 to 67
 //   CC1        the crescendo roller: adds stops and couplers in kCrescendoOrder's
-//              order, from one soft stop to full organ, to what is drawn
+//              order, from one soft stop to full organ, to what is drawn. The
+//              roller takes 0.8 s over its whole travel and each stop comes
+//              on its slider, so a wheel thrown over swells and does not step
 //   CC11       the swell pedal: 0 shut .. 127 open
 //   CC123      all keys up
 //   CC120      all keys up, and every hanging pallet freed (Ciphers)
 // Other channels play the Hauptwerk. Velocity is how fast the key opens the
 // pallet, which a tracker action passes on to the pipes' speech: it changes
 // the attack, never the level. A pipe organ has no sustaining pedal.
+//
+// Nothing in an organ answers at once or in step. A stop comes on as its
+// slider crosses the chest, each in its own time (0.1 to 0.2 s), and stays
+// part open if its knob is left part drawn: its pipes then get less wind, and
+// speak flat, weak and slow. A pipe is heard from where it stands, each
+// division at its own depth in the case. A coupler has lost motion, so the
+// manual it pulls speaks a few milliseconds late, later for a slow key.
 //
 // Imperfections. An organ is some thousands of hand-made pipes in an unheated
 // building, and no two of them are alike or stay as the tuner left them.
@@ -39,7 +49,9 @@
 //                and wind noise
 //   Wind         how far the reservoirs' sag, dip and bounce reach the pipes,
 //                with a slow unrest of the pressure itself
-//   Blower, Action   the organ's own noises (Mechanics.h)
+//   Wind Noise   the blower's hum, the chests' hiss and the bellows' thud
+//   Action       the keys' and stop knobs' knocks (Mechanics.h), and the
+//                couplers' lost motion: none at 0, up to 36 ms at 1
 //   Dead Pipes   pipes that do not speak at all
 //   Ciphers      pallets that hang part open when their key is let go, so
 //                the note whines on, flat and weak, on every stop drawn,
@@ -84,6 +96,8 @@ struct Diagnostics {
     int pipes = 0;                               // speaking or ringing
     std::array<double, kDivisions> pressure {};  // each reservoir's, against nominal
     std::array<double, kDivisions> demand {};    // the wind each division takes: 1 at full organ
+    double supply = 1.0;                         // the pressure the wind supply holds, against nominal
+    int stage = 0;                               // how many of kCrescendoOrder the roller has added
 };
 
 class Engine {
@@ -94,12 +108,12 @@ public:
     const Controls& GetControls() const { return controls; }
 
     void Midi(const std::uint8_t* bytes, int size);
-    void KeyDown(int division, int key, int velocity);   // key 0 is C (MIDI 36)
-    void KeyUp(int division, int key);
+    void KeyDown(int division, int note, int velocity);   // MIDI note numbers: 60 is c1
+    void KeyUp(int division, int note);
     void AllKeysUp();
     void AllSoundOff();                   // and every hanging pallet freed
     void SetSwell(double position);       // as the Swell control and CC11 do
-    void SetCrescendo(double position);   // as the Crescendo control and CC1 do
+    void SetCrescendo(double position);   // as the Crescendo control and CC1 do: where the roller is turned to
     void Render(float* left, float* right, int frames);
 
     // The output stage's look-ahead, samples: a front end reports it to its
@@ -108,15 +122,17 @@ public:
     const Diagnostics& Diag() const { return diag; }
     // A pipe's sounding frequency as it is tuned now, Hz, or 0 where no pipe
     // stands: for tools and tests.
-    double PipeHz(int rank, int key) const;
+    double PipeHz(int rank, int note) const;
 
 private:
     struct Slot {
         std::int16_t index = -1;      // among the flues or the reeds; -1: no pipe stands here
         std::uint8_t rank = 0, key = 0, division = 0;
         bool reed = false, active = false;
+        bool resting = false;         // its key is held and there is no wind for it: silent and cleared until some comes
         std::uint32_t epoch = 0;      // the tuning it was last made for
         std::uint16_t delay = 0;      // samples from its pallet's opening to its being heard (Engine::Engine)
+        std::uint64_t lastDue = 0;    // when the wind last sent to it arrives
         float offered = 0.0f;         // the share of its division's wind its pallet now gives
         float share = 0.0f;           // and the share that has reached it
         float gain = 0.0f;            // its regulated level
@@ -127,9 +143,10 @@ private:
 
     void Apply(const Controls& before, bool all);
     void Register();
-    void UpdateKey(int key);
-    void UpdateChannel(int division, int key);
-    void Offer(int slot, float share);
+    void SetSlider(int stop, float position);
+    void UpdateKey(int key, bool struck = false);
+    void UpdateChannel(int division, int key, int late = 0);
+    void Offer(int slot, float share, int late);
     bool Take(int slot, float share);
     void Design(int slot);
     void Place(Slot& slot);
@@ -157,12 +174,17 @@ private:
     std::array<std::array<float, kManualKeys>, kDivisions> hang {}, share {}, robbed {}, fullAir {};
     std::array<std::array<float, kManualKeys>, kDivisions> placeLeft {}, placeRight {};
     std::array<float, kManualKeys> touch {};
-    std::array<bool, kStopCount> stopDrawn {};
-    std::array<bool, kRankCount> rankDrawn {};
+    // Each stop's slider, 0 shut .. 1 open, where its knob and the roller
+    // want it and how far it travels a tick; and what that leaves its ranks.
+    std::array<float, kStopCount> slider {}, sliderTarget {}, sliderStep {};
+    std::array<float, kRankCount> opening {};      // the share of the channel's pressure the slider passes
+    std::array<bool, kRankCount> rankOpen {};
     std::array<bool, kCouplerCount> coupled {};
-    double swell = 1.0, crescendo = 0.0;
+    double swell = 1.0, crescendo = 0.0, roller = 0.0;
+    int stage = 0;
 
     // The wind.
+    double spin = 1.0, stock = 1.0;                // the blower's speed and the wind in store, each 0..1
     std::array<Reservoir, kDivisions> reservoirs {};
     std::array<Tremulant, 2> tremulants {};        // Positiv, Recit
     std::array<double, kDivisions> fullWind {}, demand {}, unrest {}, unrestSlow {};
@@ -175,7 +197,7 @@ private:
     int untilTick = 0;
     float boxLow[2] {}, boxLowGain = 1.0f, boxHighGain = 1.0f, boxLowTarget = 1.0f, boxHighTarget = 1.0f;
     float dry = 0.0f, wet = 0.0f, dryTarget = 0.0f, wetTarget = 0.0f;
-    float presence = 0.0f, blower = 0.0f;
+    float presence = 0.0f, hum = 0.0f, hiss = 0.0f;
     Knocks knocks;
     WindNoise windNoise;
     Nave nave;

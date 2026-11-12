@@ -266,6 +266,17 @@ build `OreganaDSPCxx17` for any `Source/DSP/` change, then run the `unit`,
   (`BlockPartitionInvariance`): wind reaches each pipe on its own sample, in
   the order it is due, and the speaking pipes are added up in one list's
   order.
+- Keys are MIDI note numbers everywhere (`KeyDown`, `PipeHz`): 21 to 108
+  on the manuals, 21 to 67 on the Pedal. A pipe's place in the hashes is
+  its rank and MIDI note (`PipePlace`, `KeyPlace`), so a wider compass
+  would not move any pipe's character.
+- A stop control is a slider's position, 0 to 1, and anything between is a
+  half-drawn stop. Stops, couplers and the roller's stages come on through
+  `Register` and the sliders, never at once; the couplers' lost motion is
+  taken up only when a key goes down (`UpdateKey(key, true)`).
+- The church's controls fade or glide (`Nave.h`): a new one must do the
+  same, and `ChurchIsThePlayers` holds the decay in each band and the
+  click-free turn.
 - The factory registrations' Volume trims come from
   `build-dsp/RenderOregana --levels`; run it again after any change to the
   pipes' levels, the master level or the church.
@@ -273,4 +284,4 @@ build `OreganaDSPCxx17` for any `Source/DSP/` change, then run the `unit`,
   listening set (the Toccata's opening, the crescendo, the imperfection
   settings) to a directory outside the checkout; none of it is committed.
 - The engine holds every pipe's delay lines and the church: keep it on the
-  heap, and construct it off the audio thread (it designs 3,618 pipes).
+  heap, and construct it off the audio thread (it designs 5,130 pipes).
