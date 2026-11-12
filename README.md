@@ -288,16 +288,18 @@ that a single stop is not 18 dB below full organ when it is loaded.
 
 ## Known gaps
 
-- **No plug-in, no Rack Extension, no CI, no release.** This is the engine,
-  its tools and tests; the generated README parts (screenshot, demo table,
-  downloads) wait for a main build.
+- **No plug-in, no CI, no release.** This is the engine, its tools and
+  tests; the generated README parts (screenshot, demo table, downloads) wait
+  for a main build. The Rack Extension over it is development source in the
+  Rack repository, not yet built with the SDK.
 - **CPU is above the portfolio's 10 % target for large registrations.** One
   256-frame block takes at most 4 % of a core on a single stop, 14 % on the
   Plenum demo (198 pipes) and 37 % on the Tutti demo (468 pipes); sixteen
   keys of full organ take 60 %. Development container, GCC 13, Release, one
   thread. The plan is in
   [Docs/plans/cpu-optimisation-2026-11-12.md](Docs/plans/cpu-optimisation-2026-11-12.md).
-- **48 kHz only.** A front end at another rate has to convert.
+- **The engine is 48 kHz only.** At another rate `OreganaInstrument.h`
+  resamples it, which costs 32 engine samples of latency more.
 - **The keys outside C to c4 are no organ's** (How it works, The keys). A
   16' manual stop drawn alone is silent on A0 to B0, and a 32' Pedal stop
   below C.
