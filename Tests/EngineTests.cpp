@@ -227,7 +227,7 @@ void StopsCouplersAndCrescendo() {
 }
 
 void WindSagsAndBounces() {
-    Controls controls = kPresets.back().ToControls();   // Tutti
+    Controls controls = kPresets[16].ToControls();   // Tutti
     controls[kRoom] = 0.0;
     Bench bench(controls);
     for (int note : { 36, 48, 55, 60, 64, 67, 72 }) bench.organ->KeyDown(kHauptwerk, note, 80);
@@ -377,7 +377,7 @@ void Imperfections() {
     }
     // Dead pipes: about one in sixteen is silent, and comes back.
     {
-        Controls controls = kPresets.back().ToControls();
+        Controls controls = kPresets[16].ToControls();
         Bench bench(controls);
         for (int note = 48; note < 72; ++note) bench.organ->KeyDown(kHauptwerk, note, 80);
         bench.Play(0.1);
@@ -639,7 +639,7 @@ void WindSupplies() {
 
     // Hand-pumped: full organ empties a bellows every few seconds, and each
     // changeover is a dip in the wind.
-    Controls controls = kPresets.back().ToControls();   // Tutti
+    Controls controls = kPresets[16].ToControls();   // Tutti
     controls[kRoom] = 0.0;
     controls[kWindSupply] = kWindBellows;
     Bench pumped(controls);

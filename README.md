@@ -41,6 +41,21 @@ and plenty.
 
 ## Version history
 
+### 0.4.0 — 2026-11-12 — twenty organs
+
+- **Twenty organ presets** after the 17 registrations: five chapel organs
+  (Positive, Italian, Village, Romantic, Derelict), ten church organs
+  (Baroque, Saxon, Flutes, French, Italian, Romantic, Hymn, Reeds, Evensong,
+  Winter) and five cathedral organs (Plenum, Symphony, Reeds, Fonds, Nave).
+  Each draws only the stops such an instrument would have and sets its
+  building, wind, tuning and state with them: a positive on treadled bellows
+  in meantone at 415 Hz in a small dry room, a cold parish church whose reeds
+  no longer agree with its flues, a full organ heard from far down a nave
+  that rings for ten seconds. The values are typical of such organs, not
+  measurements of one.
+- Nothing about the engine's sound changes; the registrations are as they
+  were.
+
 ### 0.3.0 — 2026-11-12 — one keyboard, any sample rate
 
 - **A playing layer for front ends** (`OreganaInstrument.h`): one keyboard
@@ -284,7 +299,9 @@ to 57 ms to speak (`RegistersSpeakApart` in the engine suite prints them).
 **Output.** The engine runs at 48 kHz, the rate its pipes are tuned at, and
 ends in the portfolio's shared peak limiter at -1.5 dBFS, which full organ
 does not reach on the demos. The factory registrations carry a Volume trim so
-that a single stop is not 18 dB below full organ when it is loaded.
+that a single stop is not 18 dB below full organ when it is loaded. The organ
+presets are trimmed the same way, and they do not limit the crescendo roller:
+it still brings on the whole stop list, a chapel organ's too.
 
 ## Known gaps
 
