@@ -1,8 +1,10 @@
 // A MIDI file through one registration, for listening and for measurement.
 //
-//   RenderOregana <preset> <phrase.mid> <out.wav> [--tail s] [id=value ...]
+//   RenderOregana <preset> <phrase.mid> <out.wav> [--tail s] [--changes file] [id=value ...]
 //       <preset> is a factory preset's name or number from 1; id=value sets a
 //       control (OreganaControls.h) over the preset's, in physical units.
+//       --changes reads registration changes made while playing: a line is
+//       the second it happens at and the id=value pairs set then.
 //       Prints the render's level, the most pipes speaking at once and the
 //       time it took.
 //   RenderOregana --levels
@@ -21,6 +23,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -44,11 +49,41 @@ int FindPreset(const std::string& name) {
     return *end == '\0' && number >= 1 && number <= static_cast<long>(kPresets.size()) ? static_cast<int>(number - 1) : -1;
 }
 
-demos::detail::Demo Play(const Controls& controls, const std::vector<demos::MidiEvent>& events, double seconds, int* mostPipes) {
+int FindControl(const std::string& id) {
+    for (int c = 0; c < kControlCount; ++c)
+        if (id == kControlInfo[static_cast<std::size_t>(c)].id) return c;
+    throw std::runtime_error("no control " + id);
+}
+
+std::vector<OreganaVoice::Change> ReadChanges(const char* path) {
+    std::ifstream file(path);
+    if (!file) throw std::runtime_error(std::string("cannot read ") + path);
+    std::vector<OreganaVoice::Change> changes;
+    std::string line, pair;
+    while (std::getline(file, line)) {
+        std::istringstream words(line);
+        double seconds = 0.0;
+        if (!(words >> seconds)) continue;
+        if (!changes.empty() && seconds < changes.back().seconds) throw std::runtime_error("changes out of order at " + line);
+        while (words >> pair) {
+            const auto equals = pair.find('=');
+            if (equals == std::string::npos) throw std::runtime_error("no id=value in " + pair);
+            changes.push_back({ seconds, FindControl(pair.substr(0, equals)), std::atof(pair.c_str() + equals + 1) });
+        }
+    }
+    return changes;
+}
+
+demos::detail::Demo Play(const Controls& controls, const std::vector<demos::MidiEvent>& events, double seconds, int* mostPipes,
+                         const std::vector<OreganaVoice::Change>& changes = {}) {
     demos::Instrument instrument;
     instrument.name = "Oregana";
     instrument.presets = { "render" };
-    instrument.open = [&](std::size_t, double, int, std::uint32_t) { return std::make_unique<OreganaVoice>(controls, mostPipes); };
+    instrument.open = [&](std::size_t, double, int, std::uint32_t) {
+        auto voice = std::make_unique<OreganaVoice>(controls, mostPipes);
+        voice->SetChanges(changes);
+        return voice;
+    };
     demos::detail::Demo demo = demos::detail::Play(instrument, 0, events, seconds, nullptr);
     demos::detail::Measure(demo);
     return demo;
@@ -92,7 +127,7 @@ int main(int argc, char** argv) {
             return 0;
         }
         if (argc < 4) {
-            std::fprintf(stderr, "usage: RenderOregana <preset> <phrase.mid> <out.wav> [--tail s] [id=value ...]\n"
+            std::fprintf(stderr, "usage: RenderOregana <preset> <phrase.mid> <out.wav> [--tail s] [--changes file] [id=value ...]\n"
                                  "       RenderOregana --levels | --list\n");
             return 2;
         }
@@ -103,25 +138,21 @@ int main(int argc, char** argv) {
         }
         Controls controls = kPresets[static_cast<std::size_t>(preset)].ToControls();
         double tail = 6.0;
+        std::vector<OreganaVoice::Change> changes;
         for (int i = 4; i < argc; ++i) {
             const std::string arg = argv[i];
             if (arg == "--tail" && i + 1 < argc) { tail = std::atof(argv[++i]); continue; }
+            if (arg == "--changes" && i + 1 < argc) { changes = ReadChanges(argv[++i]); continue; }
             const auto equals = arg.find('=');
-            int control = -1;
-            for (int c = 0; c < kControlCount; ++c)
-                if (equals != std::string::npos && arg.substr(0, equals) == kControlInfo[static_cast<std::size_t>(c)].id) control = c;
-            if (control < 0) {
-                std::fprintf(stderr, "no control in %s\n", arg.c_str());
-                return 2;
-            }
-            controls[control] = std::atof(arg.c_str() + equals + 1);
+            if (equals == std::string::npos) throw std::runtime_error("no id=value in " + arg);
+            controls[FindControl(arg.substr(0, equals))] = std::atof(arg.c_str() + equals + 1);
         }
         const auto events = demos::ReadMidi(argv[2]);
         if (events.empty()) throw std::runtime_error("no MIDI channel events");
         const double seconds = events.back().seconds + tail;
         int pipes = 0;
         const auto start = std::chrono::steady_clock::now();
-        auto demo = Play(controls, events, seconds, &pipes);
+        auto demo = Play(controls, events, seconds, &pipes, changes);
         const std::chrono::duration<double> spent = std::chrono::steady_clock::now() - start;
         demo.stem = argv[3];
         demos::detail::WriteWav(argv[3], demo);

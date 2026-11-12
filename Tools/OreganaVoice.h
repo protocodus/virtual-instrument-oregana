@@ -5,15 +5,19 @@
 #include "DSP/OreganaEngine.h"
 #include "PresetDemoRenderer.h"
 
+#include <cmath>
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 class OreganaVoice final : public protocodus::demos::Voice {
 public:
     // `mostPipes`, if given, is kept at the most pipes that spoke at once.
-    explicit OreganaVoice(const oregana::Controls& controls, int* mostPipes = nullptr)
-        : engine(std::make_unique<oregana::Engine>()), most(mostPipes) {
+    explicit OreganaVoice(const oregana::Controls& initial, int* mostPipes = nullptr)
+        : engine(std::make_unique<oregana::Engine>()), controls(initial), most(mostPipes) {
         engine->SetControls(controls);
         engine->Reset();
     }
@@ -27,12 +31,31 @@ public:
         engine->Midi(bytes, size);
     }
 
+    // Registration changes while playing. Render() splits its block at each
+    // one's sample, in order, as a host hands over automation.
+    struct Change { double seconds; int control; double value; };
+    void SetChanges(std::vector<Change> list) { changes = std::move(list); }
+
     void Render(float* left, float* right, int frames) override {
-        engine->Render(left, right, frames);
-        if (most && engine->Diag().pipes > *most) *most = engine->Diag().pipes;
+        while (frames > 0) {
+            for (; next < changes.size() && changes[next].seconds * protocodus::demos::kSampleRate <= static_cast<double>(frame); ++next) {
+                controls[changes[next].control] = changes[next].value;
+                engine->SetControls(controls);
+            }
+            int run = frames;
+            if (next < changes.size())
+                run = static_cast<int>(oregana::Min<double>(run, std::ceil(changes[next].seconds * protocodus::demos::kSampleRate - static_cast<double>(frame))));
+            engine->Render(left, right, run);
+            if (most && engine->Diag().pipes > *most) *most = engine->Diag().pipes;
+            left += run; right += run; frames -= run; frame += run;
+        }
     }
 
 private:
     std::unique_ptr<oregana::Engine> engine;
+    oregana::Controls controls;
+    std::vector<Change> changes;
+    std::size_t next = 0;
+    std::int64_t frame = 0;
     int* most;
 };
