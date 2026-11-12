@@ -100,6 +100,10 @@ constexpr float kGainStep = 0.001f;   // output gains glide in about 20 ms
 // The noises at Action and Blower 1: a key's knock peaks near -38 dBFS and
 // the wind noise sits at -50 dBFS RMS, at the pipes (estimates).
 constexpr double kKnockLevel = 0.012, kBlowerLevel = 0.22;
+// A slider's rub is at its loudest with three or more stops moving, quiet
+// beside their knobs' knocks, and the shutters knock as a thrown pedal lands
+// them: a tenth of the travel in one step is a full knock (estimates).
+constexpr double kRubLevel = 1.0, kShutterThrow = 0.1;
 constexpr float kPresenceRise = 0.00222f, kPresenceFall = 0.000333f;   // 0.3 s and 2 s
 
 constexpr double kDeadShare = 0.0625, kCipherShare = 0.04, kRunningShare = 0.083;
@@ -282,7 +286,7 @@ void Engine::Reset() {
     boxHighGain = boxHighTarget;
     dry = dryTarget;
     wet = wetTarget;
-    presence = hum = hiss = 0.0f;
+    presence = hum = hiss = rub = 0.0f;
     knocks.Clear();
     windNoise.Clear();
     nave.Clear();
@@ -362,7 +366,12 @@ void Engine::Apply(const Controls& before, bool all) {
 }
 
 void Engine::SetSwell(double position) {
+    const double before = swell;
     swell = position == position ? Clamp(position, 0.0, 1.0) : 1.0;
+    // The shutters meet their frame at either end of the pedal's travel, as
+    // hard as the pedal was moving.
+    if (swell != before && (swell == 0.0 || swell == 1.0) && controls[kAction] > 0.0)
+        knocks.Strike(kShutters, kKnockLevel * controls[kAction] * Min(1.0, Abs(swell - before) / kShutterThrow), 0.0);
     boxLowTarget = static_cast<float>(std::pow(10.0, kBoxLowDb * (1.0 - swell) / 20.0));
     boxHighTarget = static_cast<float>(std::pow(10.0, kBoxHighDb * (1.0 - swell) / 20.0));
 }
@@ -402,8 +411,9 @@ void Engine::SetSlider(int stop, float position) {
 // Which pallets key `key` holds open across the divisions: its own, and
 // through the couplers, which pull one another's keys as a tracker action's
 // do. A key just `struck` pulls the coupled ones late, by each coupler's lost
-// motion on the way.
-void Engine::UpdateKey(int key, bool struck) {
+// motion on the way. `own` is the division whose key moved, whose knock
+// the caller has struck.
+void Engine::UpdateKey(int key, bool struck, int own) {
     const auto k = static_cast<std::size_t>(key);
     const bool pedal = key < kPedalKeys && played[kPedal][k];
     bool pulled[kDivisions];
@@ -440,6 +450,11 @@ void Engine::UpdateKey(int key, bool struck) {
         const int place = KeyPlace(d, key);
         const bool hangs = !pulled[d] && Unit(place, kCipher) < kCipherShare * controls[kCiphers];
         hang[static_cast<std::size_t>(d)][k] = hangs ? static_cast<float>(0.35 + 0.55 * Unit(place, kCipherLeak)) : 0.0f;
+        // A pallet a coupler moves knocks at its own chest, when the lost
+        // motion is taken up; the key's own is in the key's knock.
+        if (d != own && controls[kAction] > 0.0)
+            knocks.Strike(pulled[d] ? kPalletPulled : kPalletShut, kKnockLevel * controls[kAction] * (pulled[d] ? 1.9 - touch[k] : 1.0),
+                          controls[kWidth] * Stand(d, key), late[d]);
     }
     for (int d = 0; d < kDivisions; ++d)
         for (int near : { key - 2, key, key + 2 })
@@ -621,8 +636,9 @@ void Engine::KeyDown(int division, int note, int velocity) {
     const double stroke = Clamp(velocity, 1, 127) / 127.0;
     touch[k] = static_cast<float>(1.5 - stroke);
     if (controls[kAction] > 0.0)
-        knocks.Strike(kKeyDown, kKnockLevel * controls[kAction] * (0.4 + stroke), controls[kWidth] * Stand(division, key));
-    UpdateKey(key, true);
+        knocks.Strike(division == kPedal ? kPedalDown : kKeyDown, kKnockLevel * controls[kAction] * (0.4 + stroke),
+                      controls[kWidth] * Stand(division, key));
+    UpdateKey(key, true, division);
 }
 
 void Engine::KeyUp(int division, int note) {
@@ -631,8 +647,9 @@ void Engine::KeyUp(int division, int note) {
     const auto d = static_cast<std::size_t>(division), k = static_cast<std::size_t>(key);
     if (!played[d][k]) return;
     played[d][k] = false;
-    if (controls[kAction] > 0.0) knocks.Strike(kKeyUp, kKnockLevel * controls[kAction], controls[kWidth] * Stand(division, key));
-    UpdateKey(key);
+    if (controls[kAction] > 0.0)
+        knocks.Strike(division == kPedal ? kPedalUp : kKeyUp, kKnockLevel * controls[kAction], controls[kWidth] * Stand(division, key));
+    UpdateKey(key, false, division);
 }
 
 void Engine::AllKeysUp() {
@@ -662,11 +679,15 @@ void Engine::Tick() {
             Register();
         }
     }
+    int moving = 0;
     for (int i = 0; i < kStopCount; ++i) {
         const float at = slider[static_cast<std::size_t>(i)], target = sliderTarget[static_cast<std::size_t>(i)];
         const float step = sliderStep[static_cast<std::size_t>(i)];
-        if (at != target) SetSlider(i, at < target ? Min(at + step, target) : Max(at - step, target));
+        if (at == target) continue;
+        SetSlider(i, at < target ? Min(at + step, target) : Max(at - step, target));
+        ++moving;
     }
+    rub = static_cast<float>(kRubLevel * controls[kAction] * Min(moving, 3) / 3.0);
 
     const double live = 2.0 * controls[kWind], depth = 0.01 * controls[kTremulantDepth];
 
@@ -704,6 +725,14 @@ void Engine::Tick() {
         double p = head * (1.0 + live * (reservoirs[d].pressure - 1.0 + kUnrest * unrest[d]));
         if (d == kPositiv) p *= tremulants[0].Step(controls[kTremulantPos] >= 0.5, depth);
         if (d == kRecit) p *= tremulants[1].Step(controls[kTremulantRec] >= 0.5, depth);
+        // The valve's thump, from the middle of its division: as loud as the
+        // beat is deep, a full one at 10 %, and heard with the wind's noise,
+        // while the organ is played and a little after.
+        if (d == kPositiv || d == kRecit) {
+            const Tremulant& t = tremulants[d == kPositiv ? 0 : 1];
+            if (t.beat && controls[kBlower] > 0.0 && presence > 0.0f)
+                knocks.Strike(kTremulantBeat, kKnockLevel * controls[kBlower] * presence * t.running * Min(1.0, 10.0 * depth), 0.0);
+        }
         pressure[d] = static_cast<float>(Max(p, 0.0));
         diag.pressure[d] = pressure[d];
         diag.demand[d] = demand[d] / fullWind[d];
@@ -749,8 +778,11 @@ void Engine::Tick() {
 
     // The wind is heard while the organ is played and a little after: the
     // blower's hum as it turns, the chests' hiss as they hold pressure.
-    presence += (speaking > 0 ? kPresenceRise * (1.0f - presence) : -kPresenceFall * presence);
-    if (speaking == 0 && presence < 1.0e-4f) presence = 0.0f;
+    // The blower is heard coming up to speed and running down as well.
+    const bool turning = supply == kWindBlower ? spin < 0.98 : spin > 0.02;
+    presence += (speaking > 0 || turning ? kPresenceRise * (1.0f - presence) : -kPresenceFall * presence);
+    if (speaking == 0 && !turning && presence < 1.0e-4f) presence = 0.0f;
+    windNoise.SetSpin(spin);
     const float noise = static_cast<float>(kBlowerLevel * controls[kBlower]) * presence;
     hum = noise * static_cast<float>(spin);
     hiss = noise * static_cast<float>(Min(head, 1.5));
@@ -803,7 +835,7 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
                 + boxLowGain * boxLow[c] + boxHighGain * (enclosed - boxLow[c]);
         }
         knocks.Process(sound[0], sound[1]);
-        if (hum > 0.0f || hiss > 0.0f) windNoise.Process(hum, hiss, sound[0], sound[1]);
+        if (hum > 0.0f || hiss > 0.0f || rub > 0.0f) windNoise.Process(hum, hiss, rub, sound[0], sound[1]);
         float roomLeft, roomRight;
         nave.Process(sound[0], sound[1], roomLeft, roomRight);
         dry += kGainStep * (dryTarget - dry);

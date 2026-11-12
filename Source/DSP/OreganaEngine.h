@@ -144,7 +144,7 @@ private:
     void Apply(const Controls& before, bool all);
     void Register();
     void SetSlider(int stop, float position);
-    void UpdateKey(int key, bool struck = false);
+    void UpdateKey(int key, bool struck = false, int own = -1);
     void UpdateChannel(int division, int key, int late = 0);
     void Offer(int slot, float share, int late);
     bool Take(int slot, float share);
@@ -197,7 +197,7 @@ private:
     int untilTick = 0;
     float boxLow[2] {}, boxLowGain = 1.0f, boxHighGain = 1.0f, boxLowTarget = 1.0f, boxHighTarget = 1.0f;
     float dry = 0.0f, wet = 0.0f, dryTarget = 0.0f, wetTarget = 0.0f;
-    float presence = 0.0f, hum = 0.0f, hiss = 0.0f;
+    float presence = 0.0f, hum = 0.0f, hiss = 0.0f, rub = 0.0f;
     Knocks knocks;
     WindNoise windNoise;
     Nave nave;

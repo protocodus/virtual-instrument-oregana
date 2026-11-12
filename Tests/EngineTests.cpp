@@ -443,6 +443,76 @@ void Imperfections() {
     }
 }
 
+// The action's and the wind's other noises, with no stop drawn.
+void MechanismIsHeard() {
+    const auto bench = [] {
+        auto b = std::make_unique<Bench>();
+        b->Set(kAction, 1.0);
+        return b;
+    };
+    const auto crossings = [](const Take& take) {
+        int count = 0;
+        for (std::size_t i = 1; i < take.left.size(); ++i) count += (take.left[i] < 0.0f) != (take.left[i - 1] < 0.0f);
+        return count;
+    };
+    // A coupled key knocks again at the chest it pulls, after the lost motion.
+    auto alone = bench(), coupled = bench();
+    coupled->Draw({ kCouplerPosHw, kCouplerRecHw });
+    alone->organ->KeyDown(kHauptwerk, 60, 100);
+    coupled->organ->KeyDown(kHauptwerk, 60, 100);
+    const double one = alone->Play(0.1).Rms(0.008, 0.1), three = coupled->Play(0.1).Rms(0.008, 0.1);
+    Expect(three > 1.1 * one, "MechanismIsHeard", "a key coupled to two manuals knocks at their chests too, against the key alone", three / one);
+    // A pedal key lands lower than a manual key.
+    auto manual = bench(), pedal = bench();
+    manual->organ->KeyDown(kHauptwerk, 48, 100);
+    pedal->organ->KeyDown(kPedal, 48, 100);
+    const int high = crossings(manual->Play(0.05)), low = crossings(pedal->Play(0.05));
+    Expect(low < high && low > 4, "MechanismIsHeard", "a pedal key lands lower than a manual key, zero crossings in 50 ms", low);
+    // The shutters knock when the pedal is thrown shut, and hardly when it is eased shut.
+    auto thrown = bench(), eased = bench();
+    thrown->organ->SetSwell(0.0);
+    const double thud = thrown->Play(0.3).Peak();
+    double soft = 0.0;
+    for (int step = 126; step >= 0; --step) {
+        eased->organ->SetSwell(step / 127.0);
+        soft = Max(soft, eased->Play(0.01).Peak());
+    }
+    soft = Max(soft, eased->Play(0.3).Peak());
+    Expect(thud > 1.0e-3 && soft < 0.2 * thud && soft > 0.0, "MechanismIsHeard", "the shutters knock as hard as the pedal is thrown, eased against thrown", soft / thud);
+    // A slider rubs across the chest while it travels, and no longer.
+    auto drawn = bench();
+    drawn->Play(0.1);
+    drawn->Set(kAction, 1.0);
+    drawn->controls[kHwOctave8] = drawn->controls[kHwOctave4] = drawn->controls[kHwMixtur] = 1.0;
+    drawn->Set(kVolume, drawn->controls[kVolume]);
+    const Take rub = drawn->Play(1.0);
+    Expect(Db(rub.Rms(0.06, 0.1)) > -70.0 && rub.Rms(0.6, 1.0) == 0.0, "MechanismIsHeard", "sliders rub while they travel, dBFS", Db(rub.Rms(0.06, 0.1)));
+    // The tremulant's valve thumps once a beat while the organ is played.
+    Bench wind;
+    wind.Set(kBlower, 0.0);
+    wind.Draw({ kPosGedackt8, kTremulantPos });
+    wind.organ->KeyDown(kPositiv, 60, 80);
+    const Take smooth = wind.Play(3.0);
+    Bench beaten;
+    beaten.Set(kBlower, 1.0);
+    beaten.Draw({ kPosGedackt8, kTremulantPos });
+    beaten.organ->KeyDown(kPositiv, 60, 80);
+    const Take thumped = beaten.Play(3.0);
+    double differs = 0.0;
+    for (std::size_t i = 0; i < smooth.left.size(); ++i) differs = Max(differs, static_cast<double>(Abs(thumped.left[i] - smooth.left[i])));
+    Expect(differs > 1.0e-3, "MechanismIsHeard", "the tremulant's valve is heard with the wind's noise, peak", differs);
+    // The blower is heard coming up to speed, and falls silent when nobody plays.
+    Bench blower;
+    blower.Set(kBlower, 1.0);
+    blower.Set(kWindSupply, kWindOff);
+    blower.Play(30.0);
+    Expect(blower.Play(1.0).Peak() == 0.0, "MechanismIsHeard", "a blower run down is silent", 0.0);
+    blower.Set(kWindSupply, kWindBlower);
+    const double start = Db(blower.Play(2.0).Rms(0.5, 2.0));
+    blower.Play(40.0);
+    Expect(start > -75.0 && blower.Play(1.0).Peak() == 0.0, "MechanismIsHeard", "the blower is heard starting and then leaves an unplayed organ silent, dBFS", start);
+}
+
 // When a take first sounds, ms.
 double FirstSound(const Take& take) {
     for (std::size_t i = 0; i < take.left.size(); ++i)
@@ -917,6 +987,7 @@ int main() {
     SwellBoxCloses();
     NaveLevel();
     Imperfections();
+    MechanismIsHeard();
     EveryKeySounds();
     StopsSlide();
     RegistersSpeakApart();

@@ -62,6 +62,7 @@ struct Tremulant {
     double cosine = 1.0, sine = 0.0;   // where the valve is in its beat
     double turnCos = 1.0, turnSin = 0.0;
     double running = 0.0, start = 0.0;
+    bool beat = false;   // the valve has just shut: once a beat
 
     // The valve takes a quarter of a second to find its beat and to stop.
     void Design(double hz, double stepSeconds) {
@@ -78,6 +79,7 @@ struct Tremulant {
     // The share of the pressure it leaves this step.
     double Step(bool on, double depth) {
         running += start * ((on ? 1.0 : 0.0) - running);
+        beat = false;
         if (running < 1.0e-6) {
             running = 0.0;
             cosine = 1.0;
@@ -86,6 +88,7 @@ struct Tremulant {
         }
         const double c = cosine * turnCos - sine * turnSin, s = sine * turnCos + cosine * turnSin;
         const double norm = 1.5 - 0.5 * (c * c + s * s);
+        beat = sine < 0.0 && s >= 0.0;
         cosine = c * norm;
         sine = s * norm;
         return 1.0 - running * depth * 0.5 * (1.0 - cosine);
