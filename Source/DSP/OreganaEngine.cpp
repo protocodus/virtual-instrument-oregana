@@ -57,7 +57,8 @@ constexpr float kRobbing = 0.03f;
 // it out again. With the blower switched off the organ plays on what is in
 // store, a second and a half of full organ or some ten seconds of one stop,
 // and then the plate comes down on its last quarter and the pressure with it:
-// every pipe goes flat, weakens and stops, the large ones last. Switched on
+// every pipe goes flat and weakens, the flues stop at a little over half the
+// pressure and the reeds last. Switched on
 // again, the blower takes about a second to come up to speed and fill it.
 // On the bellows a calcant treads: the wind is always there, its pressure
 // falls a little as each bellows sinks (the more the livelier the wind), and

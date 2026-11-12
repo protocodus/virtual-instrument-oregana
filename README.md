@@ -58,7 +58,7 @@ and plenty.
 - **Wind Supply**: the blower can be switched off (the reservoir runs down
   and the pipes go flat and die) and on again, or a calcant treads the
   bellows, with a dip and a thud at each changeover. **Wind Pressure** runs
-  the organ from half to one and a half times the pressure it was voiced on.
+  the organ from 0.6 to 1.5 times the pressure it was voiced on.
 - **A new church**: 33 early reflections and a field of 32 delay lines, with
   Church Size, Decay Bass and Decay Treble beside Decay (now 1 to 12 s),
   Room and Width. All of them can be turned while the organ sounds.
@@ -183,7 +183,8 @@ driven by the wind they are given:
   pipe. A knob takes 0.1 to 0.2 s to travel, each knob its own time, and the
   pipes get more wind as the holes line up. A stop control anywhere between
   in and drawn leaves the slider there: at half, the Octave 8' gets 0.63 of
-  its wind and sounds 26 cents flat and 5 dB down, as a half-drawn stop does.
+  its wind and sounds 26 cents flat and 5 dB down, as a half-drawn stop
+  does. Under about 0.45 its flues get too little to speak and only hiss.
 - *Couplers have lost motion.* With Action at 0 a coupled manual's pallets
   open with the key. A worn action takes up its slack first: 7 to 21 ms at
   an ordinary stroke with Action at 1, each key and coupler its own share
@@ -191,16 +192,18 @@ driven by the wind they are given:
   quarter of that as loaded.
 - *The wind supply.* With the blower running the reservoir is kept full.
   Switched off, the organ plays on what is in store, a second and a half of
-  full organ or some ten seconds of one stop; then the pressure falls and
-  every held pipe goes flat, weakens and stops. Switched on, the blower
+  full organ or some ten seconds of one stop; then the pressure falls, the
+  held flues go flat, weaken and fall silent at a little over half the
+  pressure, and the reeds hold on longest. Switched on, the blower
   comes up in about a second and the held pipes speak again. On Bellows a
   calcant treads instead: the pressure droops a little as each bellows
   sinks, and the next takes over with a dip of 3 % and a thud (a full chord
   empties one about every 7 s). He treads only while the organ is played,
   and there is no blower hum.
-- *Wind Pressure* runs the whole organ from half to one and a half times
-  the pressure it was voiced on. On half, the Octave 8' is 30 cents flat and
-  soft; on one and a half it is 24 cents sharp and loud.
+- *Wind Pressure* runs the whole organ from 0.6 to 1.5 times the pressure
+  it was voiced on. On 0.6 the Octave 8' is 29 cents flat and 5 dB down; on
+  1.5 it is 24 cents sharp and louder. A little under 0.6 the flues stop
+  speaking, which is where the range ends.
 
 None of these figures is measured on an organ. The times, the slack and the
 supply's sizes are estimates from written accounts of such actions and

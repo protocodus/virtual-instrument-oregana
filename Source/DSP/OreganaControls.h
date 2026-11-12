@@ -117,9 +117,11 @@ constexpr std::array<ControlInfo, kControlCount> MakeControlInfo() {
         { "width", "Width", 0.0, 1.0, 0.8, 0, Curve::kLinear, "" },
         { "wind_supply", "Wind Supply", 0.0, static_cast<double>(kWindSupplies - 1), static_cast<double>(kWindBlower), kWindSupplies,
           Curve::kStepped, "" },
-        // Half the voiced pressure, where the pipes still speak, flat and
-        // soft, to half as much again, where they are sharp and loud.
-        { "pressure", "Wind Pressure", 0.5, 1.5, 1.0, 0, Curve::kLinear, "" },
+        // From 0.6 of the voiced pressure, where every flue still speaks,
+        // flat and 5 to 9 dB down (a little lower they fall silent, and only
+        // the reeds go on), to half as much again, where they are sharp and
+        // loud.
+        { "pressure", "Wind Pressure", 0.6, 1.5, 1.0, 0, Curve::kLinear, "" },
         { "room_size", "Church Size", 0.5, 2.0, 1.0, 0, Curve::kLog, "" },
         // Voiced: stone gives the bass back, and a church rings longer there
         // than in the middle.

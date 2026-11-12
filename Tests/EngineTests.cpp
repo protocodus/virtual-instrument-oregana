@@ -622,9 +622,14 @@ void WindSupplies() {
     const Take sounding = bench.Play(2.0);
     const double steady = Db(sounding.Rms(1.0, 2.0)), tuned = bench.organ->PipeHz(1, 60);
     bench.Set(kWindSupply, kWindOff);
-    double sagged = 0.0;
-    for (int i = 0; i < 200 && bench.organ->Diag().supply > 0.6; ++i) sagged = CentsBetween(bench.Play(0.1).Hz(tuned), tuned);
-    Expect(bench.organ->Diag().supply <= 0.6 && sagged < -3.0, "WindSupplies", "with the blower off the wind runs down and a held pipe goes flat, cents", sagged);
+    double sagged = 0.0, weakened = 0.0;
+    for (int i = 0; i < 200 && bench.organ->Diag().supply > 0.7; ++i) {
+        const Take sinking = bench.Play(0.1);
+        sagged = CentsBetween(sinking.Hz(tuned), tuned);
+        weakened = Db(sinking.Rms(0.0, 0.1)) - steady;
+    }
+    Expect(bench.organ->Diag().supply <= 0.7 && sagged < -3.0 && weakened < -1.0 && weakened > -10.0, "WindSupplies",
+           "with the blower off the wind runs down and a held pipe goes flat and weak, cents", sagged);
     const Take dying = bench.Play(8.0);
     Expect(bench.organ->Diag().supply == 0.0 && dying.Rms(7.0, 8.0) == 0.0 && bench.organ->Diag().pipes == 0, "WindSupplies",
            "until there is none and the organ is silent under a held key, supply", bench.organ->Diag().supply);
@@ -665,7 +670,7 @@ void WindSupplies() {
 void PressureBendsPitch() {
     double level[3], cents[3];
     int at = 0;
-    for (double pressure : { 0.5, 1.0, 1.5 }) {
+    for (double pressure : { 0.6, 1.0, 1.5 }) {
         Bench bench;
         bench.Set(kPressure, pressure);
         bench.Draw({ kHwOctave8 });
@@ -675,7 +680,8 @@ void PressureBendsPitch() {
         cents[at++] = CentsBetween(take.Hz(bench.organ->PipeHz(1, 60)), bench.organ->PipeHz(1, 60));
         Expect(bench.organ->Diag().supply == pressure, "PressureBendsPitch", "the supply holds the Wind Pressure", bench.organ->Diag().supply);
     }
-    Expect(cents[0] < -5.0 && cents[0] > -80.0 && level[0] < level[1] - 2.0, "PressureBendsPitch", "on half the wind a flue is flat and soft, cents", cents[0]);
+    Expect(cents[0] < -5.0 && cents[0] > -80.0, "PressureBendsPitch", "on the least wind a flue is flat, cents", cents[0]);
+    Expect(level[0] < level[1] - 2.0 && level[0] > level[1] - 10.0, "PressureBendsPitch", "and soft, but it speaks, dB", level[0] - level[1]);
     Expect(cents[2] > 3.0 && cents[2] < 60.0 && level[2] > level[1] + 1.0, "PressureBendsPitch", "on half as much again it is sharp and loud, cents", cents[2]);
 }
 
