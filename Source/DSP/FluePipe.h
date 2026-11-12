@@ -135,7 +135,7 @@ struct FluePipe {
     // half): its round trip, what the junction passes each way, and its open top.
     int upperLength = 0;
     float upFromBelow = 0.0f, upFromAbove = 0.0f, downFromBelow = 1.0f, downFromAbove = 0.0f;
-    float upperLowpass = 1.0f, upperGain = 0.0f;
+    float upperLowpass = 1.0f, upperGain = 0.0f, upperAllpass = 0.0f;
     // The foot and the radiation.
     float attack = 1.0f, release = 1.0f, radiation = 0.0f;
     float gainLeft = 0.0f, gainRight = 0.0f;
@@ -145,7 +145,7 @@ struct FluePipe {
     float* jet = nullptr;
     float* upper = nullptr;
     int loopAt = 0, jetAt = 0, upperAt = 0;
-    float upperOut = 0.0f;
+    float upperOut = 0.0f, upperAllpassIn = 0.0f, upperAllpassOut = 0.0f;
     float allpassIn = 0.0f, allpassOut = 0.0f, lowpassOut = 0.0f, dcIn = 0.0f, dcOut = 0.0f;
     float jetOut = 0.0f, radiationIn = 0.0f, radiationOut = 0.0f;
     float foot = 0.0f, wind = 0.0f;       // foot pressure and what the pallet offers it, against nominal
@@ -251,7 +251,12 @@ struct FluePipe {
             upFromAbove = static_cast<float>(-bore);
             downFromBelow = static_cast<float>(bore);
             downFromAbove = static_cast<float>(1.0 - bore);
-            upperLength = Max(1, static_cast<int>(std::lround(v.chimneyLength * kPi / w)));
+            // Its length there and back is a whole number of samples and
+            // an allpass for the rest: cut to whole samples alone, it stepped
+            // the pipe's pitch by up to 4 cents as the organ was retuned.
+            const double chimney = v.chimneyLength * kPi / w;
+            upperLength = Max(1, static_cast<int>(std::lround(chimney - 1.0)));
+            upperAllpass = static_cast<float>(detail::AllpassFor(Max(chimney - upperLength, 0.1), w));
             const double opening = Min(kSoundSpeed / (kTwoPi * radius * v.chimney), 0.45 * kPipeRate);
             upperLowpass = static_cast<float>(1.0 - std::exp(-kTwoPi * opening / kPipeRate));
             upperGain = static_cast<float>(std::sqrt(perPeriod));
@@ -269,8 +274,11 @@ struct FluePipe {
             downFromAbove = static_cast<float>(-(1.0 - h));
             double topGain, topLag;
             detail::OnePole(lp, w, topGain, topLag);
-            upperLength = Max(1, static_cast<int>(std::floor((kTwoPi - topLag) / w)));
-            const double fill = Clamp(kTwoPi - upperLength * w, 0.02, 0.9 * 0.5 * (kPi - w));
+            const int whole = Max(2, static_cast<int>(std::floor((kTwoPi - topLag) / w)));
+            const double fill = Clamp(kTwoPi - whole * w, 0.02, 0.9 * 0.5 * (kPi - w));
+            // The line's allpass at 0 is one sample of the delay.
+            upperLength = whole - 1;
+            upperAllpass = 0.0f;
             const double topPole = std::sin(fill) / std::sin(w + fill);
             detail::OnePole(1.0 - topPole, w, topGain, topLag);
             upperLowpass = static_cast<float>(1.0 - topPole);
@@ -300,6 +308,7 @@ struct FluePipe {
         for (int i = 0; i < upperLength; ++i) upper[i] = 0.0f;
         loopAt = jetAt = upperAt = 0;
         allpassIn = allpassOut = lowpassOut = dcIn = dcOut = jetOut = radiationIn = radiationOut = upperOut = 0.0f;
+        upperAllpassIn = upperAllpassOut = 0.0f;
         foot = wind = 0.0f;
         jetTransit = jetLongest;
         jetStep = 0.0f;
@@ -324,7 +333,7 @@ struct FluePipe {
         float* const upperBuffer = upper;
         const int upperTrip = upperLength;
         int at = loopAt, jetWrite = jetAt, upperRead = upperAt;
-        float upperLp = upperOut;
+        float upperLp = upperOut, upperApIn = upperAllpassIn, upperApOut = upperAllpassOut;
         float apIn = allpassIn, apOut = allpassOut, lpOut = lowpassOut, blockIn = dcIn, blockOut = dcOut;
         float jetLp = jetOut, radIn = radiationIn, radOut = radiationOut, pressure = foot, transit = jetTransit;
         std::uint32_t seed = random;
@@ -340,7 +349,10 @@ struct FluePipe {
             apOut = ap;
             float turned = ap;
             if (upperTrip > 0) {
-                const float back = upperBuffer[upperRead];
+                const float stored = upperBuffer[upperRead];
+                const float back = upperAllpass * (stored - upperApOut) + upperApIn;
+                upperApIn = stored;
+                upperApOut = back;
                 upperLp += upperLowpass * (upFromBelow * ap + upFromAbove * back - upperLp);
                 upperBuffer[upperRead] = -upperGain * upperLp;
                 if (++upperRead == upperTrip) upperRead = 0;
@@ -386,6 +398,8 @@ struct FluePipe {
         jetAt = jetWrite;
         upperAt = upperRead;
         upperOut = upperLp;
+        upperAllpassIn = upperApIn;
+        upperAllpassOut = upperApOut;
         allpassIn = apIn;
         allpassOut = apOut;
         lowpassOut = lpOut;

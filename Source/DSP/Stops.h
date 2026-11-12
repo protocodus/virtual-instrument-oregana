@@ -216,6 +216,20 @@ constexpr StopSpec kStops[] = {
 
 constexpr int kStopCount = static_cast<int>(sizeof(kStops) / sizeof(kStops[0]));
 
+// The stops by name, in kStops' order, for registrations.
+enum Stop : int {
+    kHwPrincipal16, kHwOctave8, kHwGamba8, kHwRohrfloete8, kHwOctave4, kHwSpitzfloete4, kHwQuinte223,
+    kHwSuperoctave2, kHwCornet, kHwMixtur, kHwScharff, kHwTrompete16, kHwTrompete8,
+    kPosGedackt8, kPosQuintadena8, kPosUndaMaris8, kPosPrincipal4, kPosRohrfloete4, kPosNasat223, kPosOctave2,
+    kPosTerz135, kPosQuinte113, kPosSiffloete1, kPosCimbel, kPosDulcian16, kPosKrummhorn8, kPosVoxHumana8,
+    kRecPrincipal8, kRecVoceUmana8, kRecFluteHarmonique8, kRecGambe8, kRecVoixCeleste8, kRecFluteOctaviante4,
+    kRecOctavin2, kRecPleinJeu, kRecBasson16, kRecTrompette8, kRecHautbois8, kRecClairon4,
+    kPedUntersatz32, kPedPrincipal16, kPedSubbass16, kPedOctave8, kPedGedackt8, kPedOctave4, kPedNachthorn2,
+    kPedMixtur, kPedContraposaune32, kPedPosaune16, kPedTrompete8, kPedCornet2,
+    kStopEnd
+};
+static_assert(kStopEnd == kStopCount, "the Stop names follow kStops");
+
 // Which division a rank stands in, and where its pipes begin among all the
 // organ's pipes: a rank has a place for every key of its division, whether or
 // not a pipe stands there.
@@ -309,10 +323,13 @@ inline const ReedFamily& Reed(Family family) {
         { 1.0, 0.15, -2.0, 18.0, 0.8, 0.8, 0.08, 2.0, 10.0, 0.2, 0.01, 1.2 } };
     // A resonator a third as long as the note's: its resonance stands three
     // times above the note as a formant, and the tongue alone sets the pitch,
-    // well above its own (so the tongue is made slow).
+    // well above its own (so the tongue is made slow). With no resonator to
+    // hold it, its pitch follows the wind: 2.3 cents flat for each 1 % the
+    // wind falls at this flow and closing, the least of the voicings tried
+    // (4.7 at flow 0.8; a stiffer or lighter tongue did not help).
     static const ReedFamily voxHumana { false,
-        { 3.0, 0.15, 0.0, 15.0, 0.8, 0.7, 0.05, 0.76, 15.0, 0.2, 0.015, 1.0 },
-        { 3.0, 0.15, 0.0, 15.0, 0.8, 0.7, 0.05, 0.76, 15.0, 0.2, 0.015, 1.0 } };
+        { 3.0, 0.15, 0.0, 15.0, 2.0, 0.5, 0.05, 0.76, 15.0, 0.2, 0.015, 1.0 },
+        { 3.0, 0.15, 0.0, 15.0, 2.0, 0.5, 0.05, 0.76, 15.0, 0.2, 0.015, 1.0 } };
     switch (family) {
         case Family::Trompette: return trompette;
         case Family::Hautbois: return hautbois;

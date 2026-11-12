@@ -1,0 +1,186 @@
+#pragma once
+
+// Oregana: a physically modelled church organ.
+//
+// Every pipe of every stop is there all the time, 3,618 of them (Stops.h): a
+// flue pipe is a jet driving an air column, a reed pipe a tongue beating on a
+// shallot under a resonator (FluePipe.h, ReedPipe.h). A key opens its pallet
+// and the pipes of the drawn stops on its channel take wind and speak as
+// their voicing lets them; nothing here is an oscillator, an envelope or a
+// sample. The wind comes from one reservoir for each division, which sags
+// and bounces as the pipes draw on it (Wind.h), the Recit stands in a swell
+// box, and the church answers (Nave.h).
+//
+// MIDI (Midi)
+//   channel 1  Hauptwerk (I), C to c4 on notes 36 to 96
+//   channel 2  Positiv (II)
+//   channel 3  Recit (III), enclosed
+//   channel 4  Pedal, C to g1 on notes 36 to 67
+//   CC1        the crescendo roller: adds stops and couplers in kCrescendoOrder's
+//              order, from one soft stop to full organ, to what is drawn
+//   CC11       the swell pedal: 0 shut .. 127 open
+//   CC123      all keys up
+//   CC120      all keys up, and every hanging pallet freed (Ciphers)
+// Other channels play the Hauptwerk. Velocity is how fast the key opens the
+// pallet, which a tracker action passes on to the pipes' speech: it changes
+// the attack, never the level. A pipe organ has no sustaining pedal.
+//
+// Imperfections. An organ is some thousands of hand-made pipes in an unheated
+// building, and no two of them are alike or stay as the tuner left them.
+// Each control below turns one such thing from none to plenty, and each pipe
+// keeps its own share of it whatever is played (a hash of its place in the
+// organ, not a random number):
+//   Tuning       every pipe off its pitch, flues by up to 10 cents and reeds
+//                by up to 20
+//   Temperature  the air's: flue pipes follow the speed of sound, 2.95 cents
+//                a degree, and reed tongues do not, so the reeds stand flat
+//                of the flues in a warm church and sharp in a cold one
+//   Voicing      every pipe off its rank's level (up to 3 dB), speech, chiff
+//                and wind noise
+//   Wind         how far the reservoirs' sag, dip and bounce reach the pipes,
+//                with a slow unrest of the pressure itself
+//   Blower, Action   the organ's own noises (Mechanics.h)
+//   Dead Pipes   pipes that do not speak at all
+//   Ciphers      pallets that hang part open when their key is let go, so
+//                the note whines on, flat and weak, on every stop drawn,
+//                until the stops go in or all sound is cut (CC120)
+//   Runnings     wind leaking from an open channel into the one a whole
+//                tone away on the chest, whose pipes whisper along
+// Tuning, Temperature, Voicing, Pitch and Temperament are the pipe maker's
+// and the tuner's work: a pipe takes them the next time it speaks.
+//
+// The engine runs at 48 kHz, the rate its pipes are tuned at (DspMath.h); a
+// front end at another rate converts. JUCE-free, C++17, no allocation, locks
+// or exceptions after construction. It is a large object: keep it on the heap.
+
+#include "Mechanics.h"
+#include "Nave.h"
+#include "OreganaControls.h"
+#include "OutputStage.h"
+#include "Stops.h"
+#include "Wind.h"
+
+#include <array>
+#include <cstdint>
+#include <vector>
+
+namespace oregana {
+
+// The crescendo roller's order: the controls it adds, one by one, to what is
+// drawn by hand. Mutations, the undulating stops and the solo reeds stay the
+// player's own.
+inline constexpr int kCrescendoOrder[] = {
+    kPosGedackt8, kHwRohrfloete8, kPedSubbass16, kRecFluteHarmonique8, kCouplerRecHw, kCouplerPosHw, kCouplerHwPed,
+    kRecGambe8, kHwGamba8, kPedGedackt8, kPosRohrfloete4, kHwOctave8, kPedOctave8, kRecPrincipal8,
+    kRecFluteOctaviante4, kHwSpitzfloete4, kPosPrincipal4, kHwOctave4, kPedPrincipal16, kPedOctave4, kHwPrincipal16,
+    kRecOctavin2, kPosOctave2, kHwQuinte223, kHwSuperoctave2, kPosQuinte113, kRecPleinJeu, kHwMixtur, kPedMixtur,
+    kPosCimbel, kRecHautbois8, kRecTrompette8, kHwTrompete8, kPedPosaune16, kPedTrompete8, kCouplerRecPed,
+    kRecBasson16, kRecClairon4, kHwScharff, kHwTrompete16, kPosDulcian16, kPedUntersatz32, kCouplerPosPed,
+    kHwCornet, kPedContraposaune32,
+};
+constexpr int kCrescendoStages = static_cast<int>(sizeof(kCrescendoOrder) / sizeof(kCrescendoOrder[0]));
+
+struct Diagnostics {
+    int pipes = 0;                               // speaking or ringing
+    std::array<double, kDivisions> pressure {};  // each reservoir's, against nominal
+    std::array<double, kDivisions> demand {};    // the wind each division takes: 1 at full organ
+};
+
+class Engine {
+public:
+    Engine();
+    void Reset();                         // silence, every key up, the wind at rest
+    void SetControls(const Controls& controls);
+    const Controls& GetControls() const { return controls; }
+
+    void Midi(const std::uint8_t* bytes, int size);
+    void KeyDown(int division, int key, int velocity);   // key 0 is C (MIDI 36)
+    void KeyUp(int division, int key);
+    void AllKeysUp();
+    void AllSoundOff();                   // and every hanging pallet freed
+    void SetSwell(double position);       // as the Swell control and CC11 do
+    void SetCrescendo(double position);   // as the Crescendo control and CC1 do
+    void Render(float* left, float* right, int frames);
+
+    // The output stage's look-ahead, samples: a front end reports it to its
+    // host as latency.
+    int LatencySamples() const { return output.DelaySamples(); }
+    const Diagnostics& Diag() const { return diag; }
+    // A pipe's sounding frequency as it is tuned now, Hz, or 0 where no pipe
+    // stands: for tools and tests.
+    double PipeHz(int rank, int key) const;
+
+private:
+    struct Slot {
+        std::int16_t index = -1;      // among the flues or the reeds; -1: no pipe stands here
+        std::uint8_t rank = 0, key = 0, division = 0;
+        bool reed = false, active = false;
+        std::uint32_t epoch = 0;      // the tuning it was last made for
+        std::uint16_t delay = 0;      // samples from its pallet's opening to its being heard (Engine::Engine)
+        float offered = 0.0f;         // the share of its division's wind its pallet now gives
+        float share = 0.0f;           // and the share that has reached it
+        float gain = 0.0f;            // its regulated level
+        float air = 0.0f;             // the wind it takes
+        float* buffer = nullptr;      // its delay lines, and the room each has
+        int loopRoom = 0, jetRoom = 0, upperRoom = 0;
+    };
+
+    void Apply(const Controls& before, bool all);
+    void Register();
+    void UpdateKey(int key);
+    void UpdateChannel(int division, int key);
+    void Offer(int slot, float share);
+    bool Take(int slot, float share);
+    void Design(int slot);
+    void Place(Slot& slot);
+    void Tick();
+    void RenderChunk(float* left, float* right, int frames);
+    double Cents(const Slot& slot) const;
+
+    Controls controls;
+    std::vector<Slot> slots;
+    std::vector<FluePipe> flues;
+    std::vector<ReedPipe> reeds;
+    std::vector<float> arena;
+    // The speaking and ringing pipes' slots, flues and reeds in one list:
+    // its order is the order their sound is added up in, which must not
+    // depend on how the host cuts its blocks.
+    std::vector<int> active;
+    struct Pending { int slot; std::uint64_t due; float share; };
+    std::vector<Pending> pending;                // wind on its way to a pipe, soonest first
+    std::uint64_t now = 0;                       // samples rendered
+    std::uint32_t epoch = 1;
+    int redesignAt = 0, stale = 0;
+
+    // The keys and what they open.
+    std::array<std::array<bool, kManualKeys>, kDivisions> played {}, open {};
+    std::array<std::array<float, kManualKeys>, kDivisions> hang {}, share {}, robbed {}, fullAir {};
+    std::array<std::array<float, kManualKeys>, kDivisions> placeLeft {}, placeRight {};
+    std::array<float, kManualKeys> touch {};
+    std::array<bool, kStopCount> stopDrawn {};
+    std::array<bool, kRankCount> rankDrawn {};
+    std::array<bool, kCouplerCount> coupled {};
+    double swell = 1.0, crescendo = 0.0;
+
+    // The wind.
+    std::array<Reservoir, kDivisions> reservoirs {};
+    std::array<Tremulant, 2> tremulants {};        // Positiv, Recit
+    std::array<double, kDivisions> fullWind {}, demand {}, unrest {}, unrestSlow {};
+    std::array<float, kDivisions> pressure {};
+    std::uint32_t unrestRandom = 1u;
+
+    // From the pipes to the listener.
+    static constexpr int kChunk = FluePipe::kTick;
+    std::array<std::array<std::array<float, kChunk>, 2>, kDivisions> bus {};
+    int untilTick = 0;
+    float boxLow[2] {}, boxLowGain = 1.0f, boxHighGain = 1.0f, boxLowTarget = 1.0f, boxHighTarget = 1.0f;
+    float dry = 0.0f, wet = 0.0f, dryTarget = 0.0f, wetTarget = 0.0f;
+    float presence = 0.0f, blower = 0.0f;
+    Knocks knocks;
+    WindNoise windNoise;
+    Nave nave;
+    protocodus::OutputStage<2> output;
+    Diagnostics diag;
+};
+
+} // namespace oregana
