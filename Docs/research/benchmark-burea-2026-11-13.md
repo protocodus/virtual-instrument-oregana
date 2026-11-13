@@ -195,3 +195,133 @@ The flow is an estimate chosen on the model's own grounds and checked against
 one recorded stop, not fitted to it; whether it is the better trumpet is for
 the ear (listening set 4, 2026-11-13, not yet judged). The tables above this
 section are from before the change.
+
+## More stops
+
+Seven more ranks of the same organ against the nearest of Oregana's stops,
+by the same protocol (the 16' stops measured with a4 as 220, the 4' with
+880, so each key is searched at the pitch it sounds). The tables are from
+after the trumpets' change. Nothing was changed to match them.
+
+### Octave 4' (Hauptwerk) against the Octave 4'
+
+| Notes | | Attack ms | Outside the harmonics dB | Level spread dB | H2 | H3 | H4 | H5 | H6 | H7 | H8 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 36-47 | recorded | 52 | -34 | 3.4 | -1 | -9 | -13 | -23 | -24 | -30 | -27 |
+| 36-47 | Oregana | 81 | -49 | 0.3 | -11 | -4 | -12 | -17 | -21 | -33 | -33 |
+| 48-59 | recorded | 36 | -36 | 2.4 | +2 | -13 | -17 | -24 | -29 | -27 | -30 |
+| 48-59 | Oregana | 43 | -47 | 0.3 | -10 | -7 | -16 | -25 | -29 | -45 | -43 |
+| 60-71 | recorded | 43 | -38 | 3.2 | -4 | -21 | -21 | -31 | -36 | -37 | -41 |
+| 60-71 | Oregana | 24 | -47 | 0.6 | -11 | -12 | -20 | -34 | -38 | -51 | -38 |
+| 72-83 | recorded | 62 | -39 | 2.0 | -9 | -20 | -30 | -42 | -40 | -47 | -51 |
+| 72-83 | Oregana | 14 | -47 | 0.6 | -12 | -16 | -25 | -46 | -39 | -42 | -32 |
+| 84-96 | recorded | 148 | -37 | 2.7 | -16 | -25 | -42 | -41 | -53 | -56 | -62 |
+| 84-96 | Oregana | 10 | -48 | 0.7 | -16 | -23 | -37 | -49 | -30 | -37 | -41 |
+
+As the Principal 8': the recorded second harmonic is the strongest in the bass and the model's is 10 dB under it; the rest lies within a few dB up to c2.
+
+### Rohrflöte 8' against the Rohrflöjt 8'
+
+| Notes | | Attack ms | Outside the harmonics dB | Level spread dB | H2 | H3 | H4 | H5 | H6 | H7 | H8 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 36-47 | recorded | 202 | -19 | 1.3 | -44 | -16 | -49 | -40 | -48 | -60 | -54 |
+| 36-47 | Oregana | 191 | -31 | 0.5 | -50 | -19 | -46 | -37 | -59 | -36 | -61 |
+| 48-59 | recorded | 137 | -23 | 5.1 | -42 | -22 | -40 | -23 | -40 | -36 | -36 |
+| 48-59 | Oregana | 108 | -47 | 0.4 | -52 | -16 | -52 | -41 | -51 | -47 | -53 |
+| 60-71 | recorded | 104 | -28 | 2.4 | -41 | -17 | -48 | -26 | -36 | -32 | -49 |
+| 60-71 | Oregana | 66 | -46 | 0.3 | -54 | -12 | -57 | -45 | -45 | -56 | -47 |
+| 72-83 | recorded | 62 | -29 | 6.4 | -38 | -22 | -36 | -22 | -37 | -38 | -51 |
+| 72-83 | Oregana | 38 | -46 | 0.5 | -59 | -15 | -49 | -49 | -41 | -68 | -57 |
+| 84-96 | recorded | 182 | -29 | 6.1 | -43 | -22 | -30 | -39 | -41 | -49 | -48 |
+| 84-96 | Oregana | 20 | -45 | 0.4 | -58 | -24 | -44 | -45 | -47 | -60 | -72 |
+
+Close in the third harmonic (within 6 dB). The recorded fifth is 15 to 25 dB stronger from c to c3: the chimney's own resonance, which the model's chimney gives too little of.
+
+### Quintadena 8' against the Quintadena 8'
+
+| Notes | | Attack ms | Outside the harmonics dB | Level spread dB | H2 | H3 | H4 | H5 | H6 | H7 | H8 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 36-47 | recorded | 83 | -20 | 3.0 | -33 | -8 | -25 | -25 | -31 | -43 | -31 |
+| 36-47 | Oregana | 96 | -52 | 0.5 | -73 | -5 | -70 | -8 | -59 | -20 | -50 |
+| 48-59 | recorded | 47 | -28 | 3.6 | -34 | -8 | -30 | -27 | -34 | -39 | -36 |
+| 48-59 | Oregana | 63 | -54 | 0.3 | -73 | -4 | -66 | -14 | -52 | -27 | -45 |
+| 60-71 | recorded | 43 | -29 | 3.1 | -36 | -8 | -32 | -26 | -33 | -38 | -37 |
+| 60-71 | Oregana | 39 | -52 | 0.4 | -74 | -5 | -57 | -21 | -47 | -35 | -41 |
+| 72-83 | recorded | 37 | -25 | 11.7 | -35 | -12 | -35 | -28 | -34 | -40 | -42 |
+| 72-83 | Oregana | 25 | -51 | 0.6 | -75 | -11 | -51 | -28 | -41 | -45 | -35 |
+| 84-96 | Oregana | 14 | -52 | 0.6 | -67 | -18 | -46 | -37 | -33 | -49 | -46 |
+
+The twelfth agrees. The model's fifth and seventh harmonics are 17 and 23 dB too strong in the bass octave, and its even harmonics are 35 to 40 dB too weak: a real stopped pipe is not a perfect one.
+
+### Subbass 16' against the Subbas 16'
+
+| Notes | | Attack ms | Outside the harmonics dB | Level spread dB | H2 | H3 | H4 | H5 | H6 | H7 | H8 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 36-47 | recorded | 259 | -10 | 3.5 | -43 | -8 | -46 | -27 | -40 | -54 | -40 |
+| 36-47 | Oregana | 324 | -26 | 0.9 | -65 | -9 | -53 | -30 | -50 | -50 | -52 |
+| 48-59 | recorded | 135 | -21 | 5.4 | -51 | -13 | -40 | -40 | -42 | -61 | -60 |
+| 48-59 | Oregana | 155 | -35 | 0.6 | -65 | -14 | -48 | -37 | -46 | -61 | -46 |
+| 60-71 | recorded | 125 | -23 | 6.0 | -43 | -23 | -43 | -64 | -51 | -65 | -57 |
+| 60-71 | Oregana | 95 | -47 | 0.3 | -61 | -18 | -45 | -42 | -41 | -68 | -51 |
+
+Close: the third and fifth harmonics within 5 dB over the two lower octaves.
+
+### Gamba 8' against the Salicional 8'
+
+| Notes | | Attack ms | Outside the harmonics dB | Level spread dB | H2 | H3 | H4 | H5 | H6 | H7 | H8 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 36-47 | recorded | 180 | -18 | 3.4 | -42 | -13 | -46 | -38 | -47 | -53 | -51 |
+| 36-47 | Oregana | 152 | -52 | 0.7 | -13 | -3 | -8 | -6 | -8 | -12 | -12 |
+| 48-59 | recorded | 162 | -29 | 3.6 | -9 | -15 | -18 | -27 | -36 | -34 | -39 |
+| 48-59 | Oregana | 80 | -51 | 0.3 | -12 | -3 | -8 | -7 | -11 | -18 | -18 |
+| 60-71 | recorded | 217 | -33 | 3.7 | -5 | -14 | -20 | -26 | -31 | -40 | -45 |
+| 60-71 | Oregana | 46 | -50 | 0.4 | -12 | -3 | -9 | -11 | -15 | -25 | -23 |
+| 72-83 | recorded | 195 | -36 | 4.1 | -8 | -26 | -28 | -41 | -40 | -42 | -50 |
+| 72-83 | Oregana | 26 | -49 | 0.4 | -11 | -4 | -13 | -18 | -22 | -34 | -33 |
+| 84-96 | recorded | 247 | -36 | 8.3 | -9 | -25 | -28 | -39 | -40 | -44 | -47 |
+| 84-96 | Oregana | 14 | -50 | 0.6 | -10 | -9 | -17 | -28 | -31 | -50 | -47 |
+
+Only partly comparable: a Gamba is the keener string, and the recorded bass octave is stopped pipes. Above it the model's third and higher harmonics are 10 to 20 dB stronger and its second 3 to 7 dB weaker; the recorded string takes 160 to 250 ms to speak, the model's 14 to 80 ms.
+
+### Posaune 16' against the Basun 16'
+
+| Notes | | Attack ms | Outside the harmonics dB | Level spread dB | H2 | H3 | H4 | H5 | H6 | H7 | H8 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 36-47 | recorded | 109 | -34 | 2.1 | +10 | +13 | +12 | +18 | +15 | +22 | +12 |
+| 36-47 | Oregana | 56 | -50 | 1.3 | -1 | -4 | -6 | -9 | -9 | -6 | -6 |
+| 48-59 | recorded | 150 | -30 | 1.8 | +2 | +2 | -0 | +2 | +8 | +7 | +5 |
+| 48-59 | Oregana | 55 | -49 | 1.0 | -2 | -4 | -7 | -9 | -11 | -8 | -10 |
+| 60-71 | recorded | 135 | -36 | 1.7 | +1 | +5 | +7 | +8 | +7 | +3 | -3 |
+| 60-71 | Oregana | 29 | -48 | 0.7 | -2 | -5 | -8 | -10 | -12 | -10 | -13 |
+
+The recorded reed's harmonics stand 10 to 22 dB above its fundamental in the bass octave and the model's 1 to 9 dB below: the model's fundamental is 10 to 20 dB too strong against the rest, after the flow's change.
+
+### Krummhorn 8' against the Krummhorn 8'
+
+| Notes | | Attack ms | Outside the harmonics dB | Level spread dB | H2 | H3 | H4 | H5 | H6 | H7 | H8 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 36-47 | recorded | 47 | -32 | 1.7 | +10 | +14 | +8 | +5 | +11 | +10 | +4 |
+| 36-47 | Oregana | 24 | -56 | 0.5 | -27 | -2 | -25 | -5 | -20 | -10 | -23 |
+| 48-59 | recorded | 69 | -35 | 2.2 | +7 | +5 | +3 | +5 | +5 | +8 | +6 |
+| 48-59 | Oregana | 16 | -54 | 0.4 | -27 | -2 | -25 | -5 | -21 | -11 | -23 |
+| 60-71 | recorded | 64 | -35 | 3.1 | -2 | +1 | +1 | +4 | -12 | -8 | -16 |
+| 60-71 | Oregana | 12 | -47 | 0.4 | -26 | -2 | -25 | -6 | -21 | -12 | -24 |
+| 72-83 | recorded | 62 | -42 | 2.0 | +4 | -0 | -14 | -8 | -15 | -15 | -27 |
+| 72-83 | Oregana | 10 | -51 | 0.6 | -26 | -2 | -24 | -7 | -25 | -15 | -32 |
+| 84-96 | recorded | 16 | -39 | 4.1 | +4 | +6 | +4 | -8 | -14 | -18 | -20 |
+| 84-96 | Oregana | 10 | -46 | 0.6 | -28 | -4 | -31 | -12 | -28 | -23 | -31 |
+
+The largest difference found. The recorded pipe has every harmonic strong; the model's cylinder gives the odd ones and holds the even ones 25 dB down.
+
+### The Krummhorn led by its tongue
+
+The model's Krummhorn is led by its resonator (tongue 2.0 times the pipe's
+pitch, Q 10), and a real one by its tongue. A voicing led by the tongue
+(tongue 1.03, Q 40, closing 0.5, flow 2, the resonator 1.25 times as long)
+gives the recorded spectrum, and its pitch then moves 3 to 5 cents for each
+1 % of wind, where the present one moves 0.6 and the trumpet 0.3. A real
+reed moves far less than that, so the candidate was not kept: the tongue's
+pitch here leans on the wind more than a real tongue's does, and that has to
+be put right before any reed can be led by its tongue. It is also why the
+resonator's warming could not be modelled (README, Known gaps).
+

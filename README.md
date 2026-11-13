@@ -393,8 +393,19 @@ it still brings on the whole stop list, a chapel organ's too.
   (it was up to 27 dB before 0.5.0), and no weaker above them
   ([benchmark](Docs/research/benchmark-burea-2026-11-13.md)). More flow
   would close the rest and makes the bass pipes slow to speak. The shallot
-  has no resonance of its own here, and the other reeds (Krummhorn, Dulcian,
-  Vox humana, Hautbois) have been compared with no recording.
+  has no resonance of its own here, and the Dulcian, Vox humana and Hautbois
+  have been compared with no recording.
+- **The Krummhorn has only its odd harmonics.** A recorded one has every
+  harmonic strong; here the even ones are 25 dB down, because the resonator
+  and not the tongue leads the pipe. A voicing led by the tongue matched the
+  recording and went 3 to 5 cents flat or sharp for each 1 % of wind, so it
+  was not kept.
+- **The Posaune 16' has too much fundamental**: 10 to 20 dB against its
+  harmonics in the bass octave, by a recorded Basun 16'.
+- **The stopped pipes are too perfect.** A recorded Quintadena has its even
+  harmonics 35 dB under the fundamental and these have them 70 dB under,
+  with the fifth and seventh about 20 dB too strong in the bass; a recorded
+  Rohrflöte has 15 to 25 dB more fifth harmonic in the middle of the compass.
 - **A principal's second harmonic is about 10 dB too weak** against the same
   organ's Principal 8'. The jet swings symmetrically about a small offset;
   a larger offset stops the pipe speaking before it gives the harmonic.
