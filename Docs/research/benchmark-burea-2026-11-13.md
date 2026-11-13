@@ -107,16 +107,12 @@ Measured on the raw files, so only as good as the set's own levelling:
 
 ## What it says
 
-1. **The trumpet is far too dull.** The recorded Trumpet's first eight
+1. **The trumpet was far too dull.** The recorded Trumpet's first eight
    harmonics are level within a few dB up to c1 and fall only above;
-   Oregana's fall 4 dB a harmonic everywhere, so its eighth is 20 to 27 dB
-   weaker than the recorded one's in the bass and tenor. This is the largest
-   difference found. In `ProbePipe` the tongue swings almost sinusoidally and
-   is shut for a small part of its cycle, where a real tongue rolls shut and
-   stays shut for much of it. More `flow` brightens it (4 to 6 dB at the
-   sixth harmonic for double the flow) only with the shallot's pressure
-   swinging to four times the boot's, which is not a reed pipe any more, so
-   no voicing was changed. The remedy is the tongue's closing, not a number.
+   Oregana's fell 4 dB a harmonic everywhere, so its eighth was 20 to 27 dB
+   weaker than the recorded one's in the bass and tenor. This was the largest
+   difference found, and it was the voicing after all: see The trumpet again,
+   below.
 2. **The principal's second harmonic is about 10 dB too weak.** Recorded, the
    second harmonic stands 8 to 16 dB above the third in every octave; in
    Oregana it is below the third in the bass and level with it in the
@@ -148,4 +144,51 @@ Measured on the raw files, so only as good as the set's own levelling:
    Rendering Oregana through its church at the microphone's distance would
    be the comparison, and the microphone's distance is not known.
 
-The first two, the noise and the evenness are Known gaps in the README.
+The principal's harmonic, the noise and the evenness are Known gaps in the
+README.
+
+## The trumpet again
+
+The first reading of finding 1 was that the tongue's motion was wrong, since
+more `flow` brightened the pipe only with the shallot's pressure swinging to
+four times the boot's. A published simulation of a reed pipe that agrees with
+its authors' measurements (Rucz, Preukschat, Angster, Augusztinovicz and
+Miklós, Simulation of the Sound Generation of Lingual Organ Pipes, DAGA 2014,
+figure 3) shows both things the model already did: a tongue that swings
+almost sinusoidally and touches the shallot briefly, and a shallot pressure
+that sits near the boot's while the tongue is open and falls to about three
+times that below zero each time it shuts. So the motion was right and the
+opening was too small. An estimate from typical sizes (`Stops.h`, beside the
+trumpets) gives a flow of about 8 in the bass where the voicing had 2.
+
+`ProbePipe reed 65.4`, the trumpet's voicing, flow alone changed:
+
+| Flow | H2 to H8 against the first, dB | Shallot's lowest pressure, boots | Speaks (half) |
+| --- | --- | --- | --- |
+| 2 | -3 -7 -11 -16 -19 -21 -24 | -2.6 | 72 ms |
+| 4 | -2 -4 -7 -10 -11 -9 -10 | -3.8 | 72 ms |
+| 6 | -1 -3 -5 -7 -8 -4 -4 | -4.4 | 80 ms |
+| 8 | -1 -2 -4 -6 -6 -1 -1 | -4.8 | 132 ms |
+
+The pitch moves by under 1 cent across the table. The trumpets now have 6 in
+the bass falling to 1.6 at the top (it was 2 to 1.2), the Posaunes 5 and the
+Trompette 6.5, and every pipe was regulated again. The same measurement
+after the change:
+
+| Notes | | H2 | H3 | H4 | H5 | H6 | H7 | H8 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 36-47 | recorded | +4 | +1 | +2 | +0 | +1 | +4 | +3 |
+| 36-47 | Oregana | -1 | -3 | -5 | -8 | -8 | -4 | -5 |
+| 48-59 | recorded | -1 | -1 | -4 | -3 | +1 | +2 | -1 |
+| 48-59 | Oregana | -2 | -4 | -6 | -9 | -10 | -7 | -9 |
+| 60-71 | recorded | -6 | -1 | -1 | -6 | -4 | -9 | -15 |
+| 60-71 | Oregana | -2 | -4 | -7 | -10 | -11 | -10 | -13 |
+| 72-83 | recorded | -2 | -4 | -8 | -10 | -15 | -20 | -25 |
+| 72-83 | Oregana | -2 | -5 | -8 | -11 | -14 | -14 | -19 |
+| 84-96 | recorded | +5 | -2 | -6 | -10 | -20 | -30 | -36 |
+| 84-96 | Oregana | -4 | -8 | -14 | -15 | -14 | -16 | -26 |
+
+The flow is an estimate chosen on the model's own grounds and checked against
+one recorded stop, not fitted to it; whether it is the better trumpet is for
+the ear (listening set 4, 2026-11-13, not yet judged). The tables above this
+section are from before the change.

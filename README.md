@@ -60,10 +60,15 @@ and plenty.
 - **About half the CPU**: the Tutti demo's worst block went from 37 % of a
   core to 21 %, the Plenum's from 14 % to 9 %, with the same samples before
   the changes above.
-- **The first comparison with a recorded organ**
-  ([Docs/research/benchmark-burea-2026-11-13.md](Docs/research/benchmark-burea-2026-11-13.md)).
-  It changed nothing in the engine and found two things voicing cannot mend
-  (Known gaps).
+- **Brighter trumpets.** The Trompetes, the Posaunes, the Trompette and the
+  Clairon pass three times the wind under their open tongues, so the flow is
+  cut only in the short time a tongue is nearly shut, as in a real reed. The
+  eighth harmonic of the Trompete 8's lowest octave rose by 19 dB. This came
+  from the first comparison with a recorded organ
+  ([Docs/research/benchmark-burea-2026-11-13.md](Docs/research/benchmark-burea-2026-11-13.md)),
+  which also found a weakness of the principals that voicing cannot mend
+  (Known gaps). Every pipe was regulated again and fourteen presets' Volume
+  trims moved by 1 dB.
 - A session sounds a little different: locked pipes are steadier and the
   early reflections changed. No control was added or renamed.
 
@@ -382,11 +387,13 @@ it still brings on the whole stop list, a chapel organ's too.
   (2026-11-13) and taken out: the model's trumpets then moved 27 of the
   flues' 29.5 cents for 10 degrees, because here the resonator and not the
   tongue sets a reed's pitch, which is the reverse of a real reed.
-- **The trumpet is too dull.** Against a recorded Trumpet 8' the model's
-  eighth harmonic is 20 to 27 dB weaker in the bass and tenor
-  ([benchmark](Docs/research/benchmark-burea-2026-11-13.md)). The tongue
-  swings almost sinusoidally where a real one rolls shut and stays shut for
-  much of its cycle; more flow does not mend it.
+- **The trumpets are still a little dull in the bass.** Against a recorded
+  Trumpet 8' the eighth harmonic of the two lowest octaves is 8 dB weaker
+  (it was up to 27 dB before 0.5.0), and no weaker above them
+  ([benchmark](Docs/research/benchmark-burea-2026-11-13.md)). More flow
+  would close the rest and makes the bass pipes slow to speak. The shallot
+  has no resonance of its own here, and the other reeds (Krummhorn, Dulcian,
+  Vox humana, Hautbois) have been compared with no recording.
 - **A principal's second harmonic is about 10 dB too weak** against the same
   organ's Principal 8'. The jet swings symmetrically about a small offset;
   a larger offset stops the pipe speaking before it gives the harmonic.

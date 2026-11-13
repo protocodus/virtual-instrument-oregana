@@ -310,16 +310,25 @@ inline const FlueFamily& Flue(Family family) {
 inline const ReedFamily& Reed(Family family) {
     // A reed's flow falls towards the treble, as the voicer thins the
     // tongues there: the top of a trumpet joins the chorus and does not lead it.
+    // A trumpet's flow in the bass is an estimate from typical sizes: a slit
+    // of some 48 mm2 under the resting tongue into a shallot 12 mm wide on
+    // 70 mm of wind gives 8 (c sqrt(2 rho / p) times the areas' ratio). The
+    // open tongue then passes more than the shallot takes, so the flow is cut
+    // only in the short time the tongue is nearly shut, and that short gap is
+    // the trumpet's brightness: at 2 the eighth harmonic of 8' C was 24 dB
+    // under the first, at 6 it is 4 dB under, where a recorded Trumpet 8' has
+    // it level (Docs/research/benchmark-burea-2026-11-13.md). Above 6 a bass
+    // pipe takes longer to speak (80 ms to half at 6, 132 ms at 8), so 6 it is.
     static const ReedFamily trumpet { true,
-        { 1.06, 0.15, 0.0, 25.0, 2.0, 0.5, 0.01, 1.03, 40.0, 0.2, 0.01, 1.0 },
-        { 1.06, 0.15, 0.0, 25.0, 1.2, 0.5, 0.01, 1.03, 40.0, 0.2, 0.01, 1.0 } };
+        { 1.06, 0.15, 0.0, 25.0, 6.0, 0.5, 0.01, 1.03, 40.0, 0.2, 0.01, 1.0 },
+        { 1.06, 0.15, 0.0, 25.0, 1.6, 0.5, 0.01, 1.03, 40.0, 0.2, 0.01, 1.0 } };
     static const ReedFamily posaune { true,
-        { 1.06, 0.15, 3.0, 20.0, 2.2, 0.5, 0.03, 1.03, 40.0, 0.25, 0.012, 1.3 },
-        { 1.06, 0.15, 3.0, 20.0, 1.4, 0.5, 0.03, 1.03, 40.0, 0.25, 0.012, 1.3 } };
+        { 1.06, 0.15, 3.0, 20.0, 5.0, 0.5, 0.03, 1.03, 40.0, 0.25, 0.012, 1.3 },
+        { 1.06, 0.15, 3.0, 20.0, 1.6, 0.5, 0.03, 1.03, 40.0, 0.25, 0.012, 1.3 } };
     // The French trumpet's tongue is flatter and shuts at once: brassier.
     static const ReedFamily trompette { true,
-        { 1.06, 0.15, -1.0, 28.0, 2.2, 0.5, 0.004, 1.03, 40.0, 0.2, 0.01, 1.0 },
-        { 1.06, 0.15, -1.0, 28.0, 1.5, 0.5, 0.004, 1.03, 40.0, 0.2, 0.01, 1.0 } };
+        { 1.06, 0.15, -1.0, 28.0, 6.5, 0.5, 0.004, 1.03, 40.0, 0.2, 0.01, 1.0 },
+        { 1.06, 0.15, -1.0, 28.0, 2.0, 0.5, 0.004, 1.03, 40.0, 0.2, 0.01, 1.0 } };
     static const ReedFamily hautbois { true,
         { 1.06, 0.15, -8.0, 22.0, 1.0, 0.6, 0.02, 1.03, 40.0, 0.2, 0.012, 1.0 },
         { 1.06, 0.15, -8.0, 22.0, 0.7, 0.6, 0.02, 1.03, 40.0, 0.2, 0.012, 1.0 } };
