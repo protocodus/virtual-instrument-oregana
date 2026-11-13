@@ -151,6 +151,7 @@ private:
     };
 
     void Apply(const Controls& before, bool all);
+    void PlaceKeys();
     void Register();
     void SetSlider(int stop, float position);
     void UpdateKey(int key, bool struck = false, int own = -1);
@@ -190,6 +191,7 @@ private:
     std::array<bool, kRankCount> rankOpen {};
     std::array<bool, kCouplerCount> coupled {};
     double swell = 1.0, crescendo = 0.0, roller = 0.0;
+    double pressureSet = 1.0, widthSet = 0.0;      // Wind Pressure and Width as they have arrived: both glide
     int stage = 0;
 
     // The wind.

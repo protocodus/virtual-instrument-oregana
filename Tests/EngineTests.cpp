@@ -1092,6 +1092,103 @@ void ExtremesStayFinite() {
     Expect(finite, "ExtremesStayFinite", "nonsense controls are brought into range", take.Peak());
 }
 
+// Every control, on an organ with all four divisions sounding: the one
+// control at its other end against the organ as it stood.
+struct Thrown {
+    Controls base;
+    Thrown() {
+        for (const int drawn : std::initializer_list<int> { kHwOctave8, kHwTrompete8, kPosPrincipal4, kPosKrummhorn8, kRecPrincipal8, kRecTrompette8, kPedSubbass16, kPedPosaune16,
+                           kCouplerPosHw, kCouplerRecHw, kTremulantPos, kTremulantRec })
+            base[drawn] = 1.0;
+    }
+    // The end of its range further from where the control stands.
+    double Other(int i) const {
+        const ControlInfo& info = kControlInfo[static_cast<std::size_t>(i)];
+        if (info.steps > 0) return base[i] == info.min ? info.min + 1.0 : info.min;
+        return base[i] - info.min > info.max - base[i] ? info.min : info.max;
+    }
+    // Keys held on three divisions (the Recit is heard through its couplers)
+    // for `seconds`; `control` stands at `value` from `from` to `until`, or
+    // throughout when both are 0.
+    Take Play(int control, double value, double from, double until, double seconds) const {
+        Bench bench(base);
+        if (from <= 0.0) bench.Set(control, value);
+        for (int note : { 48, 55, 64 }) bench.organ->KeyDown(kHauptwerk, note, 90);
+        bench.organ->KeyDown(kPositiv, 60, 90);
+        bench.organ->KeyDown(kPedal, 36, 90);
+        Take whole;
+        for (const double end : { from, until, seconds }) {
+            if (end <= 0.0) continue;
+            const Take part = bench.Play(end - static_cast<double>(whole.left.size()) / kRate, 64);
+            whole.left.insert(whole.left.end(), part.left.begin(), part.left.end());
+            whole.right.insert(whole.right.end(), part.right.begin(), part.right.end());
+            bench.Set(control, end == from ? value : base[control]);
+        }
+        return whole;
+    }
+};
+
+void EveryControlTells() {
+    // No control is a dead knob: each one at its other end changes what the
+    // organ gives by more than a thousandth of it.
+    const Thrown thrown;
+    const Take base = thrown.Play(0, thrown.base[0], 0.0, 0.0, 2.5);
+    int silent = 0;
+    const char* which = "";
+    for (int i = 0; i < kControlCount; ++i) {
+        // The keyboard's manual and the Pedal's keys are the Instrument's
+        // (Oregana.Instrument holds them); a cipher tells only on the one key
+        // in 25 that hangs, after it is let go (Imperfections).
+        if (i == kKeyboard || i == kPedalMode || i == kCiphers) continue;
+        const Take take = thrown.Play(i, thrown.Other(i), 0.0, 0.0, 2.5);
+        double sum = 0.0;
+        for (std::size_t n = 0; n < take.left.size(); ++n) {
+            const double l = take.left[n] - base.left[n], r = take.right[n] - base.right[n];
+            sum += l * l + r * r;
+        }
+        if (Db(std::sqrt(sum / static_cast<double>(take.left.size())) / base.Rms(0.0, 2.5)) < -60.0) {
+            ++silent;
+            which = kControlInfo[static_cast<std::size_t>(i)].id;
+        }
+    }
+    std::printf("%s", silent ? which : "");
+    Expect(silent == 0, "EveryControlTells", "every control changes the sound, controls that do not", silent);
+}
+
+void ThrownControlsDoNotClick() {
+    // Automation and a patch change throw a control from one value to
+    // another at once. Held notes take that without a click: no 2 ms of the
+    // output's second difference stands more than four times over the
+    // 2 ms a little before and after it. (Wind Pressure and Width did,
+    // five and ten times over, until 0.5.0 made them glide.)
+    const Thrown thrown;
+    int clicks = 0;
+    double worst = 0.0;
+    const char* which = "";
+    for (int i = 0; i < kControlCount; ++i) {
+        const Take take = thrown.Play(i, thrown.Other(i), 1.0, 1.6, 2.2);
+        constexpr std::size_t kWindow = 96;
+        std::vector<double> peaks;
+        for (std::size_t at = take.Frames(0.9); at + kWindow <= take.left.size(); at += kWindow) {
+            double peak = 0.0;
+            for (std::size_t n = at; n < at + kWindow; ++n)
+                peak = Max(peak, Max(Abs(static_cast<double>(take.left[n]) - 2.0 * take.left[n - 1] + take.left[n - 2]),
+                                     Abs(static_cast<double>(take.right[n]) - 2.0 * take.right[n - 1] + take.right[n - 2])));
+            peaks.push_back(peak);
+        }
+        for (std::size_t w = 3; w + 3 < peaks.size(); ++w) {
+            const double around = Max(Max(Max(peaks[w - 3], peaks[w - 2]), Max(peaks[w + 2], peaks[w + 3])), 1.0e-7);
+            if (peaks[w] > 2.0e-4 && peaks[w] / around > worst) {
+                worst = peaks[w] / around;
+                if (worst > 4.0) which = kControlInfo[static_cast<std::size_t>(i)].id;
+            }
+            if (peaks[w] > 2.0e-4 && peaks[w] / around > 4.0) ++clicks;
+        }
+    }
+    std::printf("%s", clicks ? which : "");
+    Expect(clicks == 0, "ThrownControlsDoNotClick", "no control thrown under held notes clicks, the sharpest edge over its surroundings", worst);
+}
+
 } // namespace
 
 // Neighbouring pipes hear each other: two of one key standing a row apart
@@ -1156,6 +1253,8 @@ int main() {
     BlockPartitionInvariance();
     ResetPlaysAsNew();
     ExtremesStayFinite();
+    EveryControlTells();
+    ThrownControlsDoNotClick();
     std::printf("%d failure%s\n", failures, failures == 1 ? "" : "s");
     return failures == 0 ? 0 : 1;
 }

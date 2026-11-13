@@ -114,6 +114,12 @@ constexpr float kSliderNarrow = 0.5f;
 // it came on: a wheel resting on a stage's edge does not chatter.
 constexpr double kRollerStep = kStepSeconds / 0.8, kStageBack = 0.4;
 
+// A control thrown from one end to the other clicked where it was taken at
+// once (the pressure's step into every pipe, the places' into every gain):
+// the pressure now crosses its whole range in 50 ms and arrives, and the
+// pipes' places cross theirs in 50 ms, as the church's own width does.
+constexpr double kPressureStep = 0.9 * kStepSeconds / 0.05, kWidthStep = kStepSeconds / 0.05;
+
 // A coupler's lost motion at Action 1: the key it pulls starts 16 ms behind
 // an ordinary stroke, half as much to half as much again from key to key,
 // and in step with how slowly the key is pressed (an estimate of a worn
@@ -376,6 +382,9 @@ void Engine::Reset() {
     roller = crescendo;
     stage = static_cast<int>(roller * kCrescendoStages);
     diag.stage = stage;
+    pressureSet = controls[kPressure];
+    widthSet = controls[kWidth];
+    PlaceKeys();
     Register();
     for (int i = 0; i < kStopCount; ++i) SetSlider(i, sliderTarget[static_cast<std::size_t>(i)]);
     const int supply = static_cast<int>(controls[kWindSupply]);
@@ -423,14 +432,10 @@ void Engine::Apply(const Controls& before, bool all) {
         for (Tremulant& t : tremulants) t.Design(controls[kTremulantRate], kStepSeconds);
     if (changed(kDecay) || changed(kDecayBass) || changed(kDecayTreble) || changed(kRoomSize) || changed(kWidth))
         nave.Set(controls[kDecay], controls[kDecayBass], controls[kDecayTreble], controls[kRoomSize], controls[kWidth]);
-    if (changed(kWidth)) {
-        for (int d = 0; d < kDivisions; ++d)
-            for (int key = 0; key < kDivisionKeys[d]; ++key) {
-                const double angle = 0.25 * kPi * (1.0 + 0.7 * controls[kWidth] * Stand(d, key));
-                placeLeft[static_cast<std::size_t>(d)][static_cast<std::size_t>(key)] = static_cast<float>(std::cos(angle));
-                placeRight[static_cast<std::size_t>(d)][static_cast<std::size_t>(key)] = static_cast<float>(std::sin(angle));
-            }
-        for (int index : active) Place(slots[static_cast<std::size_t>(index)]);
+    if (all) {
+        widthSet = controls[kWidth];
+        pressureSet = controls[kPressure];
+        PlaceKeys();
     }
     if (changed(kVolume) || changed(kRoom)) {
         // The listener walks down the nave: the organ's own sound gives way
@@ -675,6 +680,18 @@ void Engine::Design(int index) {
     s.epoch = epoch;
 }
 
+// Every key's place between the two ears at the width as it has arrived, and
+// the speaking pipes moved there.
+void Engine::PlaceKeys() {
+    for (int d = 0; d < kDivisions; ++d)
+        for (int key = 0; key < kDivisionKeys[d]; ++key) {
+            const double angle = 0.25 * kPi * (1.0 + 0.7 * widthSet * Stand(d, key));
+            placeLeft[static_cast<std::size_t>(d)][static_cast<std::size_t>(key)] = static_cast<float>(std::cos(angle));
+            placeRight[static_cast<std::size_t>(d)][static_cast<std::size_t>(key)] = static_cast<float>(std::sin(angle));
+        }
+    for (int index : active) Place(slots[static_cast<std::size_t>(index)]);
+}
+
 void Engine::Place(Slot& s) {
     const float left = s.gain * placeLeft[s.division][s.key], right = s.gain * placeRight[s.division][s.key];
     if (s.reed) {
@@ -745,6 +762,11 @@ void Engine::AllSoundOff() {
 // Every kTick samples: the roller and the sliders, the wind, each speaking
 // pipe's share of it, and the pipes that have rung out.
 void Engine::Tick() {
+    if (widthSet != controls[kWidth]) {
+        const double gap = controls[kWidth] - widthSet;
+        widthSet = Abs(gap) <= kWidthStep ? controls[kWidth] : widthSet + (gap > 0.0 ? kWidthStep : -kWidthStep);
+        PlaceKeys();
+    }
     if (roller != crescendo) {
         const double gap = crescendo - roller;
         roller = Abs(gap) <= kRollerStep ? crescendo : roller + (gap > 0.0 ? kRollerStep : -kRollerStep);
@@ -793,7 +815,9 @@ void Engine::Tick() {
     }
     double head = Min(1.0, stock / kKnee);
     if (supply == kWindBellows) head *= 1.0 - kWedge * live * (1.0 - stock);
-    head *= controls[kPressure];
+    const double lacking = controls[kPressure] - pressureSet;
+    pressureSet = Abs(lacking) <= kPressureStep ? controls[kPressure] : pressureSet + (lacking > 0.0 ? kPressureStep : -kPressureStep);
+    head *= pressureSet;
     diag.supply = head;
 
     for (std::size_t d = 0; d < kDivisions; ++d) {

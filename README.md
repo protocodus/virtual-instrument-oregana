@@ -78,6 +78,10 @@ and plenty.
   as long as full organ, the Tutti rings longer than it did, and Cathedral
   Fonds, fifteen stops, lost its long nave. The Volume trims were read
   again.
+- **Wind Pressure and Width no longer click when thrown.** A jump of either
+  under held notes, as automation or a patch change makes, was taken at
+  once and clicked; both now cross their range in 50 ms. Every control was
+  thrown and swept under held notes and no other one clicked.
 - A session sounds a little different: locked pipes are steadier and the
   early reflections changed. No control was added or renamed.
 
@@ -383,8 +387,10 @@ it still brings on the whole stop list, a chapel organ's too.
 - **The bass decay is a little under what Decay Bass asks**: at 2 an 80 Hz
   tail lasts 1.9 times as long, at 0.5 it lasts 0.59 of it.
 - **No parameter matrix and no parameter-reach test yet** (U4, U11). The
-  engine suite checks the extremes of every control together and the fuzz
-  target writes any value to any control. Pitch, Temperament, Tuning,
+  engine suite checks the extremes of every control together, that each
+  control at its other end changes the sound and that none clicks when
+  thrown under held notes, and the fuzz target writes any value to any
+  control. Pitch, Temperament, Tuning,
   Temperature and Voicing are the tuner's and voicer's work by design: a
   speaking pipe keeps what it was made with, and takes a change the next
   time it speaks.

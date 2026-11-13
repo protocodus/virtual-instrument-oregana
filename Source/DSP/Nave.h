@@ -130,14 +130,16 @@ public:
         earlyPole = static_cast<float>(std::exp(-kTwoPi * kEarlyCorner / kPipeRate));
         latePole = static_cast<float>(std::exp(-kTwoPi * kLateCorner / kPipeRate));
         const double rho = 1.0 - Clamp(width, 0.0, 1.0);
-        lateMid = static_cast<float>(std::sqrt(0.5 * (1.0 + rho)));
-        lateSide = static_cast<float>(std::sqrt(0.5 * (1.0 - rho)));
+        lateMidAsked = static_cast<float>(std::sqrt(0.5 * (1.0 + rho)));
+        lateSideAsked = static_cast<float>(std::sqrt(0.5 * (1.0 - rho)));
         asked = { size, Clamp(width, 0.0, 1.0) };
         // A silent church has nothing to fade or glide.
         if (resting) {
             loss = wanted;
             Build(shapes[1], asked);
             fade = 1.0f;
+            lateMid = lateMidAsked;
+            lateSide = lateSideAsked;
         }
     }
 
@@ -302,6 +304,9 @@ public:
 #endif
         write = (write + 1) & (kLineSize - 1);
 
+        // The late field's width glides (10 ms): taken at once, a thrown Width clicked.
+        lateMid += kWidthGlide * (lateMidAsked - lateMid);
+        lateSide += kWidthGlide * (lateSideAsked - lateSide);
         const float mid = kLateGain * lateMid * (even + odd), apart = kLateGain * lateSide * (even - odd);
         roomLeft = kEarlyGain * earlyLeft + mid + apart;
         roomRight = kEarlyGain * earlyRight + mid - apart;
@@ -521,7 +526,8 @@ private:
     float fade = 1.0f;
     int write = 0, untilTurn = 0;
     float earlyPole = 0.0f, latePole = 0.0f, earlyLeft = 0.0f, earlyRight = 0.0f, late = 0.0f;
-    float lateMid = 0.7071f, lateSide = 0.7071f;
+    static constexpr float kWidthGlide = 1.0f / 480.0f;
+    float lateMid = 0.7071f, lateSide = 0.7071f, lateMidAsked = 0.7071f, lateSideAsked = 0.7071f;
     bool resting = true;
     int quietFor = 0;
 };
