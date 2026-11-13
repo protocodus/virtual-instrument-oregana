@@ -87,11 +87,12 @@ and plenty.
   follow the Wind control and are gone at 0
   ([Docs/research/known-gaps-2026-11-13.md](Docs/research/known-gaps-2026-11-13.md),
   which also holds the research on every gap below).
-- **Fixed: a repeated note no longer clicks.** A flue's key struck again
-  within 20 ms, before its foot had emptied (a fast repetition, or a
-  sequencer's note-off and note-on a tick apart), began its puff of wind with
-  a step: a click as large as the pipe's whole sound. The puff now begins
-  from nothing (`RepeatedKeysDoNotClick`).
+- **Fixed: a repeated note and a very short one no longer click.** A flue's
+  key struck again within 20 ms, before its foot had emptied (a fast
+  repetition, or a sequencer's note-off and note-on a tick apart), began its
+  puff of wind with a step, a click as large as the pipe's whole sound; a
+  note under 10 ms ended its puff with the same step. The puff now begins
+  from nothing and dies with the foot (`RepeatedKeysDoNotClick`).
 - **Brighter trumpets.** The Trompetes, the Posaunes, the Trompette and the
   Clairon pass three times the wind under their open tongues, so the flow is
   cut only in the short time a tongue is nearly shut, as in a real reed. The

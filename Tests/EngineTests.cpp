@@ -906,14 +906,15 @@ void ReedsWaver() {
 // A key struck again before its pipe's foot has emptied (a repeated note, or
 // a sequencer's note-off and note-on a tick apart) refills a foot that is
 // part full. The puff of that filling begins from nothing: until 0.5.0 it
-// began with a step, a click some twenty times the pipe's steepest sample.
+// began with a step, a click some twenty times the pipe's steepest sample,
+// and ended with one where the wind went in mid-puff.
 void RepeatedKeysDoNotClick() {
     const auto steepest = [](const Take& take) {
         double most = 0.0;
         for (std::size_t n = 1; n < take.left.size(); ++n) most = Max(most, Abs(static_cast<double>(take.left[n]) - take.left[n - 1]));
         return most;
     };
-    double worst = 0.0;
+    double worst = 0.0, brief = 0.0;
     for (const int stop : { kPosGedackt8, kHwOctave8 }) {
         Bench bench;
         bench.Draw({ stop });
@@ -927,8 +928,18 @@ void RepeatedKeysDoNotClick() {
             bench.organ->KeyDown(division, 60, 100);
             worst = Max(worst, Max(falling, steepest(bench.Play(0.3, 48))) / held);
         }
+        // A note shorter than its foot takes to fill: the wind goes in mid-puff.
+        bench.organ->KeyUp(division, 60);
+        bench.Play(1.0);
+        for (const double length : { 0.001, 0.003, 0.006 }) {
+            bench.organ->KeyDown(division, 60, 100);
+            const double rising = steepest(bench.Play(length, 48));
+            bench.organ->KeyUp(division, 60);
+            brief = Max(brief, Max(rising, steepest(bench.Play(0.5, 48))) / held);
+        }
     }
     Expect(worst < 2.0, "RepeatedKeysDoNotClick", "a key struck again within 20 ms steps no further than its held sound, times", worst);
+    Expect(brief < 2.0, "RepeatedKeysDoNotClick", "nor does a note of 1 to 6 ms, times", brief);
 }
 
 void CrescendoIsSmooth() {

@@ -175,6 +175,7 @@ struct FluePipe {
     float jetTransit = 1.0f, jetStep = 0.0f;
     std::uint32_t random = 1u;
     float filledFrom = 0.0f;   // the foot's pressure when its wind last began to rise
+    float puffNow = 0.0f;      // the puff's drive: the gap times the pressure gained, or what is left of it
     int quiet = 0;
 
     static constexpr int kTick = 32;   // samples between Tick() calls
@@ -360,7 +361,7 @@ struct FluePipe {
         loopAt = jetAt = upperAt = 0;
         allpassIn = allpassOut = lowpassOut = dcIn = dcOut = jetOut = radiationIn = radiationOut = upperOut = breathOut = breathSlow = 0.0f;
         upperAllpassIn = upperAllpassOut = 0.0f;
-        foot = wind = filledFrom = 0.0f;
+        foot = wind = filledFrom = puffNow = 0.0f;
         jetTransit = jetLongest;
         jetStep = 0.0f;
         bendNow = bendStep = bendTarget = 0.0f;
@@ -441,7 +442,8 @@ struct FluePipe {
         float upperLp = upperOut, upperApIn = upperAllpassIn, upperApOut = upperAllpassOut;
         float apIn = allpassIn, apOut = allpassOut, lpOut = lowpassOut, blockIn = dcIn, blockOut = dcOut;
         float jetLp = jetOut, radIn = radiationIn, radOut = radiationOut, pressure = foot, transit = jetTransit, breath = breathOut, slow = breathSlow;
-        float filled = filledFrom;
+        float filled = filledFrom, pushing = puffNow;
+        const float keep = 1.0f - release;
         std::uint32_t seed = random;
         const float target = wind, rise = attack, fall = release;
         const float jetSize = static_cast<float>(jetLength);
@@ -492,9 +494,12 @@ struct FluePipe {
             // midway through the foot's filling, and counted from where the
             // filling began: counted from an empty foot, a key struck again
             // within 20 ms, its foot still part full, began its puff with a
-            // step (a click as large as the pipe's whole sound at c1).
-            const float blown = -source * pressure * JetShape(jetGain * jetLp + offset + turbulence)
-                + puff * (gap > 0.0f ? gap : 0.0f) * (pressure - filled);
+            // step (a click as large as the pipe's whole sound at c1). Wind
+            // taken away in mid-puff (a note under 10 ms) lets the puff die
+            // as the foot empties: cut off, it ended with the same step.
+            if (gap > 0.0f) pushing = gap * (pressure - filled);
+            else pushing = pushing > 1.0e-20f ? pushing * keep : 0.0f;
+            const float blown = -source * pressure * JetShape(jetGain * jetLp + offset + turbulence) + puff * pushing;
             float leaving = returned + blown - shed * Abs(returned) * returned;
             // The pressure a neighbour makes at the mouth enters as a wave.
             if (heard != nullptr) leaving += heard[i];
@@ -531,6 +536,7 @@ struct FluePipe {
         radiationOut = radOut;
         foot = pressure;
         filledFrom = filled;
+        puffNow = pushing;
         jetTransit = Clamp(transit, 0.0f, jetLongest);
         random = seed;
     }
@@ -569,7 +575,8 @@ struct FluePipe {
         Float4 breath = OREGANA_LANES(breathOut), slow = OREGANA_LANES(breathSlow);
         const Float4 breathPoleC = OREGANA_LANES(breathPole), breathFloorC = OREGANA_LANES(breathFloor), breathLowC = OREGANA_LANES(breathLow);
         Float4 radIn = OREGANA_LANES(radiationIn), radOut = OREGANA_LANES(radiationOut), pressure = OREGANA_LANES(foot);
-        Float4 filled = OREGANA_LANES(filledFrom);
+        Float4 filled = OREGANA_LANES(filledFrom), pushing = OREGANA_LANES(puffNow);
+        const Float4 keep = Four(1.0f) - fall;
 #undef OREGANA_LANES
         const Float4 zero = Four(0.0f), one = Four(1.0f);
         float* loopBuffer[4];
@@ -605,6 +612,7 @@ struct FluePipe {
             const Int4 filling = gap > zero;
             pressure += gap * Choose(filling, rise, fall);
             filled = Choose(filling, filled, pressure);
+            pushing = Choose(filling, gap * (pressure - filled), Where(pushing > Four(1.0e-20f), pushing * keep));
 
             Float4 x;
             if (Bends) x = BentFour(loopBuffer, room, at, loopSize, bend);
@@ -661,7 +669,7 @@ struct FluePipe {
             const Float4 swing2 = swing * swing;
             const Float4 shape = Choose(swing > Four(3.0f), one,
                                         Choose(swing < Four(-3.0f), -one, swing * (27.0f + swing2) / (27.0f + 9.0f * swing2)));
-            const Float4 blown = -sourceC * pressure * shape + puffC * Where(filling, gap) * (pressure - filled);
+            const Float4 blown = -sourceC * pressure * shape + puffC * pushing;
             Float4 leaving = returned + blown - shedC * Abs(returned) * returned;
             if (Hears) leaving += Float4 { heard[0][i], heard[1][i], heard[2][i], heard[3][i] };
             for (int l = 0; l < 4; ++l) {
@@ -707,6 +715,7 @@ struct FluePipe {
             p.radiationOut = radOut[l];
             p.foot = pressure[l];
             p.filledFrom = filled[l];
+            p.puffNow = pushing[l];
             p.jetTransit = Clamp(transit[l], 0.0f, p.jetLongest);
             p.random = seed[l];
         }
