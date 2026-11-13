@@ -27,6 +27,10 @@ constexpr double kRowMetres = 0.12, kOffRowMetres = 1.5;
 // Recit's box at the back. Estimates of a case some three metres deep, kept
 // small for the Hauptwerk, which a player hears his own keys through.
 constexpr double kDivisionMetres[kDivisions] = { 0.5, 0.0, 3.0, 1.5 };
+// And at its own height against the Hauptwerk: the Positiv below it at the
+// gallery's rail, the Recit's box above and behind. Estimates too. The
+// church reflects each division from where it stands (Nave::Stand).
+constexpr double kDivisionHigher[kDivisions] = { 0.0, -2.0, 2.5, 0.0 };
 
 // Neighbouring flue pipes hear each other (Mitnahme). The pipes of one key
 // stand along its channel, rank behind rank, kRowMetres apart and no nearer
@@ -198,6 +202,8 @@ double Sanitized(int index, double value) {
 } // namespace
 
 Engine::Engine() {
+    static_assert(Nave::kSources == kDivisions, "the church hears each division apart");
+    for (int d = 0; d < kDivisions; ++d) nave.Stand(d, kDivisionMetres[kHauptwerk] - kDivisionMetres[d], kDivisionHigher[d]);
     slots.resize(static_cast<std::size_t>(kPipeCount));
     int flueCount = 0, reedCount = 0;
     std::size_t room = 0;
@@ -1038,16 +1044,22 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
         float sound[2];
         boxLowGain += kGainStep * (boxLowTarget - boxLowGain);
         boxHighGain += kGainStep * (boxHighTarget - boxHighGain);
+        // What the church hears from the divisions after the first, in
+        // their order: the Positiv, the Recit through its box, the Pedal.
+        float apart[kDivisions - 1] = {};
         for (std::size_t c = 0; c < 2; ++c) {
             const float enclosed = bus[kRecit][c][at];
             boxLow[c] += kBoxPole * (enclosed - boxLow[c]);
             sound[c] = bus[kHauptwerk][c][at] + bus[kPositiv][c][at] + bus[kPedal][c][at]
                 + boxLowGain * boxLow[c] + boxHighGain * (enclosed - boxLow[c]);
+            apart[kPositiv - 1] += 0.5f * bus[kPositiv][c][at];
+            apart[kRecit - 1] += 0.5f * (boxLowGain * boxLow[c] + boxHighGain * (enclosed - boxLow[c]));
+            apart[kPedal - 1] += 0.5f * bus[kPedal][c][at];
         }
         knocks.Process(sound[0], sound[1]);
         if (hum > 0.0f || hiss > 0.0f || rub > 0.0f) windNoise.Process(hum, hiss, rub, sound[0], sound[1]);
         float roomLeft, roomRight;
-        nave.Process(sound[0], sound[1], roomLeft, roomRight);
+        nave.Process(sound[0], sound[1], roomLeft, roomRight, apart);
         dry += kGainStep * (dryTarget - dry);
         wet += kGainStep * (wetTarget - wet);
         std::array<float, 2> frame { dry * sound[0] + wet * roomLeft, dry * sound[1] + wet * roomRight };

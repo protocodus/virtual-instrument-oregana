@@ -900,6 +900,23 @@ void ChurchIsThePlayers() {
     }
     Expect(first[0] == 136.0 && first[1] == 272.0, "ChurchIsThePlayers", "the first reflection comes twice as late in a church twice the size, samples", first[1]);
 
+    // A source stood 0.5 m nearer and 2 m lower has its own paths: the
+    // floor's reflection is then 0.78 m behind its direct sound, not 0.97 m.
+    {
+        const auto apart = std::make_unique<Nave>();
+        apart->Stand(1, 0.5, -2.0);
+        apart->Set(4.5, 1.0, 0.2, 1.0, 1.0);
+        apart->Clear();
+        int came = -1;
+        for (int i = 0; i < 2000 && came < 0; ++i) {
+            const float lower[Nave::kSources - 1] = { i == 0 ? 1.0f : 0.0f, 0.0f, 0.0f };
+            float left, right;
+            apart->Process(lower[0], lower[0], left, right, lower);
+            if (left != 0.0f) came = i;
+        }
+        Expect(came == 109, "ChurchIsThePlayers", "a division nearer and lower is reflected by its own paths, samples", came);
+    }
+
     // The time a band's tail takes to fall 60 dB: a second of sixteen tones
     // within a sixth of `hz`, then the fall over half the time expected.
     const auto decay = [&](double hz, double rt60, double bass, double treble, double size, double expected) {
