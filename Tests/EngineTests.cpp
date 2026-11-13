@@ -612,7 +612,10 @@ double FirstSound(const Take& take) {
 // When a take's level first comes within 6 dB of where it settles, ms.
 double HalfWay(const Take& take) {
     const double seconds = static_cast<double>(take.left.size()) / kRate, settled = take.Rms(0.75 * seconds, seconds);
-    for (double t = 0.0; t + 0.01 <= seconds; t += 0.001)
+    // To a tenth of a millisecond: at whole milliseconds two of StopsSlide's
+    // nine stops can fall on the same one (the Rohrfloete 8' at 187.8 ms and
+    // the Gedackt 8' at 187.9 did once the pipes' turbulence changed).
+    for (double t = 0.0; t + 0.01 <= seconds; t += 0.0001)
         if (take.Rms(t, t + 0.01) > 0.5 * settled) return 1000.0 * t;
     return -1.0;
 }

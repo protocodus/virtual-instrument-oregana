@@ -122,6 +122,18 @@ inline void Interpolated(double delay, double w, double& gain, double& lag) {
 
 } // namespace detail
 
+// The jet's turbulence is not white: between kBreathFloor and kBreathCorner
+// times the note it is kBreathLow times as strong, and from there it falls 6
+// dB an octave to the white level near the fourteenth harmonic. Under the
+// floor it is white again: slower turbulence than that made a small pipe's
+// level wander (a 2960 Hz pipe by 1.4 dB), which no recorded pipe did. Calibrated against two recorded
+// organs (Docs/research/benchmark-ilmenau-2026-11-13.md): between their
+// harmonics a principal and a flute carry most noise about the first two and
+// 15 to 20 dB less by the twelfth, where white turbulence left the model 25
+// dB short at the bottom and right at the top.
+inline constexpr double kBreathLow = 20.0;
+inline constexpr double kBreathCorner = 0.7, kBreathFloor = 0.15;
+
 struct FluePipe {
     // The loop.
     int loopLength = 1;
@@ -130,6 +142,7 @@ struct FluePipe {
     int jetLength = 4;
     float jetNominal = 1.0f, jetLongest = 1.0f;   // transit at nominal wind and the longest kept, samples
     float jetLowpass = 1.0f, jetGain = 0.0f, offset = 0.0f, source = 0.0f, noise = 0.0f, puff = 0.0f;
+    float breathPole = 0.0f, breathFloor = 0.0f, breathLow = 0.0f;   // the turbulence's band and its strength there (kBreathLow)
     float shed = 0.0f;
     // The pipe beyond a junction (a chimney, or a harmonic pipe's upper
     // half): its round trip, what the junction passes each way, and its open top.
@@ -157,7 +170,7 @@ struct FluePipe {
     float bendNow = 0.0f, bendStep = 0.0f, bendTarget = 0.0f;
     float upperOut = 0.0f, upperAllpassIn = 0.0f, upperAllpassOut = 0.0f;
     float allpassIn = 0.0f, allpassOut = 0.0f, lowpassOut = 0.0f, dcIn = 0.0f, dcOut = 0.0f;
-    float jetOut = 0.0f, radiationIn = 0.0f, radiationOut = 0.0f;
+    float jetOut = 0.0f, radiationIn = 0.0f, radiationOut = 0.0f, breathOut = 0.0f, breathSlow = 0.0f;
     float foot = 0.0f, wind = 0.0f;       // foot pressure and what the pallet offers it, against nominal
     float jetTransit = 1.0f, jetStep = 0.0f;
     std::uint32_t random = 1u;
@@ -258,6 +271,11 @@ struct FluePipe {
         jetGain = static_cast<float>(drive / (returning * jetLpGain * readGain));
         offset = static_cast<float>(lip);
         noise = static_cast<float>(v.noise);
+        breathPole = static_cast<float>(1.0 - std::exp(-kTwoPi * kBreathCorner * hz / kPipeRate));
+        breathFloor = static_cast<float>(1.0 - std::exp(-kTwoPi * kBreathFloor * hz / kPipeRate));
+        // The top octave's short loops cannot carry it either: at 7.4 kHz it
+        // threw a pipe to the octave below.
+        breathLow = static_cast<float>(kBreathLow * (1.0 - top));
         puff = static_cast<float>(1.2 * v.chiff);
 
         // Beyond a junction. Neither a chimney nor a harmonic pipe's upper
@@ -339,7 +357,7 @@ struct FluePipe {
         for (int i = 0; i < jetLength; ++i) jet[i] = 0.0f;
         for (int i = 0; i < upperRoom; ++i) upper[i] = 0.0f;
         loopAt = jetAt = upperAt = 0;
-        allpassIn = allpassOut = lowpassOut = dcIn = dcOut = jetOut = radiationIn = radiationOut = upperOut = 0.0f;
+        allpassIn = allpassOut = lowpassOut = dcIn = dcOut = jetOut = radiationIn = radiationOut = upperOut = breathOut = breathSlow = 0.0f;
         upperAllpassIn = upperAllpassOut = 0.0f;
         foot = wind = 0.0f;
         jetTransit = jetLongest;
@@ -421,7 +439,7 @@ struct FluePipe {
         const bool bent = bend != 0.0f || bendBy != 0.0f;
         float upperLp = upperOut, upperApIn = upperAllpassIn, upperApOut = upperAllpassOut;
         float apIn = allpassIn, apOut = allpassOut, lpOut = lowpassOut, blockIn = dcIn, blockOut = dcOut;
-        float jetLp = jetOut, radIn = radiationIn, radOut = radiationOut, pressure = foot, transit = jetTransit;
+        float jetLp = jetOut, radIn = radiationIn, radOut = radiationOut, pressure = foot, transit = jetTransit, breath = breathOut, slow = breathSlow;
         std::uint32_t seed = random;
         const float target = wind, rise = attack, fall = release;
         const float jetSize = static_cast<float>(jetLength);
@@ -463,7 +481,10 @@ struct FluePipe {
             if (++jetWrite == jetLength) jetWrite = 0;
             jetLp += jetLowpass * (deflection - jetLp);
 
-            const float turbulence = noise * NextNoise(seed);
+            const float white = NextNoise(seed);
+            breath += breathPole * (white - breath);
+            slow += breathFloor * (white - slow);
+            const float turbulence = noise * (white + breathLow * (breath - slow));
             // The wind's arrival pushes a puff of air into the pipe, largest
             // midway through the foot's filling.
             const float blown = -source * pressure * JetShape(jetGain * jetLp + offset + turbulence)
@@ -498,6 +519,8 @@ struct FluePipe {
         dcIn = blockIn;
         dcOut = blockOut;
         jetOut = jetLp;
+        breathOut = breath;
+        breathSlow = slow;
         radiationIn = radIn;
         radiationOut = radOut;
         foot = pressure;
@@ -536,6 +559,8 @@ struct FluePipe {
         Float4 upperLp = OREGANA_LANES(upperOut), upperApIn = OREGANA_LANES(upperAllpassIn), upperApOut = OREGANA_LANES(upperAllpassOut);
         Float4 apIn = OREGANA_LANES(allpassIn), apOut = OREGANA_LANES(allpassOut), lpOut = OREGANA_LANES(lowpassOut);
         Float4 blockIn = OREGANA_LANES(dcIn), blockOut = OREGANA_LANES(dcOut), jetLp = OREGANA_LANES(jetOut);
+        Float4 breath = OREGANA_LANES(breathOut), slow = OREGANA_LANES(breathSlow);
+        const Float4 breathPoleC = OREGANA_LANES(breathPole), breathFloorC = OREGANA_LANES(breathFloor), breathLowC = OREGANA_LANES(breathLow);
         Float4 radIn = OREGANA_LANES(radiationIn), radOut = OREGANA_LANES(radiationOut), pressure = OREGANA_LANES(foot);
 #undef OREGANA_LANES
         const Float4 zero = Four(0.0f), one = Four(1.0f);
@@ -620,7 +645,9 @@ struct FluePipe {
             const Float4 white = NextNoise(seed);
             jetLp += jetLowpassC * (deflection - jetLp);
 
-            const Float4 turbulence = noiseC * white;
+            breath += breathPoleC * (white - breath);
+            slow += breathFloorC * (white - slow);
+            const Float4 turbulence = noiseC * (white + breathLowC * (breath - slow));
             const Float4 swing = jetGainC * jetLp + offsetC + turbulence;
             const Float4 swing2 = swing * swing;
             const Float4 shape = Choose(swing > Four(3.0f), one,
@@ -665,6 +692,8 @@ struct FluePipe {
             p.dcIn = blockIn[l];
             p.dcOut = blockOut[l];
             p.jetOut = jetLp[l];
+            p.breathOut = breath[l];
+            p.breathSlow = slow[l];
             p.radiationIn = radIn[l];
             p.radiationOut = radOut[l];
             p.foot = pressure[l];

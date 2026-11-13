@@ -71,6 +71,13 @@ and plenty.
   resonator gives the room, not by the wave inside it: the lowest Trompete
   is let go 2.3 s after its key where it was kept 7.6 s, its sound by then
   116 dB down.
+- **The flue pipes breathe as recorded ones do.** A pipe's wind noise is now
+  strongest about its first harmonics and falls towards the top, where it
+  was even: 9 to 17 dB more noise between a pipe's harmonics, as two
+  recorded organs have it
+  ([Ilmenau](Docs/research/benchmark-ilmenau-2026-11-13.md),
+  [Bureå](Docs/research/benchmark-burea-2026-11-13.md)). Soft flutes and
+  single principals are airier; a full chorus changes little.
 - **Brighter trumpets.** The Trompetes, the Posaunes, the Trompette and the
   Clairon pass three times the wind under their open tongues, so the flow is
   cut only in the short time a tongue is nearly shut, as in a real reed. The
@@ -225,8 +232,9 @@ Rossing, *The Physics of Musical Instruments*, section 16.3). Nothing else
 makes the tone: the pipe speaks when the wind lets the loop's gain pass one,
 settles where the jet saturates and the lip sheds vortices, goes flat as the
 wind sags, and rings down on its own resonances when the pallet closes. The
-jet's turbulence is the wind noise and the puff of the wind's arrival is the
-chiff. Principals, open, tapered, stopped and chimney flutes, Quintadena,
+jet's turbulence is the wind noise, strongest about the first harmonics and
+falling 6 dB an octave above them (calibrated against two recorded organs),
+and the puff of the wind's arrival is the chiff. Principals, open, tapered, stopped and chimney flutes, Quintadena,
 strings and harmonic flutes differ only in the dimensions and voicing a pipe
 maker would choose (`Stops.h`).
 
@@ -457,21 +465,25 @@ it still brings on the whole stop list, a chapel organ's too.
 - **A principal's second harmonic is about 10 dB too weak** against the same
   organ's Principal 8'. The jet swings symmetrically about a small offset;
   a larger offset stops the pipe speaking before it gives the harmonic.
-- **Real pipes are noisier and less even** than these: 9 to 16 dB more of a
-  recorded pipe's power lies outside its harmonics, and the notes of a
-  recorded octave differ by 1.4 to 5 dB where these differ by under 1 dB as
-  loaded (part of the recorded spread is the room).
+- **Real ranks are less even** than these: the notes of a recorded octave
+  differ by 1.4 to 5 dB where these differ by under 1 dB as loaded (part of
+  the recorded spread is the room).
+- **The breath does not lead the tone.** A recorded pipe hisses for some
+  100 ms before its tone begins; these are silent until it does. And no
+  short note has been compared with a recording: the one set with known key
+  times holds only notes of 4 s
+  ([benchmark](Docs/research/benchmark-ilmenau-2026-11-13.md)).
 - **Nothing is fitted to an organ.** Scales, voicing, winding, the swell
   box, the church, the divisions' places, the pipes' hearing and the noises
-  are typical values and estimates, stated as such beside the code. One
-  organ has been compared (the benchmark above) and nothing was changed to
-  match it.
+  are typical values and estimates, stated as such beside the code. Two
+  organs have been compared (the benchmarks above); the trumpets' flow and
+  the flue pipes' noise spectrum were set by them, and nothing else.
 - **The seat moves across the nave only.** Along it, Room mixes the organ
   and the church and the reflections stay those of a seat 18 m away. From a
   side seat the far ear has the organ later and weaker at every frequency
   alike: there is no head's shadow that grows with the pitch.
 - **The new sound has not been listened to.** The pipes' hearing, the
-  divisions' places and the mechanism's noises were added with A against B
+  divisions' places, the mechanism's noises and the pipes' breath were added with A against B
   listening sets that no one has yet judged.
 
 ## Build
