@@ -157,6 +157,7 @@ struct FluePipe {
     int quiet = 0;
 
     static constexpr int kTick = 32;   // samples between Tick() calls
+    static constexpr float kPipeSilent = 1.0e-5f;
     static constexpr float kLongestJet = 3.0f;   // the transit kept as the wind falls, against nominal
 
     // `resonance` is the tuner's correction: the loop's first resonance
@@ -341,7 +342,10 @@ struct FluePipe {
         const float target = Min(jetNominal / Sqrt(pressure), jetLongest);
         jetStep = Clamp((target - jetTransit) * (1.0f / kTick), -0.5f, 0.5f);
         const float level = Abs(lowpassOut) + Abs(allpassOut) + Abs(radiationOut) + foot;
-        quiet = level < 1.0e-6f ? quiet + 1 : 0;
+        // A released pipe is let go when it has rung down to kPipeSilent, some
+        // 105 dB under its own speech at the output (owner, 2026-11-13: 100 dB
+        // is past hearing; it rang 20 dB further), and costs nothing from then.
+        quiet = level < kPipeSilent ? quiet + 1 : 0;
     }
     bool Silent() const { return wind == 0.0f && quiet > 16; }
 

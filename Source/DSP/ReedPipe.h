@@ -132,7 +132,7 @@ struct ReedPipe {
         // As a flue's (FluePipe::Tick).
         if (wind == 0.0f && foot < 1.0e-25f) foot = 0.0f;
         const float level = Abs(lowpassOut) + Abs(allpassOut) + Abs(speed) + foot;
-        quiet = level < 1.0e-6f ? quiet + 1 : 0;
+        quiet = level < FluePipe::kPipeSilent ? quiet + 1 : 0;
     }
     bool Silent() const { return wind == 0.0f && quiet > 16; }
 

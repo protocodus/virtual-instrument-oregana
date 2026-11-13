@@ -63,6 +63,11 @@ and plenty.
   gave one at a time. Pipes ringing out after their keys are let go no
   longer cost double on a host that does not flush denormal numbers: half a
   second after sixteen keys of full organ, 7 % of a core where it was 15 %.
+  A released pipe is let go once it has rung down some 105 dB under its own
+  speech, where it rang 20 dB further (owner, 2026-11-13: past hearing): a
+  quarter to a half fewer pipes ring on in a release. A pipe struck again
+  after that starts from rest, so a render differs from 0.4.0's in how
+  near-unison pipes beat, not in their levels.
 - **Brighter trumpets.** The Trompetes, the Posaunes, the Trompette and the
   Clairon pass three times the wind under their open tongues, so the flow is
   cut only in the short time a tongue is nearly shut, as in a real reed. The
