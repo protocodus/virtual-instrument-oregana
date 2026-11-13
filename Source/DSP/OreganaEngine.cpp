@@ -959,7 +959,20 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
             busLeft = rows[0].data() + from + s.outDelay;
             busRight = rows[1].data() + from + s.outDelay;
         }
-        for (int i = 0; i < frames - from; ++i) {
+        int i = 0;
+#if defined(OREGANA_FOUR)
+        for (; i + 4 <= frames - from; i += 4) {
+            Float4 heard, toLeft, toRight;
+            __builtin_memcpy(&heard, sound + i, sizeof heard);
+            __builtin_memcpy(&toLeft, busLeft + i, sizeof toLeft);
+            __builtin_memcpy(&toRight, busRight + i, sizeof toRight);
+            toLeft += gainLeft * heard;
+            toRight += gainRight * heard;
+            __builtin_memcpy(busLeft + i, &toLeft, sizeof toLeft);
+            __builtin_memcpy(busRight + i, &toRight, sizeof toRight);
+        }
+#endif
+        for (; i < frames - from; ++i) {
             busLeft[i] += gainLeft * sound[i];
             busRight[i] += gainRight * sound[i];
         }

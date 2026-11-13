@@ -330,6 +330,13 @@ struct FluePipe {
     // Every kTick samples: the jet's transit follows the foot pressure, no
     // faster than the jet itself moves.
     void Tick() {
+        // A foot all but empty is empty. Left to fall it passes, long before
+        // the pipe has rung out, through numbers too small for a processor
+        // to keep at speed (denormals): a host that does not flush them paid
+        // twice over for every ringing pipe (full organ let go, 0.5 s on: 15 %
+        // of a core against 7 %). For the same reason the puff takes the gap
+        // only while the foot fills, and so never squares a falling foot.
+        if (wind == 0.0f && foot < 1.0e-25f) foot = 0.0f;
         const float pressure = Max(foot, 1.0f / (kLongestJet * kLongestJet));
         const float target = Min(jetNominal / Sqrt(pressure), jetLongest);
         jetStep = Clamp((target - jetTransit) * (1.0f / kTick), -0.5f, 0.5f);
@@ -409,7 +416,7 @@ struct FluePipe {
             // The wind's arrival pushes a puff of air into the pipe, largest
             // midway through the foot's filling.
             const float blown = -source * pressure * JetShape(jetGain * jetLp + offset + turbulence)
-                + (gap > 0.0f ? puff * gap * pressure : 0.0f);
+                + puff * (gap > 0.0f ? gap : 0.0f) * pressure;
             float leaving = returned + blown - shed * Abs(returned) * returned;
             // The pressure a neighbour makes at the mouth enters as a wave.
             if (heard != nullptr) leaving += heard[i];
@@ -518,7 +525,7 @@ struct FluePipe {
 
             for (int l = 0; l < 4; ++l) jetBuffer[l][jetWrite[l]] = returned[l];
             Float4 read = ToFloat(jetWrite) - transit;
-            read = Choose(read < zero, read + jetSize, read);
+            read += Where(read < zero, jetSize);
             // A read just under 0 rounds up to the buffer's length as a float.
             Int4 older = Truncated(read);
             older &= ~(older >= jetCount);
@@ -539,7 +546,7 @@ struct FluePipe {
             const Float4 swing2 = swing * swing;
             const Float4 shape = Choose(swing > Four(3.0f), one,
                                         Choose(swing < Four(-3.0f), -one, swing * (27.0f + swing2) / (27.0f + 9.0f * swing2)));
-            const Float4 blown = -sourceC * pressure * shape + Choose(filling, puffC * gap * pressure, zero);
+            const Float4 blown = -sourceC * pressure * shape + puffC * Where(filling, gap) * pressure;
             Float4 leaving = returned + blown - shedC * Abs(returned) * returned;
             if (Hears) leaving += Float4 { heard[0][i], heard[1][i], heard[2][i], heard[3][i] };
             for (int l = 0; l < 4; ++l) {

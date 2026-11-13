@@ -287,7 +287,7 @@ public:
             const UInt4 turned = UInt4 { (kInputSigns >> i) & 1u, (kInputSigns >> (i + 1)) & 1u, (kInputSigns >> (i + 2)) & 1u,
                                          (kInputSigns >> (i + 3)) & 1u } << 31;
             const Float4 mixed = kMixGain * Lanes(out, i) + (Float4)((UInt4)Four(spread) ^ turned);
-            const Float4 in = Choose(Abs(mixed) < Four(1.1754944e-38f), Four(0.0f), mixed);
+            const Float4 in = Unless(Abs(mixed) < Four(1.1754944e-38f), mixed);
             lineBuffer[i][writeAt] = in[0];
             lineBuffer[i + 1][writeAt] = in[1];
             lineBuffer[i + 2][writeAt] = in[2];
@@ -406,7 +406,7 @@ private:
     // Line for lines i to i + 3.
     Float4 Lines(std::size_t i, Float4 drifted, const std::array<float, kLines>& length) const {
         Float4 read = Four(static_cast<float>(write)) - Lanes(length, i) - drifted;
-        read = Choose(read < Four(0.0f), read + Four(static_cast<float>(kLineSize)), read);
+        read += Where(read < Four(0.0f), Four(static_cast<float>(kLineSize)));
         const Int4 at = Truncated(read);
         const Float4 between = read - ToFloat(at);
         const Int4 first = at & (kLineSize - 1);

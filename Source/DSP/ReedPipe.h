@@ -129,6 +129,8 @@ struct ReedPipe {
     }
 
     void Tick() {
+        // As a flue's (FluePipe::Tick).
+        if (wind == 0.0f && foot < 1.0e-25f) foot = 0.0f;
         const float level = Abs(lowpassOut) + Abs(allpassOut) + Abs(speed) + foot;
         quiet = level < 1.0e-6f ? quiet + 1 : 0;
     }
@@ -243,7 +245,7 @@ struct ReedPipe {
 
             const Float4 held = inMass + massC * p;
             const Float4 p0 = impedanceC * (2.0f * returning - held);
-            const Float4 open = Choose(y > zero, y * y / (y + curveC), zero);
+            const Float4 open = Where(y > zero, y * y / (y + curveC));
             const Float4 white = NextNoise(seed);
             const Float4 k = flowC * open * (1.0f + noiseC * white);
             const Float4 across = pressure - p0;
@@ -253,7 +255,7 @@ struct ReedPipe {
             p = p0 + impedanceC * through;
             const Float4 gap = target - pressure;
             pressure += gap * Choose(gap > zero, rise, fall) - drainC * through;
-            pressure = Choose(pressure < zero, zero, pressure);
+            pressure = Unless(pressure < zero, pressure);
             inMass = held + massC * p;
             const Float4 leaving = p - returning;
             for (int l = 0; l < 4; ++l) {
@@ -263,7 +265,7 @@ struct ReedPipe {
 
             Float4 pull = stiffnessC * (1.0f - y) - dampingC * v - stiffnessC * closingC * (pressure - p);
             const Float4 face = landingC - landingLossC * v;
-            pull = Choose(y < zero, pull - y * Choose(zero > face, zero, face), pull);
+            pull = Choose(y < zero, pull - y * Unless(zero > face, face), pull);
             v += pull;
             y += v;
 

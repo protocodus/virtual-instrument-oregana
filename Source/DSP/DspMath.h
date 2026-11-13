@@ -62,6 +62,9 @@ inline Float4 ToFloat(Int4 x) { return __builtin_convertvector(x, Float4); }
 inline Int4 Truncated(Float4 x) { return __builtin_convertvector(x, Int4); }
 // a where the comparison held, else b.
 inline Float4 Choose(Int4 held, Float4 a, Float4 b) { return (Float4)((held & (Int4)a) | (~held & (Int4)b)); }
+// a where the comparison held, else 0; and a where it did not.
+inline Float4 Where(Int4 held, Float4 a) { return (Float4)(held & (Int4)a); }
+inline Float4 Unless(Int4 held, Float4 a) { return (Float4)(~held & (Int4)a); }
 inline Float4 Abs(Float4 x) { return (Float4)((Int4)x & Int4 { 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff }); }
 inline Float4 Sqrt(Float4 x) { return Float4 { Sqrt(x[0]), Sqrt(x[1]), Sqrt(x[2]), Sqrt(x[3]) }; }
 #endif

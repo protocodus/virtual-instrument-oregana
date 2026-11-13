@@ -60,7 +60,9 @@ and plenty.
 - **About half the CPU**: the Tutti demo's worst block went from 37 % of a
   core to 20 %, the Plenum's from 14 % to 8 %. The pipes and the church's
   delay lines are stepped four to an instruction and give the samples they
-  gave one at a time.
+  gave one at a time. Pipes ringing out after their keys are let go no
+  longer cost double on a host that does not flush denormal numbers: half a
+  second after sixteen keys of full organ, 7 % of a core where it was 15 %.
 - **Brighter trumpets.** The Trompetes, the Posaunes, the Trompette and the
   Clairon pass three times the wind under their open tongues, so the flow is
   cut only in the short time a tongue is nearly shut, as in a real reed. The

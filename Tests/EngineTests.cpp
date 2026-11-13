@@ -1229,6 +1229,54 @@ void PipesHearEachOther() {
     Expect(far >= 10 && leastBeating > 3.0, "PipesHearEachOther", "and over 4 cents apart they beat as before, the smallest swing in dB", leastBeating);
 }
 
+// A pipe let go rings on long after its foot has emptied. The foot must reach
+// nothing, not fall for ever through numbers a processor steps slowly
+// (denormals): on a host that does not flush them, that doubled the cost of
+// every ringing pipe.
+void FeetEmpty() {
+    for (const bool isReed : { false, true }) {
+        int rank = 0;
+        while (PlanPipe(rank, 12).reed != isReed || !PlanPipe(rank, 12).exists) ++rank;
+        const PipePlan plan = PlanPipe(rank, 12);
+        std::vector<float> room(3 * 8192), sound(FluePipe::kTick);
+        FluePipe flue;
+        ReedPipe reed;
+        if (isReed) {
+            reed.loop = room.data();
+            reed.Design(plan.tongue, plan.hz, 1.0);
+            reed.Clear();
+        } else {
+            flue.loop = room.data();
+            flue.jet = flue.loop + 8192;
+            flue.upper = flue.loop + 2 * 8192;
+            flue.Design(plan.flue, plan.hz, 1.0);
+            flue.Clear();
+        }
+        float least = 1.0f;
+        bool ringing = false;
+        for (int tick = 0; tick < 3750; ++tick) {
+            const float wind = tick < 750 ? 1.0f : 0.0f;
+            if (isReed) {
+                reed.wind = wind;
+                reed.Tick();
+                reed.Run(sound.data(), FluePipe::kTick);
+                if (tick >= 750 && reed.foot > 0.0f) least = Min(least, reed.foot);
+                if (tick >= 750 && reed.foot == 0.0f && !reed.Silent()) ringing = true;
+            } else {
+                flue.wind = wind;
+                flue.Tick();
+                flue.Run(sound.data(), FluePipe::kTick);
+                if (tick >= 750 && flue.foot > 0.0f) least = Min(least, flue.foot);
+                if (tick >= 750 && flue.foot == 0.0f && !flue.Silent()) ringing = true;
+            }
+        }
+        const float foot = isReed ? reed.foot : flue.foot;
+        Expect(foot == 0.0f, "FeetEmpty", isReed ? "a reed's foot two seconds after its wind stopped" : "a flue's foot two seconds after its wind stopped", foot);
+        Expect(least > 1.0e-30f, "FeetEmpty", "the least it held on the way", least);
+        Expect(ringing, "FeetEmpty", "and the pipe rang on with it empty", ringing);
+    }
+}
+
 int main() {
     SilentUntilPlayed();
     PipesSoundAtTheirPitch();
@@ -1241,6 +1289,7 @@ int main() {
     Imperfections();
     MechanismIsHeard();
     FourPipesAreFourPipes();
+    FeetEmpty();
     PipesHearEachOther();
     EveryKeySounds();
     StopsSlide();
