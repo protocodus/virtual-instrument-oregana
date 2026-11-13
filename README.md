@@ -84,6 +84,13 @@ and plenty.
   (owner, 2026-11-13: loud at 0). At rest the swell box is open; turning the
   wheel up closes it, so only the Récit grows quieter. The crescendo roller,
   which the wheel turned in 0.4.0, is the Crescendo control alone.
+- **A seat across the nave.** Seat, a new control at the end of the list,
+  moves the listener from the axis towards either side wall, up to 5.5 m.
+  The organ is then heard up to 16 degrees to one side, the far ear 8
+  samples later and a quarter weaker, and the wall the listener sits by
+  answers 1.0 m behind the organ's own sound where it answered 4.6 m behind.
+  On the axis, as loaded, nothing is different, and the seat costs nothing
+  that can be measured.
 - **The pitch wheel warms and cools the air** (owner, 2026-11-13), by up to
   10 °C on top of Air Temperature. Flues follow while they sound, up to
   29.5 cents either way, gliding without a step; reeds, whose tongues set
@@ -329,6 +336,7 @@ organ sounds:
 | Decay Bass | the decay below 250 Hz against that, from half to twice | 1.3 |
 | Decay Treble | the decay at the very top against it, 0.1 to 0.6: the air's share | 0.2, which leaves 2.7 s at 4 kHz |
 | Width | from one field for both ears to the organ's breadth and two fields a head apart | 0.8 |
+| Seat | the listener across the nave, from 1.5 m from the left wall, over the axis, to 1.5 m from the right | on the axis |
 
 The divisions stand apart in it. The Hauptwerk is the organ's place above;
 the Positiv stands half a metre before it and 2 m lower, the Récit 2.5 m
@@ -458,9 +466,10 @@ it still brings on the whole stop list, a chapel organ's too.
   are typical values and estimates, stated as such beside the code. One
   organ has been compared (the benchmark above) and nothing was changed to
   match it.
-- **The listener cannot move** across the church or choose a seat off the
-  axis: the divisions' places are heard from the one seat Room moves along
-  the nave.
+- **The seat moves across the nave only.** Along it, Room mixes the organ
+  and the church and the reflections stay those of a seat 18 m away. From a
+  side seat the far ear has the organ later and weaker at every frequency
+  alike: there is no head's shadow that grows with the pitch.
 - **The new sound has not been listened to.** The pipes' hearing, the
   divisions' places and the mechanism's noises were added with A against B
   listening sets that no one has yet judged.
