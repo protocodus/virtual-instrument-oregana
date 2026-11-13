@@ -564,6 +564,8 @@ void FourPipesAreFourPipes() {
         float* out[4] = { sound[4].data(), sound[5].data(), sound[6].data(), sound[7].data() };
         for (int tick = 0; tick < 1500 && same; ++tick) {
             const float wind = tick < 600 ? 1.0f : tick < 900 ? 0.55f : tick < 1000 ? 1.3f : 0.0f;
+            // The air's bend swings both ways from tick 300 and is back at rest by 1200.
+            const float stretch = tick < 300 || tick >= 1200 ? 0.0f : 0.017f * static_cast<float>(std::sin((tick - 300) * 0.02));
             const int frames = 1 + (tick * 7) % 32;
             for (int l = 0; l < 4; ++l) {
                 if (isReed) {
@@ -575,7 +577,7 @@ void FourPipesAreFourPipes() {
                 } else {
                     for (FluePipe* pipe : { &flue[l], &flue[l + 4] }) {
                         pipe->wind = wind;
-                        pipe->Tick();
+                        pipe->Tick(stretch);
                     }
                     flue[l].Run(sound[static_cast<std::size_t>(l)].data(), frames);
                 }
@@ -589,7 +591,7 @@ void FourPipesAreFourPipes() {
         for (int l = 0; l < 4 && same; ++l)
             same = isReed ? reed[l].tongue == reed[l + 4].tongue && reed[l].foot == reed[l + 4].foot && reed[l].random == reed[l + 4].random
                           : flue[l].jetTransit == flue[l + 4].jetTransit && flue[l].foot == flue[l + 4].foot && flue[l].random == flue[l + 4].random
-                                && flue[l].jetAt == flue[l + 4].jetAt;
+                                && flue[l].jetAt == flue[l + 4].jetAt && flue[l].bendNow == 0.0f && flue[l + 4].bendNow == 0.0f;
         if (!same) {
             std::printf("  rank %d differs (kind %d)\n", rank, kind);
             break;
@@ -1277,6 +1279,83 @@ void FeetEmpty() {
     }
 }
 
+// The pitch wheel warms and cools the air: flues follow while they sound,
+// by 2.95 cents a degree, reeds do not, and the glide is smooth.
+void AirBendsTheFlues() {
+    struct Pipe { int stop, rank, division, note; bool reed; };
+    // Open, chimneyed, stopped and harmonic flues from A0 to C8, and two reeds.
+    const Pipe pipes[] = {
+        { kHwOctave8, 1, kHauptwerk, 21, false }, { kHwOctave8, 1, kHauptwerk, 36, false }, { kHwOctave8, 1, kHauptwerk, 60, false },
+        { kHwOctave8, 1, kHauptwerk, 89, false }, { kHwOctave8, 1, kHauptwerk, 108, false }, { kHwRohrfloete8, 3, kHauptwerk, 67, false },
+        { kPosGedackt8, 23, kPositiv, 53, false }, { kRecFluteHarmonique8, 41, kRecit, 72, false }, { kPedPrincipal16, 55, kPedal, 43, false },
+        { kHwTrompete8, 22, kHauptwerk, 60, true }, { kPedPosaune16, 66, kPedal, 48, true },
+    };
+    double worstPitch = 0.0, worstLevel = 0.0, worstReed = 0.0, worstSet = 0.0;
+    for (const Pipe& pipe : pipes) {
+        double rest = 0.0;
+        for (const double bend : { 0.0, 1.0, -1.0 }) {
+            Bench bench;
+            bench.Draw({ pipe.stop });
+            bench.organ->KeyDown(pipe.division, pipe.note, 80);
+            const double made = bench.organ->PipeHz(pipe.rank, pipe.note);
+            bench.Play(1.0);
+            bench.organ->SetBend(bend);
+            const Take take = bench.Play(Max(2.0, 400.0 / made));
+            const double tuned = bench.organ->PipeHz(pipe.rank, pipe.note);
+            worstSet = Max(worstSet, Abs(CentsBetween(tuned, made) - (pipe.reed ? 0.0 : 29.5 * bend)));
+            const double off = CentsBetween(take.Hz(tuned), tuned);
+            if (pipe.reed) worstReed = Abs(off) > Abs(worstReed) ? off : worstReed;
+            else if (Abs(off) > Abs(worstPitch)) worstPitch = off;
+            const double level = Db(take.Rms(1.0, 2.0));
+            if (bend == 0.0) rest = level;
+            else if (Abs(level - rest) > Abs(worstLevel)) worstLevel = level - rest;
+        }
+    }
+    Expect(worstSet < 1.0e-6, "AirBendsTheFlues", "ten degrees are 29.5 cents to a flue and nothing to a reed, cents off", worstSet);
+    // A pipe made a semitone away keeps its regulation within a cent and a
+    // half (PipesSoundAtTheirPitch); one bent a third of that way is held to
+    // the same.
+    Expect(Abs(worstPitch) < 1.5, "AirBendsTheFlues", "a held flue sounds where the wheel's air puts it, cents off at worst", worstPitch);
+    Expect(Abs(worstReed) < 1.5, "AirBendsTheFlues", "a held reed stays where it was, cents off at worst", worstReed);
+    Expect(Abs(worstLevel) < 1.0, "AirBendsTheFlues", "and is as loud bent as at rest, dB at worst", worstLevel);
+
+    // The glide: a chord of flues from the bass to the top while the wheel
+    // swings end to end twice a second, and while it is thrown from end to
+    // end at once. No 2 ms of the output's second difference stands more
+    // than four times over the 2 ms a little before and after it
+    // (ThrownControlsDoNotClick).
+    double sharpest = 0.0;
+    for (const bool thrown : { false, true }) {
+        Bench bench;
+        bench.Draw({ kHwPrincipal16, kHwOctave8, kHwRohrfloete8, kHwSuperoctave2, kPedPrincipal16, kRecFluteHarmonique8, kCouplerRecHw });
+        for (int note : { 36, 48, 55, 64, 84, 96 }) bench.organ->KeyDown(kHauptwerk, note, 90);
+        bench.organ->KeyDown(kPedal, 28, 90);
+        Take take = bench.Play(1.0, 64);
+        for (int block = 0; block < 1500; ++block) {
+            const double turn = block * 64.0 / kRate * 2.0;   // swings since the start
+            const double swing = 4.0 * Abs(turn - std::floor(turn + 0.5)) - 1.0;
+            bench.organ->SetBend(thrown ? (static_cast<int>(turn * 2.0) % 2 ? 1.0 : -1.0) : swing);
+            const Take part = bench.Play(64.0 / kRate, 64);
+            take.left.insert(take.left.end(), part.left.begin(), part.left.end());
+            take.right.insert(take.right.end(), part.right.begin(), part.right.end());
+        }
+        constexpr std::size_t kWindow = 96;
+        std::vector<double> peaks;
+        for (std::size_t at = take.Frames(0.9); at + kWindow <= take.left.size(); at += kWindow) {
+            double peak = 0.0;
+            for (std::size_t n = at; n < at + kWindow; ++n)
+                peak = Max(peak, Max(Abs(static_cast<double>(take.left[n]) - 2.0 * take.left[n - 1] + take.left[n - 2]),
+                                     Abs(static_cast<double>(take.right[n]) - 2.0 * take.right[n - 1] + take.right[n - 2])));
+            peaks.push_back(peak);
+        }
+        for (std::size_t w = 3; w + 3 < peaks.size(); ++w) {
+            const double around = Max(Max(Max(peaks[w - 3], peaks[w - 2]), Max(peaks[w + 2], peaks[w + 3])), 1.0e-7);
+            if (peaks[w] > 2.0e-4) sharpest = Max(sharpest, peaks[w] / around);
+        }
+    }
+    Expect(sharpest < 4.0, "AirBendsTheFlues", "the wheel swung and thrown under held flues does not click, the sharpest edge over its surroundings", sharpest);
+}
+
 int main() {
     SilentUntilPlayed();
     PipesSoundAtTheirPitch();
@@ -1290,6 +1369,7 @@ int main() {
     MechanismIsHeard();
     FourPipesAreFourPipes();
     FeetEmpty();
+    AirBendsTheFlues();
     PipesHearEachOther();
     EveryKeySounds();
     StopsSlide();

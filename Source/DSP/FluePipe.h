@@ -147,7 +147,14 @@ struct FluePipe {
     float* loop = nullptr;
     float* jet = nullptr;
     float* upper = nullptr;
-    int loopAt = 0, jetAt = 0, upperAt = 0;
+    int loopAt = 0, jetAt = 0, upperAt = 0;   // where the loop and the upper pipe are written next
+    // The air's warmth as the player bends it (the pitch wheel): the loop is
+    // `bendNow` samples longer than it was made, gliding a sample at a time.
+    // `loopPass` is the samples a unit of stretch adds (0: a loop too short
+    // to bend), `upperShare` the upper pipe's against the loop's.
+    int loopRoom = 1, upperRoom = 0;
+    float loopPass = 0.0f, upperShare = 0.0f;
+    float bendNow = 0.0f, bendStep = 0.0f, bendTarget = 0.0f;
     float upperOut = 0.0f, upperAllpassIn = 0.0f, upperAllpassOut = 0.0f;
     float allpassIn = 0.0f, allpassOut = 0.0f, lowpassOut = 0.0f, dcIn = 0.0f, dcOut = 0.0f;
     float jetOut = 0.0f, radiationIn = 0.0f, radiationOut = 0.0f;
@@ -158,11 +165,14 @@ struct FluePipe {
 
     static constexpr int kTick = 32;   // samples between Tick() calls
     static constexpr float kPipeSilent = 1.0e-5f;
+    // The most the air's bend stretches or shortens a pipe: 10 C either way,
+    // 29.5 cents.
+    static constexpr double kBendMost = 0.0173;
     static constexpr float kLongestJet = 3.0f;   // the transit kept as the wind falls, against nominal
 
     // `resonance` is the tuner's correction: the loop's first resonance
-    // against the note. Buffers needed: loopLength, jetLength and
-    // upperLength floats.
+    // against the note. Buffers needed: loopRoom, jetLength and
+    // upperRoom floats.
     void Design(const FlueVoicing& v, double hz, double resonance) {
         const double w = kTwoPi * hz / kPipeRate, wr = w * resonance;
         // A period under ten samples cannot carry a hard-blown jet: above
@@ -198,6 +208,13 @@ struct FluePipe {
         const double rest = pass - (lpLag - dcLead) / w;
         loopLength = Max(1, static_cast<int>(std::lround(rest - mouth)));
         allpass = static_cast<float>(detail::AllpassFor(rest - loopLength, w));
+        // The bend reads between the loop's samples, four at a time, from
+        // one newer than the shortest loop to two older than the longest.
+        const int bendMost = static_cast<int>(pass * kBendMost);
+        loopRoom = loopLength + bendMost + 4;
+        loopPass = loopLength >= bendMost + 3 ? static_cast<float>(pass) : 0.0f;
+        upperRoom = 0;
+        upperShare = 0.0f;
         lowpass = static_cast<float>(lp);
         dcPole = static_cast<float>(dc);
         // The first resonance's Q is the loss of one period: one pass of an
@@ -260,6 +277,7 @@ struct FluePipe {
             // the pipe's pitch by up to 4 cents as the organ was retuned.
             const double chimney = v.chimneyLength * kPi / w;
             upperLength = Max(1, static_cast<int>(std::lround(chimney - 1.0)));
+            SetUpperBend(chimney, pass);
             upperAllpass = static_cast<float>(detail::AllpassFor(Max(chimney - upperLength, 0.1), w));
             const double opening = Min(kSoundSpeed / (kTwoPi * radius * v.chimney), 0.45 * kPipeRate);
             upperLowpass = static_cast<float>(1.0 - std::exp(-kTwoPi * opening / kPipeRate));
@@ -282,6 +300,7 @@ struct FluePipe {
             const double fill = Clamp(kTwoPi - whole * w, 0.02, 0.9 * 0.5 * (kPi - w));
             // The line's allpass at 0 is one sample of the delay.
             upperLength = whole - 1;
+            SetUpperBend(kTwoPi / w, pass);
             upperAllpass = 0.0f;
             const double topPole = std::sin(fill) / std::sin(w + fill);
             detail::OnePole(1.0 - topPole, w, topGain, topLag);
@@ -316,21 +335,40 @@ struct FluePipe {
     }
 
     void Clear() {
-        for (int i = 0; i < loopLength; ++i) loop[i] = 0.0f;
+        for (int i = 0; i < loopRoom; ++i) loop[i] = 0.0f;
         for (int i = 0; i < jetLength; ++i) jet[i] = 0.0f;
-        for (int i = 0; i < upperLength; ++i) upper[i] = 0.0f;
+        for (int i = 0; i < upperRoom; ++i) upper[i] = 0.0f;
         loopAt = jetAt = upperAt = 0;
         allpassIn = allpassOut = lowpassOut = dcIn = dcOut = jetOut = radiationIn = radiationOut = upperOut = 0.0f;
         upperAllpassIn = upperAllpassOut = 0.0f;
         foot = wind = 0.0f;
         jetTransit = jetLongest;
         jetStep = 0.0f;
+        bendNow = bendStep = bendTarget = 0.0f;
         quiet = 0;
+    }
+
+    // The air's bend as it stands, for a pipe that begins to speak: `stretch`
+    // is how much longer the air makes every length, against 1.
+    void SetBend(float stretch) {
+        bendNow = bendTarget = loopPass * stretch;
+        bendStep = 0.0f;
     }
 
     // Every kTick samples: the jet's transit follows the foot pressure, no
     // faster than the jet itself moves.
-    void Tick() {
+    void Tick(float stretch = 0.0f) {
+        // The loop glides to the air's bend over the tick, and rests on it
+        // exactly once it has stood still for one: at rest it is 0, and the
+        // pipe is stepped as it was made.
+        const float bent = loopPass * stretch;
+        if (bent == bendTarget) {
+            bendNow = bent;
+            bendStep = 0.0f;
+        } else {
+            bendStep = (bent - bendNow) * (1.0f / kTick);
+        }
+        bendTarget = bent;
         // A foot all but empty is empty. Left to fall it passes, long before
         // the pipe has rung out, through numbers too small for a processor
         // to keep at speed (denormals): a host that does not flush them paid
@@ -339,7 +377,9 @@ struct FluePipe {
         // only while the foot fills, and so never squares a falling foot.
         if (wind == 0.0f && foot < 1.0e-25f) foot = 0.0f;
         const float pressure = Max(foot, 1.0f / (kLongestJet * kLongestJet));
-        const float target = Min(jetNominal / Sqrt(pressure), jetLongest);
+        // The jet's transit keeps its share of the period (at rest, times 1).
+        const float nominal = jetNominal * (1.0f + (loopPass > 0.0f ? stretch : 0.0f));
+        const float target = Min(nominal / Sqrt(pressure), jetLongest);
         jetStep = Clamp((target - jetTransit) * (1.0f / kTick), -0.5f, 0.5f);
         const float level = Abs(lowpassOut) + Abs(allpassOut) + Abs(radiationOut) + foot;
         // A released pipe is let go when it has rung down to kPipeSilent, some
@@ -371,8 +411,14 @@ struct FluePipe {
         float* const loopBuffer = loop;
         float* const jetBuffer = jet;
         float* const upperBuffer = upper;
-        const int upperTrip = upperLength;
-        int at = loopAt, jetWrite = jetAt, upperRead = upperAt;
+        const int upperTrip = upperLength, room = loopRoom, upperSize = upperRoom;
+        int at = loopAt, jetWrite = jetAt, upperWrite = upperAt;
+        int from = at - loopLength, upperRead = upperWrite - upperTrip;
+        if (from < 0) from += room;
+        if (upperRead < 0) upperRead += upperSize;
+        float bend = bendNow;
+        const float bendBy = bendStep, share = upperShare;
+        const bool bent = bend != 0.0f || bendBy != 0.0f;
         float upperLp = upperOut, upperApIn = upperAllpassIn, upperApOut = upperAllpassOut;
         float apIn = allpassIn, apOut = allpassOut, lpOut = lowpassOut, blockIn = dcIn, blockOut = dcOut;
         float jetLp = jetOut, radIn = radiationIn, radOut = radiationOut, pressure = foot, transit = jetTransit;
@@ -383,19 +429,20 @@ struct FluePipe {
             const float gap = target - pressure;
             pressure += gap * (gap > 0.0f ? rise : fall);
 
-            const float x = loopBuffer[at];
+            const float x = bent ? Bent(loopBuffer, room, at, loopLength, bend) : loopBuffer[from];
             const float ap = allpass * (x - apOut) + apIn;
             apIn = x;
             apOut = ap;
             float turned = ap;
             if (upperTrip > 0) {
-                const float stored = upperBuffer[upperRead];
+                const float stored = bent ? Bent(upperBuffer, upperSize, upperWrite, upperTrip, share * bend) : upperBuffer[upperRead];
                 const float back = upperAllpass * (stored - upperApOut) + upperApIn;
                 upperApIn = stored;
                 upperApOut = back;
                 upperLp += upperLowpass * (upFromBelow * ap + upFromAbove * back - upperLp);
-                upperBuffer[upperRead] = -upperGain * upperLp;
-                if (++upperRead == upperTrip) upperRead = 0;
+                upperBuffer[upperWrite] = -upperGain * upperLp;
+                if (++upperWrite == upperSize) upperWrite = 0;
+                if (++upperRead == upperSize) upperRead = 0;
                 turned = downFromBelow * ap + downFromAbove * back;
             }
             lpOut += lowpass * (turned - lpOut);
@@ -425,7 +472,9 @@ struct FluePipe {
             // The pressure a neighbour makes at the mouth enters as a wave.
             if (heard != nullptr) leaving += heard[i];
             loopBuffer[at] = leaving;
-            if (++at == loopLength) at = 0;
+            if (++at == room) at = 0;
+            if (++from == room) from = 0;
+            bend += bendBy;
 
             // The mouth's flow radiates as its rate of change up to the
             // corner where the opening is a wavelength round, evenly above.
@@ -438,7 +487,8 @@ struct FluePipe {
         }
         loopAt = at;
         jetAt = jetWrite;
-        upperAt = upperRead;
+        upperAt = upperWrite;
+        bendNow = bend;
         upperOut = upperLp;
         upperAllpassIn = upperApIn;
         upperAllpassOut = upperApOut;
@@ -462,6 +512,17 @@ struct FluePipe {
     template <bool Upper, bool Hears>
     static void RunFour(FluePipe* const pipe[4], float* const out[4], int frames, const float* const heard[4] = nullptr,
                         float* const told[4] = nullptr) {
+        bool bent = false;
+        for (int l = 0; l < 4; ++l) bent = bent || pipe[l]->bendNow != 0.0f || pipe[l]->bendStep != 0.0f;
+        if (bent) RunFourAs<Upper, Hears, true>(pipe, out, frames, heard, told);
+        else RunFourAs<Upper, Hears, false>(pipe, out, frames, heard, told);
+    }
+
+    // `Bends`: the loops are read between their samples, where the air's
+    // bend has them; else none is bent, and each is read where it was made.
+    template <bool Upper, bool Hears, bool Bends>
+    static void RunFourAs(FluePipe* const pipe[4], float* const out[4], int frames, const float* const heard[4],
+                          float* const told[4]) {
 #define OREGANA_LANES(field) Float4 { pipe[0]->field, pipe[1]->field, pipe[2]->field, pipe[3]->field }
         const Float4 allpassC = OREGANA_LANES(allpass), lowpassC = OREGANA_LANES(lowpass), loopGainC = OREGANA_LANES(loopGain);
         const Float4 dcPoleC = OREGANA_LANES(dcPole), jetLowpassC = OREGANA_LANES(jetLowpass), jetGainC = OREGANA_LANES(jetGain);
@@ -481,16 +542,25 @@ struct FluePipe {
         float* loopBuffer[4];
         float* jetBuffer[4];
         float* upperBuffer[4];
-        int at[4], upperRead[4], loopSize[4], upperTrip[4];
+        int at[4], from[4], upperWrite[4], upperRead[4], loopSize[4], upperTrip[4], room[4], upperSize[4];
         for (int l = 0; l < 4; ++l) {
             loopBuffer[l] = pipe[l]->loop;
             jetBuffer[l] = pipe[l]->jet;
             upperBuffer[l] = pipe[l]->upper;
             at[l] = pipe[l]->loopAt;
-            upperRead[l] = pipe[l]->upperAt;
+            upperWrite[l] = pipe[l]->upperAt;
             loopSize[l] = pipe[l]->loopLength;
             upperTrip[l] = pipe[l]->upperLength;
+            room[l] = pipe[l]->loopRoom;
+            upperSize[l] = pipe[l]->upperRoom;
+            from[l] = at[l] - loopSize[l];
+            if (from[l] < 0) from[l] += room[l];
+            upperRead[l] = upperWrite[l] - upperTrip[l];
+            if (upperRead[l] < 0) upperRead[l] += upperSize[l];
         }
+        Float4 bend = { pipe[0]->bendNow, pipe[1]->bendNow, pipe[2]->bendNow, pipe[3]->bendNow };
+        const Float4 bendBy = { pipe[0]->bendStep, pipe[1]->bendStep, pipe[2]->bendStep, pipe[3]->bendStep };
+        const Float4 share = { pipe[0]->upperShare, pipe[1]->upperShare, pipe[2]->upperShare, pipe[3]->upperShare };
         Int4 jetWrite = { pipe[0]->jetAt, pipe[1]->jetAt, pipe[2]->jetAt, pipe[3]->jetAt };
         const Int4 jetCount = { pipe[0]->jetLength, pipe[1]->jetLength, pipe[2]->jetLength, pipe[3]->jetLength };
         const Float4 jetSize = ToFloat(jetCount);
@@ -502,22 +572,27 @@ struct FluePipe {
             const Int4 filling = gap > zero;
             pressure += gap * Choose(filling, rise, fall);
 
-            const Float4 x = { loopBuffer[0][at[0]], loopBuffer[1][at[1]], loopBuffer[2][at[2]], loopBuffer[3][at[3]] };
+            Float4 x;
+            if (Bends) x = BentFour(loopBuffer, room, at, loopSize, bend);
+            else x = Float4 { loopBuffer[0][from[0]], loopBuffer[1][from[1]], loopBuffer[2][from[2]], loopBuffer[3][from[3]] };
             const Float4 ap = allpassC * (x - apOut) + apIn;
             apIn = x;
             apOut = ap;
             Float4 turned = ap;
             if (Upper) {
-                const Float4 stored = { upperBuffer[0][upperRead[0]], upperBuffer[1][upperRead[1]], upperBuffer[2][upperRead[2]],
-                                        upperBuffer[3][upperRead[3]] };
+                Float4 stored;
+                if (Bends) stored = BentFour(upperBuffer, upperSize, upperWrite, upperTrip, share * bend);
+                else stored = Float4 { upperBuffer[0][upperRead[0]], upperBuffer[1][upperRead[1]], upperBuffer[2][upperRead[2]],
+                                       upperBuffer[3][upperRead[3]] };
                 const Float4 back = upperAllpassC * (stored - upperApOut) + upperApIn;
                 upperApIn = stored;
                 upperApOut = back;
                 upperLp += upperLowpassC * (upFromBelowC * ap + upFromAboveC * back - upperLp);
                 const Float4 up = -upperGainC * upperLp;
                 for (int l = 0; l < 4; ++l) {
-                    upperBuffer[l][upperRead[l]] = up[l];
-                    if (++upperRead[l] == upperTrip[l]) upperRead[l] = 0;
+                    upperBuffer[l][upperWrite[l]] = up[l];
+                    if (++upperWrite[l] == upperSize[l]) upperWrite[l] = 0;
+                    if (++upperRead[l] == upperSize[l]) upperRead[l] = 0;
                 }
                 turned = downFromBelowC * ap + downFromAboveC * back;
             }
@@ -555,8 +630,10 @@ struct FluePipe {
             if (Hears) leaving += Float4 { heard[0][i], heard[1][i], heard[2][i], heard[3][i] };
             for (int l = 0; l < 4; ++l) {
                 loopBuffer[l][at[l]] = leaving[l];
-                if (++at[l] == loopSize[l]) at[l] = 0;
+                if (++at[l] == room[l]) at[l] = 0;
+                if (++from[l] == room[l]) from[l] = 0;
             }
+            if (Bends) bend += bendBy;
 
             const Float4 flow = returned + leaving;
             radOut = radiationC * (radOut + flow - radIn);
@@ -577,7 +654,8 @@ struct FluePipe {
             FluePipe& p = *pipe[l];
             p.loopAt = at[l];
             p.jetAt = jetWrite[l];
-            p.upperAt = upperRead[l];
+            p.upperAt = upperWrite[l];
+            p.bendNow = bend[l];
             p.upperOut = upperLp[l];
             p.upperAllpassIn = upperApIn[l];
             p.upperAllpassOut = upperApOut[l];
@@ -597,6 +675,65 @@ struct FluePipe {
 #endif
 
 private:
+    // A buffer's four samples about a delay of `length + whole` samples
+    // behind the one written next at `write`: one newer, that one, and two
+    // older.
+    static void Taps(const float* buffer, int room, int write, int length, int whole, float tap[4]) {
+        int i = write - length - whole - 2;
+        if (i < 0) i += room;
+        if (i + 3 < room) {
+            tap[3] = buffer[i];
+            tap[2] = buffer[i + 1];
+            tap[1] = buffer[i + 2];
+            tap[0] = buffer[i + 3];
+            return;
+        }
+        tap[3] = buffer[i];
+        if (++i == room) i = 0;
+        tap[2] = buffer[i];
+        if (++i == room) i = 0;
+        tap[1] = buffer[i];
+        if (++i == room) i = 0;
+        tap[0] = buffer[i];
+    }
+
+    // The loop as it was `length + bend` samples ago, through the cubic that
+    // passes through its four nearest samples (Lagrange): with no bend, the
+    // sample itself. At 4 kHz and half way between samples it
+    // loses 0.15 % a pass, where a pipe's walls take some 5 %.
+    static float Bent(const float* buffer, int room, int write, int length, float bend) {
+        int whole = static_cast<int>(bend);
+        if (static_cast<float>(whole) > bend) --whole;
+        const float d = bend - static_cast<float>(whole);
+        float tap[4];
+        Taps(buffer, room, write, length, whole, tap);
+        const float newer = d * (d - 1.0f) * (d - 2.0f) * (-1.0f / 6.0f), here = (d + 1.0f) * (d - 1.0f) * (d - 2.0f) * 0.5f;
+        const float older = (d + 1.0f) * d * (d - 2.0f) * -0.5f, oldest = (d + 1.0f) * d * (d - 1.0f) * (1.0f / 6.0f);
+        return newer * tap[0] + here * tap[1] + older * tap[2] + oldest * tap[3];
+    }
+
+#if defined(OREGANA_FOUR)
+    static Float4 BentFour(float* const buffer[4], const int room[4], const int write[4], const int length[4], Float4 bend) {
+        Int4 whole = Truncated(bend);
+        whole += ToFloat(whole) > bend;
+        const Float4 d = bend - ToFloat(whole);
+        float tap[4][4];
+        for (int l = 0; l < 4; ++l) Taps(buffer[l], room[l], write[l], length[l], whole[l], tap[l]);
+        const Float4 newer = d * (d - 1.0f) * (d - 2.0f) * (-1.0f / 6.0f), here = (d + 1.0f) * (d - 1.0f) * (d - 2.0f) * 0.5f;
+        const Float4 older = (d + 1.0f) * d * (d - 2.0f) * -0.5f, oldest = (d + 1.0f) * d * (d - 1.0f) * (1.0f / 6.0f);
+        return newer * Float4 { tap[0][0], tap[1][0], tap[2][0], tap[3][0] } + here * Float4 { tap[0][1], tap[1][1], tap[2][1], tap[3][1] }
+            + older * Float4 { tap[0][2], tap[1][2], tap[2][2], tap[3][2] } + oldest * Float4 { tap[0][3], tap[1][3], tap[2][3], tap[3][3] };
+    }
+#endif
+
+    // The upper pipe's buffer and its share of the bend: `trip` is its
+    // samples there and back, `pass` the loop's.
+    void SetUpperBend(double trip, double pass) {
+        const int most = static_cast<int>(trip * kBendMost);
+        upperRoom = upperLength + most + 4;
+        upperShare = loopPass > 0.0f && upperLength >= most + 3 ? static_cast<float>(trip / pass) : 0.0f;
+    }
+
     double attackSeconds = 0.003;
 };
 

@@ -67,6 +67,9 @@ public:
         Sync();
     }
 
+    // The pitch wheel, -1 .. 1: the air's warmth (Engine::SetBend).
+    void SetBend(double bend) { engine.SetBend(bend); }
+
     void KeyDown(int note, int velocity, int source = 0) {
         if (note < 0 || note > 127 || source < 0 || source >= kSources) return;
         held[static_cast<std::size_t>(source)][static_cast<std::size_t>(note)] = static_cast<std::uint8_t>(Clamp(velocity, 1, 127));

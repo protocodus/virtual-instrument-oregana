@@ -114,6 +114,11 @@ public:
     void AllSoundOff();                   // and every hanging pallet freed
     void SetSwell(double position);       // as the Swell control and CC11 do
     void SetCrescendo(double position);   // as the Crescendo control and CC1 do: where the roller is turned to
+    // The pitch wheel, -1 .. 1, as MIDI pitch bend does: it warms and cools
+    // the air by up to kBendDegrees on top of Temperature. Flues follow while
+    // they sound, gliding; reeds, whose tongues set their pitch, do not.
+    void SetBend(double bend);
+    static constexpr double kBendDegrees = 10.0;
     void Render(float* left, float* right, int frames);
 
     // The output stage's look-ahead, samples: a front end reports it to its
@@ -192,6 +197,10 @@ private:
     std::array<bool, kCouplerCount> coupled {};
     double swell = 1.0, crescendo = 0.0, roller = 0.0;
     double pressureSet = 1.0, widthSet = 0.0;      // Wind Pressure and Width as they have arrived: both glide
+    // The wheel's air, C: where it is turned to and where it has glided, and
+    // how much longer that makes a flue's every length, against 1.
+    double bendSet = 0.0, bendAir = 0.0;
+    float stretch = 0.0f;
     int stage = 0;
 
     // The wind.

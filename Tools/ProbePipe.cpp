@@ -83,9 +83,9 @@ int main(int argc, char** argv) {
                     r.allpass, r.lowpass, r.loopGain, r.mass);
     } else {
         f.Design(flue, hz, tuning);
-        loop.assign(static_cast<std::size_t>(f.loopLength), 0.0f);
+        loop.assign(static_cast<std::size_t>(f.loopRoom), 0.0f);
         jet.assign(static_cast<std::size_t>(f.jetLength), 0.0f);
-        upper.assign(static_cast<std::size_t>(f.upperLength), 0.0f);
+        upper.assign(static_cast<std::size_t>(f.upperRoom), 0.0f);
         f.loop = loop.data();
         f.jet = jet.data();
         f.upper = upper.data();

@@ -66,6 +66,12 @@ constexpr int kRoomSpare = 4;
 
 constexpr double kStepSeconds = FluePipe::kTick / kPipeRate;
 
+// Warmer air is faster: 2.95 cents a degree sharper, every length that much
+// shorter (Cents).
+float StretchFor(double degrees) {
+    return static_cast<float>(std::pow(2.0, -2.95 * degrees / 1200.0) - 1.0);
+}
+
 // Each division's winding (Wind.h): the Pedal's large reservoir is the
 // slowest and sags most, the Positiv's small one the quickest. Voiced.
 constexpr WindSpec kWinding[kDivisions] = {
@@ -242,9 +248,9 @@ Engine::Engine() {
             } else {
                 FluePipe pipe;
                 pipe.Design(plan.flue, plan.hz * kRoomRatio, tuning);
-                s.loopRoom = pipe.loopLength + kRoomSpare;
+                s.loopRoom = pipe.loopRoom + kRoomSpare;
                 s.jetRoom = pipe.jetLength + kRoomSpare;
-                s.upperRoom = pipe.upperLength > 0 ? pipe.upperLength + kRoomSpare : 0;
+                s.upperRoom = pipe.upperLength > 0 ? pipe.upperRoom + kRoomSpare : 0;
                 s.index = static_cast<std::int16_t>(flueCount++);
             }
             room += static_cast<std::size_t>(s.loopRoom + s.jetRoom + s.upperRoom);
@@ -271,7 +277,7 @@ Engine::Engine() {
         for (std::size_t upper = 0; upper < 2; ++upper)
             for (FluePipe& pipe : spareFlue[upper]) {
                 pipe.Design(upper ? chimneyed : plain, 440.0, 1.0);
-                spareRoom += static_cast<std::size_t>(pipe.loopLength + pipe.jetLength + pipe.upperLength);
+                spareRoom += static_cast<std::size_t>(pipe.loopRoom + pipe.jetLength + pipe.upperRoom);
             }
         for (ReedPipe& pipe : spareReed) {
             pipe.Design(ReedVoicing {}, 440.0, 1.0);
@@ -282,9 +288,9 @@ Engine::Engine() {
         for (auto& kind : spareFlue)
             for (FluePipe& pipe : kind) {
                 pipe.loop = spot;
-                pipe.jet = spot + pipe.loopLength;
+                pipe.jet = spot + pipe.loopRoom;
                 pipe.upper = pipe.jet + pipe.jetLength;
-                spot = pipe.upper + pipe.upperLength;
+                spot = pipe.upper + pipe.upperRoom;
                 pipe.Clear();
             }
         for (ReedPipe& pipe : spareReed) {
@@ -347,6 +353,8 @@ void Engine::Reset() {
     active.clear();
     pending.clear();
     now = 0;
+    bendAir = bendSet;
+    stretch = bendAir == 0.0 ? 0.0f : StretchFor(bendAir);
     for (std::size_t d = 0; d < kDivisions; ++d) {
         played[d].fill(false);
         open[d].fill(false);
@@ -622,6 +630,7 @@ bool Engine::Take(int index, float given) {
     } else {
         FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
         pipe.Clear();
+        pipe.SetBend(stretch);
         pipe.wind = wind;
         s.coupled = false;
     }
@@ -647,7 +656,7 @@ double Engine::PipeHz(int rank, int note) const {
     const int key = note - kFirstNote;
     if (rank < 0 || rank >= kRankCount || key < 0 || key >= kDivisionKeys[RankDivision(rank)]) return 0.0;
     const Slot& s = slots[static_cast<std::size_t>(kRankFirst[static_cast<std::size_t>(rank)] + key)];
-    return s.index < 0 ? 0.0 : PlanPipe(rank, key).hz * std::pow(2.0, Cents(s) / 1200.0);
+    return s.index < 0 ? 0.0 : PlanPipe(rank, key).hz * std::pow(2.0, (Cents(s) + (s.reed ? 0.0 : 2.95 * bendAir)) / 1200.0);
 }
 
 // Makes a pipe as the controls now have it: the builder's plan, the tuner's
@@ -712,6 +721,8 @@ void Engine::Midi(const std::uint8_t* bytes, int size) {
         KeyDown(division, data, value);
     } else if (status == 0x80 || status == 0x90) {
         KeyUp(division, data);
+    } else if (status == 0xE0) {
+        SetBend((((bytes[2] & 0x7F) << 7 | data) - 8192) / 8192.0);
     } else if (status == 0xB0) {
         if (data == 1) SetCrescendo(value / 127.0);
         else if (data == 11) SetSwell(value / 127.0);
@@ -761,7 +772,20 @@ void Engine::AllSoundOff() {
 
 // Every kTick samples: the roller and the sliders, the wind, each speaking
 // pipe's share of it, and the pipes that have rung out.
+// The wheel's air glides its whole way in 30 ms: slow enough that a wheel's
+// steps are not heard, quick enough to follow a hand.
+constexpr double kBendStep = Engine::kBendDegrees * kStepSeconds / 0.030;
+
+void Engine::SetBend(double bend) {
+    bendSet = kBendDegrees * Clamp(bend == bend ? bend : 0.0, -1.0, 1.0);
+}
+
 void Engine::Tick() {
+    if (bendAir != bendSet) {
+        const double gap = bendSet - bendAir;
+        bendAir = Abs(gap) <= kBendStep ? bendSet : bendAir + (gap > 0.0 ? kBendStep : -kBendStep);
+        stretch = bendAir == 0.0 ? 0.0f : StretchFor(bendAir);
+    }
     if (widthSet != controls[kWidth]) {
         const double gap = controls[kWidth] - widthSet;
         widthSet = Abs(gap) <= kWidthStep ? controls[kWidth] : widthSet + (gap > 0.0 ? kWidthStep : -kWidthStep);
@@ -858,7 +882,7 @@ void Engine::Tick() {
             } else {
                 FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
                 pipe.wind = wind;
-                pipe.Tick();
+                pipe.Tick(stretch);
                 demand[s.division] += pipe.air * Sqrt(static_cast<double>(pipe.foot));
                 silent = pipe.Silent();
                 if (silent && s.share > 0.0f) pipe.Clear();

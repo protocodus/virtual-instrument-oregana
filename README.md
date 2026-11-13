@@ -81,6 +81,13 @@ and plenty.
   (owner, 2026-11-13: loud at 0). At rest the swell box is open; turning the
   wheel up closes it, so only the Récit grows quieter. The crescendo roller,
   which the wheel turned in 0.4.0, is the Crescendo control alone.
+- **The pitch wheel warms and cools the air** (owner, 2026-11-13), by up to
+  10 °C on top of Air Temperature. Flues follow while they sound, up to
+  29.5 cents either way, gliding without a step; reeds, whose tongues set
+  their pitch, stay, so the organ goes out of tune with its reeds as a real
+  one does on a warm day. With the wheel at rest nothing is different and
+  nothing costs more; while it is turned, full organ costs about a third
+  more.
 - **A preset's building follows its size** (owner, 2026-11-13: the smaller
   the organ, the less reverberation). Room, Church Size, Decay, Decay Bass
   and Width are set from the number of stops a preset draws: three stops
@@ -339,7 +346,11 @@ pedal, as loaded), or every key below c, which then plays no manual. A key
 moves with either control while it is held. The mod wheel is the swell pedal:
 at rest the box is open, and turning it up closes it, as lowering expression
 does, both on top of the Swell control. The crescendo roller is the Crescendo
-control. At 48 kHz the engine's
+control. The pitch wheel (MIDI pitch bend, `SetBend`) is the air's warmth:
+each flue's loop is read between its samples, a cubic through the four
+nearest, and made up to 1.7 % longer or shorter a sample at a time, its jet's
+transit with it. Fourteen of the 4,177 flues, all above 3.9 kHz, have loops
+too short for that and do not bend. At 48 kHz the engine's
 samples go out untouched; at any other rate from 44.1 to 192 kHz they pass a
 64-tap windowed sinc, flat to 18 kHz at 44.1 kHz and to 20 kHz above 48 kHz
 with its images 80 dB down, by design and not yet measured.

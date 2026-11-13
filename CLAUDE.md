@@ -262,6 +262,10 @@ build `OreganaDSPCxx17` for any `Source/DSP/` change, then run the `unit`,
 - Each pipe's share of an imperfection is a hash of its place in the organ
   (`Unit`, `Spread` in `OreganaEngine.cpp`), never a random number drawn
   while playing: a pipe keeps its character and every render repeats.
+- The pitch wheel is the air's warmth (`Engine::SetBend`, 10 C either way):
+  speaking flues follow it by gliding their loops (`FluePipe::Bent`), reeds
+  do not. At rest every pipe's bend is exactly 0 and it is stepped as it was
+  made; `AirBendsTheFlues` holds pitch, level and the click-free glide.
 - Tuning, Temperature, Voicing, Pitch and Temperament remake a pipe, so a
   speaking pipe keeps what it has and takes the change the next time it
   speaks; silent pipes are remade two a tick. Every other control reaches
