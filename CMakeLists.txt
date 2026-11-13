@@ -127,6 +127,19 @@ if(BUILD_TESTING)
     add_test(NAME Oregana.Instrument COMMAND OreganaInstrumentTests)
     set_tests_properties(Oregana.Instrument PROPERTIES TIMEOUT 600)
 
+    # The Rack's SDK refuses a global whose value is worked out when the
+    # module loads (0.5.0d2's first build failed on two). GCC folds std::exp
+    # and std::sqrt of constants and hides them, so Clang is asked.
+    find_program(OREGANA_CLANGXX NAMES clang++)
+    if(OREGANA_CLANGXX)
+        add_test(NAME Oregana.NoLoadTimeGlobals
+            COMMAND ${OREGANA_CLANGXX} -std=c++17 -fsyntax-only -fno-builtin
+                    -Wglobal-constructors -Werror=global-constructors
+                    -I${CMAKE_CURRENT_SOURCE_DIR}/Source/DSP
+                    ${CMAKE_CURRENT_SOURCE_DIR}/Source/DSP/OreganaEngine.cpp)
+        set_tests_properties(Oregana.NoLoadTimeGlobals PROPERTIES LABELS unit)
+    endif()
+
     # The committed regulation table is what sounding every pipe afresh gives.
     add_test(NAME Oregana.PipeRegulation
              COMMAND GeneratePipeRegulation --check "${CMAKE_CURRENT_SOURCE_DIR}/Source/DSP/PipeRegulation.h")

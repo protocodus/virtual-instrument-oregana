@@ -99,9 +99,13 @@ constexpr double kUnrest = 0.16, kUnrestPole = 0.0042;
 // Tools/benchmark_steadiness.py, which reads 0.7 cents and 0.09 dB here. The
 // reeds waver by another cause (kReedEddy).
 constexpr double kWaverHz = 8.0, kWaverDepth = 0.015;
-const float kWaverPole = static_cast<float>(1.0 - std::exp(-kTwoPi * kWaverHz * kStepSeconds));
-// Noise even in -1 .. 1 (0.577 RMS) through that pole leaves sqrt(pole / (2 - pole)) of it.
-const float kWaverGain = static_cast<float>(kWaverDepth / (0.57735 * std::sqrt(kWaverPole / (2.0 - kWaverPole))));
+// Written out, because a global the compiler must work out when the module
+// loads is one the Rack's SDK refuses (Oregana.NoLoadTimeGlobals):
+// 1 - exp(-2 pi kWaverHz kStepSeconds), and kWaverDepth / (0.57735 *
+// sqrt(pole / (2 - pole))): noise even in -1 .. 1 (0.577 RMS) through that
+// pole leaves sqrt(pole / (2 - pole)) of it.
+constexpr float kWaverPole = 0.0329550691f;
+constexpr float kWaverGain = 0.200723454f;
 // A reed's own unrest. A recorded Trumpet 8' wanders as its organ's flues do:
 // 0.8 to 0.9 cents and 0.1 to 0.2 dB RMS in its two lower octaves, most of it
 // between 2 and 12 Hz (Docs/research/known-gaps-2026-11-13.md). The cause

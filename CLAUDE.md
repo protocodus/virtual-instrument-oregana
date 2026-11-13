@@ -27,7 +27,9 @@ parameter matrix and the generated README parts).
   `OreganaDSPCxx17` target proves it with the Rack's `-fno-builtin`. No
   allocation, file I/O, locks or exceptions after construction, and no libm
   call on the per-sample path that `-fno-builtin` turns into a real call: use
-  `DspMath.h`.
+  `DspMath.h`. A namespace-scope constant is `constexpr`: the Rack's SDK
+  refuses a global whose value needs `std::exp` or `std::sqrt` at load, and
+  GCC hides it (`Oregana.NoLoadTimeGlobals` asks Clang).
 - Front ends share `Source/DSP/OreganaControls.h` (the controls, their ids,
   ranges and normalised mapping) and `Source/DSP/OreganaPresets.h` (the
   factory registrations). Never rename or reuse a control or stop id, and
