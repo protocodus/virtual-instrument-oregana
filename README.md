@@ -70,6 +70,10 @@ and plenty.
   which also found a weakness of the principals that voicing cannot mend
   (Known gaps). Every pipe was regulated again and fourteen presets' Volume
   trims moved by 1 dB.
+- **The mod wheel is the swell pedal** for a front end with one keyboard
+  (owner, 2026-11-13: loud at 0). At rest the swell box is open; turning the
+  wheel up closes it, so only the Récit grows quieter. The crescendo roller,
+  which the wheel turned in 0.4.0, is the Crescendo control alone.
 - **A preset's building follows its size** (owner, 2026-11-13: the smaller
   the organ, the less reverberation). Room, Church Size, Decay, Decay Bass
   and Width are set from the number of stops a preset draws: three stops
@@ -119,8 +123,8 @@ and plenty.
 - **The keyboards are a piano's 88 keys** (A0 to C8) and the Pedal runs from
   the same A to g1; every key sounds at its own pitch. The organ grew from
   3,618 to 5,130 pipes. Keys and `PipeHz` now take MIDI note numbers.
-- **The crescendo roller is smooth.** It turns to where the wheel is in up to
-  0.8 s, each stop it adds slides on, and a wheel resting on a stage's edge
+- **The crescendo roller is smooth.** It turns to where it is set in up to
+  0.8 s, each stop it adds slides on, and a roller resting on a stage's edge
   moves nothing.
 - **Stops slide and can stay half drawn.** A stop control is continuous: a
   knob takes 0.1 to 0.2 s of travel, each its own, and a slider left part way
@@ -246,11 +250,11 @@ speaking or ringing cost anything.
 **The machine.** What a sampled organ cannot do, because here the pipes are
 driven by the wind they are given:
 
-- *The crescendo roller* (CC1, the mod wheel) adds 45 stops and couplers in
-  order to whatever is drawn. The roller turns to where the wheel is at a
-  roller's speed, the whole way in 0.8 s; each stop it reaches slides on
-  like any other, and a stage that has come on stays until the wheel is 0.4
-  of a stage back below it. Thrown from one flute to full organ, the level
+- *The crescendo roller* (the Crescendo control; CC1 on the engine's own
+  MIDI map) adds 45 stops and couplers in order to whatever is drawn. The
+  roller turns to where the control is at a roller's speed, the whole way in
+  0.8 s; each stop it reaches slides on like any other, and a stage that has
+  come on stays until the control is 0.4 of a stage back below it. Thrown from one flute to full organ, the level
   rises by 18 dB with no step larger than 2.2 dB in 25 ms.
 - *Stops slide.* A stop is a slider under its rank with a hole for each
   pipe. A knob takes 0.1 to 0.2 s to travel, each knob its own time, and the
@@ -325,9 +329,10 @@ channels 1 to 4. A front end with one stream of notes plays through
 `OreganaInstrument.h`: every key plays the manual Keyboard names, and Pedal
 Keys gives the Pedal nothing, the lowest key held up to g1 (an automatic
 pedal, as loaded), or every key below c, which then plays no manual. A key
-moves with either control while it is held. The mod wheel turns the crescendo
-roller, as far as the further of it and the Crescendo control, and expression
-closes the swell box on top of the Swell control. At 48 kHz the engine's
+moves with either control while it is held. The mod wheel is the swell pedal:
+at rest the box is open, and turning it up closes it, as lowering expression
+does, both on top of the Swell control. The crescendo roller is the Crescendo
+control. At 48 kHz the engine's
 samples go out untouched; at any other rate from 44.1 to 192 kHz they pass a
 64-tap windowed sinc, flat to 18 kHz at 44.1 kHz and to 20 kHz above 48 kHz
 with its images 80 dB down, by design and not yet measured.

@@ -11,10 +11,14 @@
 //               the Pedal as Pedal Keys says (OreganaControls.h). A key may
 //               be held by more than one source at once (a keyboard and a
 //               CV gate): it rises when the last one lets go.
-//   Mod wheel   the crescendo roller: the further of the wheel and the
-//               Crescendo control.
-//   Expression  the swell pedal, on top of the Swell control: either can
-//               shut the box, and both must be open for it to be open.
+//   Mod wheel   the swell pedal, heel down: at rest the box is open, and
+//   Expression  turning it up closes it (owner, 2026-11-13: loud at 0).
+//               Expression is the same pedal toe down. Both act on top of
+//               the Swell control: any of the three can shut the box, and
+//               all must be open for it to be open. The crescendo roller
+//               is the Crescendo control alone; the engine's own MIDI map
+//               (Engine::Midi, which the demo phrases play) keeps CC1 on
+//               the roller.
 //   Rate        at 48 kHz the engine's samples go out as they are. At any
 //               other rate they are resampled through a windowed sinc of
 //               kTaps taps, flat to 18 kHz at 44.1 kHz and to 20 kHz above
@@ -58,8 +62,7 @@ public:
 
     void SetControls(const Controls& controls, double wheel = 0.0, double expression = 1.0) {
         Controls played = controls;
-        if (wheel > played[kCrescendo]) played[kCrescendo] = wheel;
-        if (expression < 1.0) played[kSwell] *= Max(expression, 0.0);
+        played[kSwell] *= Min(Max(1.0 - wheel, 0.0), 1.0) * Min(Max(expression, 0.0), 1.0);
         engine.SetControls(played);
         Sync();
     }

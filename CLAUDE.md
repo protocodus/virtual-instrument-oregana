@@ -35,7 +35,7 @@ parameter matrix and the generated README parts).
   them.
 - A front end with one keyboard or a rate other than 48 kHz plays through
   `Source/DSP/OreganaInstrument.h` (the keyboard's manual and Pedal keys, the
-  mod wheel as the roller, expression as the swell pedal, the resampler).
+  mod wheel and expression as the swell pedal, the resampler).
   Playing behaviour belongs there or in the engine, never in one front end.
 - When a plug-in is added, its `BUNDLE_ID` and CLAP id are
   `cz.protocodus.oregana`, and they and its plug-in codes never change once a

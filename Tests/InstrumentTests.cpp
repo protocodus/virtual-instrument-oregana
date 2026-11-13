@@ -2,8 +2,8 @@
 // rate the same pitch and level, the stated latency and the same samples
 // however the host cuts its blocks; the keyboard on the manual it is given;
 // the Pedal from the lowest key or below the split; a key held by two
-// sources; the mod wheel as the crescendo roller and expression as the swell
-// pedal; and every key of the piano on every factory registration's keyboard.
+// sources; the mod wheel and expression as the swell pedal and the
+// Crescendo control as the roller; and every key of the piano on every factory registration's keyboard.
 #include "DSP/OreganaInstrument.h"
 #include "DSP/OreganaPresets.h"
 #include "../Tools/PipeMeasure.h"
@@ -218,10 +218,14 @@ void WheelAndExpression() {
     rig.wheel = 1.0;
     rig.Set();
     rig.Play(2.0);
-    Expect(rig.organ->Organ().Diag().stage == kCrescendoStages, "WheelAndExpression", "the roller's stage with the wheel up",
+    Expect(rig.organ->Organ().Diag().stage == 0, "WheelAndExpression", "the roller's stage with the wheel up",
            rig.organ->Organ().Diag().stage);
     rig.wheel = 0.0;
-    rig.Set();
+    rig.Set(kCrescendo, 1.0);
+    rig.Play(2.0);
+    Expect(rig.organ->Organ().Diag().stage == kCrescendoStages, "WheelAndExpression", "and with the Crescendo control up",
+           rig.organ->Organ().Diag().stage);
+    rig.Set(kCrescendo, 0.0);
     rig.Play(2.0);
     Expect(rig.organ->Organ().Diag().stage == 0, "WheelAndExpression", "and with it down again", rig.organ->Organ().Diag().stage);
 
@@ -234,6 +238,17 @@ void WheelAndExpression() {
     rig.Play(1.0);
     const double shut = rig.Play(0.5);
     Expect(Db(shut / open) < -6.0, "WheelAndExpression", "the Recit with expression down against up, dB", Db(shut / open));
+    rig.expression = 1.0;
+    rig.Set();
+    rig.Play(1.0);
+    const double again = rig.Play(0.5);
+    Expect(std::abs(Db(again / open)) < 0.5, "WheelAndExpression", "the wheel at rest leaves the box open, dB", Db(again / open));
+    rig.wheel = 1.0;
+    rig.Set();
+    rig.Play(1.0);
+    const double wheeled = rig.Play(0.5);
+    Expect(std::abs(Db(wheeled / shut)) < 0.5, "WheelAndExpression", "the wheel up shuts it as expression down does, dB",
+           Db(wheeled / shut));
 }
 
 void EveryKeySounds() {
