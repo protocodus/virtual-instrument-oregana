@@ -96,12 +96,25 @@ constexpr double kUnrest = 0.16, kUnrestPole = 0.0042;
 // foot's pressure here (0.55 cents and 0.08 dB for 1 %), so it is taken as
 // that: each pipe's wind through noise under kWaverHz, kWaverDepth RMS with
 // the Wind as modelled. Set by that recording and the measurement in
-// Tools/benchmark_steadiness.py, which reads 0.7 cents and 0.09 dB here; the
-// reeds, which the recording does not hold, have none.
+// Tools/benchmark_steadiness.py, which reads 0.7 cents and 0.09 dB here. The
+// reeds waver by another cause (kReedEddy).
 constexpr double kWaverHz = 8.0, kWaverDepth = 0.015;
 const float kWaverPole = static_cast<float>(1.0 - std::exp(-kTwoPi * kWaverHz * kStepSeconds));
 // Noise even in -1 .. 1 (0.577 RMS) through that pole leaves sqrt(pole / (2 - pole)) of it.
 const float kWaverGain = static_cast<float>(kWaverDepth / (0.57735 * std::sqrt(kWaverPole / (2.0 - kWaverPole))));
+// A reed's own unrest. A recorded Trumpet 8' wanders as its organ's flues do:
+// 0.8 to 0.9 cents and 0.1 to 0.2 dB RMS in its two lower octaves, most of it
+// between 2 and 12 Hz (Docs/research/known-gaps-2026-11-13.md). The cause
+// taken is Respira's (its ReedModel.h and kTurbulence): the jet through the
+// gap is turbulent, and its eddies push the tongue as they change its flow,
+// so the tongue's phase walks. The same noise that moves the flow moves the
+// boot's push on the tongue by kReedEddy of itself with the Wind as
+// modelled: even in -1 .. 1, so 14 % RMS, where a jet's turbulence is some
+// 10 to 20 % of its speed. Set by that recording, a little under it: the
+// Trompete 8' reads 0.4 to 0.8 cents. A tongue its resonator holds less walks
+// further on the same push: the Vox humana 1.0 to 1.9 and the Krummhorn 1.5 to 4.8,
+// which no recording has checked.
+constexpr double kReedEddy = 0.25;
 // A channel's pipes share one pallet: with every stop drawn each gets 3 %
 // less pressure than a stop alone, falling with the square of the wind taken.
 constexpr float kRobbing = 0.03f;
@@ -365,6 +378,7 @@ void Engine::Reset() {
         if (s.reed) {
             reeds[static_cast<std::size_t>(s.index)].Clear();
             reeds[static_cast<std::size_t>(s.index)].random = seed;
+            reeds[static_cast<std::size_t>(s.index)].eddy = 0.0f;
         } else {
             flues[static_cast<std::size_t>(s.index)].Clear();
             flues[static_cast<std::size_t>(s.index)].random = seed;
@@ -836,6 +850,7 @@ void Engine::Tick() {
 
     const double live = 2.0 * controls[kWind], depth = 0.01 * controls[kTremulantDepth];
     const float waverDepth = kWaverGain * static_cast<float>(live);
+    const float reedEddy = static_cast<float>(kReedEddy * live);
 
     // The supply (kSpinUp and below): what it holds for every division.
     const int supply = static_cast<int>(controls[kWindSupply]);
@@ -897,6 +912,7 @@ void Engine::Tick() {
             if (s.reed) {
                 ReedPipe& pipe = reeds[static_cast<std::size_t>(s.index)];
                 pipe.wind = wind;
+                pipe.eddy = reedEddy;
                 pipe.Tick();
                 demand[s.division] += pipe.air * Sqrt(static_cast<double>(pipe.foot));
                 silent = pipe.Silent();

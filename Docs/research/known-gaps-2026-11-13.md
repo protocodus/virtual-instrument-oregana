@@ -34,10 +34,44 @@ passes through its own noise under 8 Hz, 1.5 % RMS at Wind 0.5
 (`kWaverDepth` in `OreganaEngine.cpp`), seeded by the pipe's place, so a
 render repeats. The level's wander is still a third under the recorded one;
 part of the recorded figure is the room's. `Oregana.Engine`'s `FluesWaver`
-holds it. The reeds have none: the recording has no reed alone.
+holds it.
 
-A listening set (A without, B with) is in the project files,
-`oregana/listening-0.5.0/unrest/`, not committed.
+### The reeds (added the same day, at the owner's word)
+
+The Bureå set has one recording for each pipe, so its Trumpet 8' can be
+measured the same way (the fundamental of each note from 36 to 59, medians by
+octave; above that the trumpet's fundamental is too weak in the church for
+the measurement):
+
+| | Pitch, cents RMS | Level, dB RMS |
+| --- | --- | --- |
+| Recorded Principal 8', notes 36 to 71 | 0.38 to 0.69 | 0.08 to 0.11 |
+| Recorded Gedakt 8', notes 36 to 71 | 0.97 to 1.22 | 0.21 to 0.33 |
+| Recorded Trumpet 8', notes 36 to 59 | 0.77 to 0.88 | 0.10 to 0.18 |
+| Oregana Trompete 8' before | 0.05 to 0.09 | 0.01 to 0.02 |
+| Oregana Trompete 8' now | 0.41 to 0.78 | 0.02 to 0.04 |
+| Oregana Vox humana now | 1.0 to 1.9 | 0.03 |
+| Oregana Krummhorn now | 1.5 to 4.8 | 0.03 to 0.05 |
+
+A second organ's flues agree with the first, and its reed walks as much as
+its flues, mostly between 2 and 12 Hz. Respira's reeds gave the mechanism
+(its `ReedModel.h` and `kTurbulence`): the jet through the gap is turbulent,
+and its eddies push the tongue as they change the flow, so the tongue's phase
+walks. Here the noise that already moved a reed's flow now also moves the
+boot's push on its tongue, by a quarter of itself at Wind 0.5 (`kReedEddy`,
+14 % RMS, where a jet's turbulence is 10 to 20 % of its speed). A push taken
+as a share of the drop across the gap, which is nearer the physics, made the
+tongue's own feedback random and threw the Krummhorn with every control at
+its most, so it is the boot's pressure alone. The Krummhorn and the Vox
+humana walk further on the same push because their resonators hold their
+tongues less; no recording has checked them. The level's wander stays under
+the recorded one's. `ReedsWaver` holds it, and on the bench (`ProbePipe`,
+`PipeRegulation.h`) the push is 0 and a reed sounds sample for sample as
+before.
+
+Listening sets (A without, B with) are in the project files,
+`oregana/listening-0.5.0/unrest/` for the flues and `unrest-reeds/` for the
+reeds, not committed.
 
 ## The breath does not lead the tone (cause found, not changed)
 

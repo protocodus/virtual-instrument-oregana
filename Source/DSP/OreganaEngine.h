@@ -49,7 +49,7 @@
 //                and wind noise
 //   Wind         how far the reservoirs' sag, dip and bounce reach the pipes,
 //                with a slow unrest of the pressure itself, and how far
-//                each flue's own jet wavers
+//                each flue's own jet wavers and each reed's tongue walks
 //   Wind Noise   the blower's hum, the chests' hiss and the bellows' thud
 //   Action       the keys' and stop knobs' knocks (Mechanics.h), and the
 //                couplers' lost motion: none at 0, up to 36 ms at 1

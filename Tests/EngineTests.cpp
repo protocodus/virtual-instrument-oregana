@@ -874,6 +874,35 @@ void FluesWaver() {
     Expect(wander[0] < 0.5 * wander[1], "FluesWaver", "and with Wind at 0 it is the turbulence's alone", wander[0]);
 }
 
+// How far a held note's pitch wanders from one half second to the next, cents RMS.
+double Drift(const Take& take, double hz, double from, double to) {
+    std::vector<float> mid(take.left.size());
+    for (std::size_t i = 0; i < mid.size(); ++i) mid[i] = take.left[i] + take.right[i];
+    double sum = 0.0, squares = 0.0;
+    int count = 0;
+    for (double t = from; t + 0.5 <= to; t += 0.5, ++count) {
+        const double cents = CentsBetween(measure::Hz(mid, take.Frames(t), take.Frames(t + 0.5), hz, kRate), hz);
+        sum += cents;
+        squares += cents * cents;
+    }
+    return std::sqrt(Max(squares / count - (sum / count) * (sum / count), 0.0));
+}
+
+void ReedsWaver() {
+    double drift[2];
+    int at = 0;
+    for (double wind : { 0.0, 0.5 }) {
+        Bench bench;
+        bench.Set(kWind, wind);
+        bench.Draw({ kHwTrompete8 });
+        bench.organ->KeyDown(kHauptwerk, 60, 80);
+        const Take take = bench.Play(9.0);
+        drift[at++] = Drift(take, take.Hz(261.6), 1.0, 9.0);
+    }
+    Expect(drift[1] > 0.08 && drift[1] < 1.0, "ReedsWaver", "a held reed's pitch walks as a recorded one's, cents RMS between half seconds", drift[1]);
+    Expect(drift[0] < 0.25 * drift[1], "ReedsWaver", "and with Wind at 0 it stands", drift[0]);
+}
+
 void CrescendoIsSmooth() {
     // The roller thrown from nothing to full organ: the organ swells over
     // most of a second, never by a step.
@@ -1468,6 +1497,7 @@ int main() {
     WindSupplies();
     PressureBendsPitch();
     FluesWaver();
+    ReedsWaver();
     CrescendoIsSmooth();
     ChurchIsThePlayers();
     BlockPartitionInvariance();

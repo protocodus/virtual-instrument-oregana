@@ -81,8 +81,10 @@ and plenty.
 - **A held pipe is no longer perfectly steady.** Each flue's own wind wavers
   a little, as its jet does: a held note wanders some 0.7 cents and 0.09 dB,
   where a recorded principal or flute wanders 0.8 cents and 0.14 dB, and no
-  two pipes wander together. It follows the Wind control and is gone at 0.
-  The reeds have none
+  two pipes wander together. A reed's tongue is pushed about by the eddies
+  in its gap, as Respira's reeds are, so its pitch walks: 0.4 to 0.8 cents
+  on the Trompete 8', where a recorded Trumpet 8' walks 0.8 to 0.9. Both
+  follow the Wind control and are gone at 0
   ([Docs/research/known-gaps-2026-11-13.md](Docs/research/known-gaps-2026-11-13.md),
   which also holds the research on every gap below).
 - **Brighter trumpets.** The Trompetes, the Posaunes, the Trompette and the
@@ -272,7 +274,9 @@ and nothing else. The pipes of one key share a pallet, so a key with every
 stop drawn gives each pipe a little less. The pressure of a division has a
 slow unrest of 0.3 %, and each flue's own wind wavers by 1.5 % under 8 Hz,
 its own and no other pipe's: that figure is set by a recorded organ's held
-notes (`Tools/benchmark_steadiness.py`). The Positiv and the Recit have a
+notes (`Tools/benchmark_steadiness.py`). The eddies in a reed's gap push its
+tongue by a quarter of the boot's push, which walks its pitch as a recorded
+trumpet's walks. The Positiv and the Recit have a
 tremulant each. These constants are voiced to written accounts of such
 winding, not measured on an organ.
 
@@ -393,7 +397,7 @@ and each pipe keeps its own share of it whatever is played:
 | Tuning | every pipe off its pitch, flues by up to 10 cents and reeds by up to 20 | a quarter: a season after the tuner's visit |
 | Temperature | flue pipes follow the air, 2.95 cents a degree, and reeds do not, so the reeds go out against the flues | 0: the 20 C the organ was tuned at |
 | Voicing | every pipe off its rank's level (up to 3 dB), speech, chiff and wind noise | 0.3 |
-| Wind | how far the reservoirs' sag, dip and bounce reach the pipes, with a slow unrest of the pressure, and how far each flue's own wind wavers | 0.5: as modelled |
+| Wind | how far the reservoirs' sag, dip and bounce reach the pipes, with a slow unrest of the pressure, and how far each flue's own wind wavers and each reed's tongue is pushed about | 0.5: as modelled |
 | Wind Noise | the blower's hum (lower while it starts or runs down), the chests' hiss and the bellows' thud | 0.2 |
 | Action | how worn the action is: the knocks of keys, coupled pallets, pedals, stop knobs, the swell's shutters and the tremulant's valve, a slider's rub, and the couplers' lost motion | 0.25 |
 | Dead Pipes | pipes that do not speak, up to one in sixteen | none |
@@ -448,9 +452,11 @@ it still brings on the whole stop list, a chapel organ's too.
   time it speaks.
 - **The Vox humana follows the wind more than the other reeds**: 2.3 cents
   for each 1 % of pressure, so it wavers under a heavy registration.
-- **A held reed is perfectly steady** but for its division's wind: only the
-  flues waver by themselves, because the one recording with held single
-  stops holds no reed alone.
+- **Only the trumpet's unrest is checked.** A reed's pitch walks by a push
+  set on one recorded Trumpet 8'. The same push walks the Krummhorn 1.5 to
+  4.8 cents and the Vox humana 1.0 to 1.9, because their resonators hold
+  their tongues less; no recording has checked those, and a reed's level
+  wanders 0.03 dB where the recorded one's wanders 0.1 to 0.2.
 - **A reed's resonator does not follow the temperature.** In a real reed the
   warming resonator pulls the pitch up a little; here a reed does not move
   with Temperature at all. Letting the resonator's air warm was tried

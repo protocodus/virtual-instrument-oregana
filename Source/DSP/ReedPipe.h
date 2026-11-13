@@ -62,6 +62,13 @@ struct ReedPipe {
     float tongue = 1.0f, speed = 0.0f;       // opening against rest, and its change per sample
     float massFlow = 0.0f, shallot = 0.0f;   // flow into the cone's mass, and the shallot's pressure
     float foot = 0.0f, wind = 0.0f;
+    // The gap's eddies push the tongue as they change its flow: their share
+    // of the boot's push on it (the boot's alone: a share of the drop across
+    // the gap made the tongue's own feedback random, and at 0.6 and at 1.2
+    // of it the Krummhorn ran away with every control at its most), which
+    // the organ sets (kReedEddy in
+    // OreganaEngine.cpp). On the bench it is 0 and the tongue is steady.
+    float eddy = 0.0f;
     float radiates = 1.0f;
     std::uint32_t random = 1u;
     int quiet = 0;
@@ -183,7 +190,8 @@ struct ReedPipe {
             const float held = inMass + mass * p;
             const float p0 = impedance * (2.0f * returning - held);
             const float open = y > 0.0f ? y * y / (y + curve) : 0.0f;
-            const float k = flow * open * (1.0f + noise * NextNoise(seed));
+            const float white = NextNoise(seed);
+            const float k = flow * open * (1.0f + noise * white);
             const float across = pressure - p0;
             const float kz = k * k * impedance;
             const float size = 0.5f * (Sqrt(kz * kz + 4.0f * k * k * Abs(across)) - kz);
@@ -197,7 +205,7 @@ struct ReedPipe {
             loopBuffer[at] = p - returning;
             if (++at == loopLength) at = 0;
 
-            float pull = stiffness * (1.0f - y) - damping * v - stiffness * closing * (pressure - p);
+            float pull = stiffness * (1.0f - y) - damping * v - stiffness * closing * (pressure - p + eddy * white * pressure);
             // The face pushes back by how far the tongue has sunk into it,
             // harder while it sinks and less as it leaves, and takes up most
             // of a landing (Hunt and Crossley, 1975): a loss that grows from
@@ -230,7 +238,7 @@ struct ReedPipe {
         const Float4 massC = OREGANA_LANES(mass), impedanceC = OREGANA_LANES(impedance), stiffnessC = OREGANA_LANES(stiffness);
         const Float4 dampingC = OREGANA_LANES(damping), closingC = OREGANA_LANES(closing), landingC = OREGANA_LANES(landing);
         const Float4 landingLossC = OREGANA_LANES(landingLoss), flowC = OREGANA_LANES(flow), curveC = OREGANA_LANES(curve);
-        const Float4 noiseC = OREGANA_LANES(noise), drainC = OREGANA_LANES(drain);
+        const Float4 noiseC = OREGANA_LANES(noise), drainC = OREGANA_LANES(drain), eddyC = OREGANA_LANES(eddy);
         const Float4 target = OREGANA_LANES(wind), rise = OREGANA_LANES(attack), fall = OREGANA_LANES(release);
         Float4 apIn = OREGANA_LANES(allpassIn), apOut = OREGANA_LANES(allpassOut), lpOut = OREGANA_LANES(lowpassOut);
         Float4 y = OREGANA_LANES(tongue), v = OREGANA_LANES(speed), inMass = OREGANA_LANES(massFlow), p = OREGANA_LANES(shallot);
@@ -273,7 +281,7 @@ struct ReedPipe {
                 if (++at[l] == loopSize[l]) at[l] = 0;
             }
 
-            Float4 pull = stiffnessC * (1.0f - y) - dampingC * v - stiffnessC * closingC * (pressure - p);
+            Float4 pull = stiffnessC * (1.0f - y) - dampingC * v - stiffnessC * closingC * (pressure - p + eddyC * white * pressure);
             const Float4 face = landingC - landingLossC * v;
             pull = Choose(y < zero, pull - y * Unless(zero > face, face), pull);
             v += pull;
