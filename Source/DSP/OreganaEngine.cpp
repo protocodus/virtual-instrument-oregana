@@ -98,7 +98,8 @@ constexpr double kUnrest = 0.16, kUnrestPole = 0.0042;
 // the Wind as modelled. Set by that recording and the measurement in
 // Tools/benchmark_steadiness.py, which reads 0.7 cents and 0.09 dB here. The
 // reeds waver by another cause (kReedEddy).
-constexpr double kWaverHz = 8.0, kWaverDepth = 0.015;
+[[maybe_unused]] constexpr double kWaverHz = 8.0;   // only in kWaverPole's literal below
+constexpr double kWaverDepth = 0.015;
 // Written out, because a global the compiler must work out when the module
 // loads is one the Rack's SDK refuses (Oregana.NoLoadTimeGlobals):
 // 1 - exp(-2 pi kWaverHz kStepSeconds), and kWaverDepth / (0.57735 *
@@ -106,6 +107,9 @@ constexpr double kWaverHz = 8.0, kWaverDepth = 0.015;
 // pole leaves sqrt(pole / (2 - pole)) of it.
 constexpr float kWaverPole = 0.0329550691f;
 constexpr float kWaverGain = 0.200723454f;
+static_assert(kWaverGain * kWaverGain * 0.57735 * 0.57735 * kWaverPole / (2.0 - kWaverPole) > 0.999 * kWaverDepth * kWaverDepth
+                  && kWaverGain * kWaverGain * 0.57735 * 0.57735 * kWaverPole / (2.0 - kWaverPole) < 1.001 * kWaverDepth * kWaverDepth,
+              "kWaverGain is kWaverDepth through kWaverPole");
 // A reed's own unrest. A recorded Trumpet 8' wanders as its organ's flues do:
 // 0.8 to 0.9 cents and 0.1 to 0.2 dB RMS in its two lower octaves, most of it
 // between 2 and 12 Hz (Docs/research/known-gaps-2026-11-13.md). The cause
