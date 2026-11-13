@@ -58,8 +58,9 @@ and plenty.
   valve thumps once a beat, a slider rubs while it travels, and the blower
   is heard starting and running down.
 - **About half the CPU**: the Tutti demo's worst block went from 37 % of a
-  core to 21 %, the Plenum's from 14 % to 9 %, with the same samples before
-  the changes above.
+  core to 20 %, the Plenum's from 14 % to 8 %. The pipes and the church's
+  delay lines are stepped four to an instruction and give the samples they
+  gave one at a time.
 - **Brighter trumpets.** The Trompetes, the Posaunes, the Trompette and the
   Clairon pass three times the wind under their open tongues, so the flow is
   cut only in the short time a tongue is nearly shut, as in a real reed. The
@@ -359,9 +360,9 @@ it still brings on the whole stop list, a chapel organ's too.
   for a main build. The Rack Extension over it is development source in the
   Rack repository, not yet built with the SDK.
 - **CPU is above the portfolio's 10 % target for large registrations.** One
-  256-frame block takes at most 4 % of a core on a single stop, 9 % on the
-  Plenum demo (198 pipes) and 21 % on the Tutti demo (468 pipes); sixteen
-  keys of full organ take 37 %. Development container, GCC 13, Release, one
+  256-frame block takes at most 3 % of a core on a single stop, 8 % on the
+  Plenum demo (198 pipes) and 20 % on the Tutti demo (468 pipes); sixteen
+  keys of full organ take 36 %. Development container, GCC 13, Release, one
   thread. The plan is in
   [Docs/plans/cpu-optimisation-2026-11-12.md](Docs/plans/cpu-optimisation-2026-11-12.md).
 - **The engine is 48 kHz only.** At another rate `OreganaInstrument.h`

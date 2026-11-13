@@ -120,7 +120,10 @@ Measured on the raw files, so only as good as the set's own levelling:
    speaking (at 1.6 times the present offset no pipe from C to c4 speaks;
    at 1.4 times a pipe takes half as long again to speak). So this too is the
    model's (a jet that swings symmetrically about a small offset), not a
-   voicing choice, and nothing was changed.
+   voicing choice, and nothing was changed. A gentler jet does the same as a
+   larger offset: at c0, a swing of 4 jet half-widths for 5.5 gives 3 dB more
+   of the second harmonic and takes a third longer to speak (127 ms to half
+   for 96), and a swing of 2.5 gives 5 dB and takes three times as long.
 3. **The Gedackt is close.** Odd harmonics lead in both, the third within
    6 dB in every octave. The recorded pipes have more of the even harmonics
    (the second at -30 to -40 dB against -50 to -65 dB), as real stopped
