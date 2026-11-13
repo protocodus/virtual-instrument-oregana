@@ -2,8 +2,8 @@
 // rate the same pitch and level, the stated latency and the same samples
 // however the host cuts its blocks; the keyboard on the manual it is given;
 // the Pedal from the lowest key or below the split; a key held by two
-// sources; the mod wheel and expression as the swell pedal and the
-// Crescendo control as the roller; and every key of the piano on every factory registration's keyboard.
+// sources; the mod wheel and the Crescendo control as the roller and
+// expression as the swell pedal; and every key of the piano on every factory registration's keyboard.
 #include "DSP/OreganaInstrument.h"
 #include "DSP/OreganaPresets.h"
 #include "../Tools/PipeMeasure.h"
@@ -218,16 +218,25 @@ void WheelAndExpression() {
     rig.wheel = 1.0;
     rig.Set();
     rig.Play(2.0);
-    Expect(rig.organ->Organ().Diag().stage == 0, "WheelAndExpression", "the roller's stage with the wheel up",
-           rig.organ->Organ().Diag().stage);
+    Expect(rig.organ->Organ().Diag().stage == kCrescendoStages && rig.Play(0.5) > kSilent, "WheelAndExpression",
+           "the wheel up is the roller thrown over: its stage", rig.organ->Organ().Diag().stage);
     rig.wheel = 0.0;
+    rig.Set();
+    rig.Play(2.0);
+    Expect(rig.organ->Organ().Diag().stage == 0, "WheelAndExpression", "and the wheel at rest takes it all off again",
+           rig.organ->Organ().Diag().stage);
     rig.Set(kCrescendo, 1.0);
     rig.Play(2.0);
-    Expect(rig.organ->Organ().Diag().stage == kCrescendoStages, "WheelAndExpression", "and with the Crescendo control up",
+    Expect(rig.organ->Organ().Diag().stage == kCrescendoStages, "WheelAndExpression", "the Crescendo control up does the same",
            rig.organ->Organ().Diag().stage);
+    rig.wheel = 0.5;
     rig.Set(kCrescendo, 0.0);
     rig.Play(2.0);
-    Expect(rig.organ->Organ().Diag().stage == 0, "WheelAndExpression", "and with it down again", rig.organ->Organ().Diag().stage);
+    const int half = rig.organ->Organ().Diag().stage;
+    Expect(half > 0 && half < kCrescendoStages, "WheelAndExpression", "and the further of the two is the roller: the wheel half up", half);
+    rig.wheel = 0.0;
+    rig.Set();
+    rig.Play(2.0);
 
     rig.Set(kRecPrincipal8, 1.0);
     rig.Set(kKeyboard, kRecit);
@@ -242,13 +251,7 @@ void WheelAndExpression() {
     rig.Set();
     rig.Play(1.0);
     const double again = rig.Play(0.5);
-    Expect(std::abs(Db(again / open)) < 0.5, "WheelAndExpression", "the wheel at rest leaves the box open, dB", Db(again / open));
-    rig.wheel = 1.0;
-    rig.Set();
-    rig.Play(1.0);
-    const double wheeled = rig.Play(0.5);
-    Expect(std::abs(Db(wheeled / shut)) < 0.5, "WheelAndExpression", "the wheel up shuts it as expression down does, dB",
-           Db(wheeled / shut));
+    Expect(std::abs(Db(again / open)) < 0.5, "WheelAndExpression", "expression up again opens the box, dB", Db(again / open));
 }
 
 void EveryKeySounds() {

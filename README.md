@@ -41,6 +41,14 @@ and plenty.
 
 ## Version history
 
+### 0.6.1 — 2026-11-13 — the mod wheel is the crescendo roller
+
+- **The mod wheel turns the crescendo roller** for a front end with one
+  keyboard (owner, 2026-11-13), in place of the swell pedal it was in 0.5.0:
+  at rest only what is drawn sounds, and all the way up is the full organ.
+  The wheel and the Crescendo control are one roller, as far over as the
+  further of the two. The swell pedal is expression and the Swell control.
+
 ### 0.6.0 — 2026-11-13 — each division's own output
 
 - **Each division can be taken on its own pair** (owner's request):
@@ -401,10 +409,10 @@ channels 1 to 4. A front end with one stream of notes plays through
 `OreganaInstrument.h`: every key plays the manual Keyboard names, and Pedal
 Keys gives the Pedal nothing, the lowest key held up to g1 (an automatic
 pedal, as loaded), or every key below c, which then plays no manual. A key
-moves with either control while it is held. The mod wheel is the swell pedal:
-at rest the box is open, and turning it up closes it, as lowering expression
-does, both on top of the Swell control. The crescendo roller is the Crescendo
-control. The pitch wheel (MIDI pitch bend, `SetBend`) is the air's warmth:
+moves with either control while it is held. The mod wheel is the crescendo roller,
+at rest only what is drawn and all the way up the full organ, as far over as
+the further of it and the Crescendo control. The swell pedal is expression,
+on top of the Swell control. The pitch wheel (MIDI pitch bend, `SetBend`) is the air's warmth:
 each flue's loop is read between its samples, a cubic through the four
 nearest, and made up to 1.7 % longer or shorter a sample at a time, its jet's
 transit with it. Fourteen of the 4,177 flues, all above 3.9 kHz, have loops
