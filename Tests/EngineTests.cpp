@@ -1209,6 +1209,69 @@ void BlockPartitionInvariance() {
     Expect(energy > 1.0, "BlockPartitionInvariance", "and it is a piece, not silence", energy);
 }
 
+void DivisionsHaveTheirOwnOutputs() {
+    // A stop of each division and a key on each: every division's pair
+    // carries its own pipes and nothing else, the Recit's follows its box,
+    // all follow the Volume, and the main output does not know they are
+    // taken.
+    struct Heard { std::vector<float> main; double level[kDivisions]; bool whole; };
+    const auto play = [](bool taken, double swell, double volume, std::initializer_list<int> blocks, int only = -1) {
+        Bench bench;
+        bench.Draw({ kHwOctave8, kPosGedackt8, kRecGambe8, kPedSubbass16 });
+        bench.Set(kSwell, swell);
+        bench.Set(kVolume, volume);
+        bench.organ->Reset();
+        const int notes[kDivisions] = { 60, 64, 67, 36 };
+        for (int d = 0; d < kDivisions; ++d)
+            if (only < 0 || only == d) bench.organ->KeyDown(d, notes[d], 100);
+        const int frames = 2 * static_cast<int>(kRate);
+        std::vector<float> out(static_cast<std::size_t>(2 * frames));
+        std::vector<std::vector<float>> own(Engine::kDivisionOutputs, std::vector<float>(static_cast<std::size_t>(frames)));
+        float* to[Engine::kDivisionOutputs];
+        auto block = blocks.begin();
+        for (int done = 0; done < frames;) {
+            const int now = Min(frames - done, *block);
+            if (++block == blocks.end()) block = blocks.begin();
+            for (int n = 0; n < Engine::kDivisionOutputs; ++n) to[n] = &own[static_cast<std::size_t>(n)][static_cast<std::size_t>(done)];
+            bench.organ->Render(&out[static_cast<std::size_t>(done)], &out[static_cast<std::size_t>(frames + done)], now, taken ? to : nullptr);
+            done += now;
+        }
+        Heard heard { out, {}, true };
+        for (int d = 0; d < kDivisions; ++d) {
+            double sum = 0.0;
+            for (int c = 0; c < 2; ++c)
+                for (int i = frames / 2; i < frames; ++i) {
+                    const double v = own[static_cast<std::size_t>(2 * d + c)][static_cast<std::size_t>(i)];
+                    heard.whole = heard.whole && v == v;
+                    sum += v * v;
+                }
+            heard.level[d] = std::sqrt(sum / frames);
+        }
+        if (taken) heard.main.insert(heard.main.end(), own[0].begin(), own[0].end());
+        return heard;
+    };
+    const Heard open = play(true, 1.0, 0.0, { 256 });
+    Expect(play(false, 1.0, 0.0, { 256 }).main == std::vector<float>(open.main.begin(), open.main.begin() + 4 * static_cast<int>(kRate)),
+           "DivisionsHaveTheirOwnOutputs", "the main output is the same samples with them taken", 0.0);
+    Expect(play(true, 1.0, 0.0, { 7, 64, 33, 512, 1, 31 }).main == open.main, "DivisionsHaveTheirOwnOutputs", "and they do not depend on the blocks", 0.0);
+    double least = 1.0;
+    for (const double level : open.level) least = Min(least, level);
+    Expect(open.whole && least > 1.0e-4, "DivisionsHaveTheirOwnOutputs", "every division sounds on its own pair, the quietest RMS", least);
+    for (int d = 0; d < kDivisions; ++d) {
+        const Heard alone = play(true, 1.0, 0.0, { 256 }, d);
+        double others = 0.0;
+        for (int e = 0; e < kDivisions; ++e)
+            if (e != d) others = Max(others, alone.level[e]);
+        Expect(alone.level[d] > 1.0e-4 && others == 0.0, "DivisionsHaveTheirOwnOutputs", "a division's key alone is on no other pair, RMS there", others);
+    }
+    const Heard shut = play(true, 0.0, 0.0, { 256 });
+    Expect(Db(shut.level[kRecit] / open.level[kRecit]) < -6.0 && Abs(Db(shut.level[kPositiv] / open.level[kPositiv])) < 0.2,
+           "DivisionsHaveTheirOwnOutputs", "the box shut takes the Recit's pair down and no other, dB", Db(shut.level[kRecit] / open.level[kRecit]));
+    const Heard soft = play(true, 1.0, -12.0, { 256 });
+    Expect(Abs(Db(soft.level[kHauptwerk] / open.level[kHauptwerk]) + 12.0) < 0.3, "DivisionsHaveTheirOwnOutputs", "and they follow the Volume, dB",
+           Db(soft.level[kHauptwerk] / open.level[kHauptwerk]));
+}
+
 void ResetPlaysAsNew() {
     Controls controls = kPresets[8].ToControls();   // Krummhorn with the tremulant
     Bench bench(controls);
@@ -1559,6 +1622,7 @@ int main() {
     CrescendoIsSmooth();
     ChurchIsThePlayers();
     BlockPartitionInvariance();
+    DivisionsHaveTheirOwnOutputs();
     ResetPlaysAsNew();
     ExtremesStayFinite();
     EveryControlTells();

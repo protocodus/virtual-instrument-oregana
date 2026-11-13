@@ -423,6 +423,9 @@ void Engine::Reset() {
     boxHighGain = boxHighTarget;
     dry = dryTarget;
     wet = wetTarget;
+    apartGain = apartTarget;
+    for (auto& line : apartLine) line.fill(0.0f);
+    apartAt = 0;
     presence = hum = hiss = rub = 0.0f;
     knocks.Clear();
     windNoise.Clear();
@@ -498,6 +501,7 @@ void Engine::Apply(const Controls& before, bool all) {
         const double volume = std::pow(10.0, controls[kVolume] / 20.0);
         dryTarget = static_cast<float>(volume * std::sqrt(1.0 - controls[kRoom]));
         wetTarget = static_cast<float>(volume * std::sqrt(controls[kRoom]));
+        apartTarget = static_cast<float>(volume);
     }
     if (registration) Register();
 }
@@ -1013,7 +1017,7 @@ void Engine::Tick() {
     }
 }
 
-void Engine::RenderChunk(float* left, float* right, int frames) {
+void Engine::RenderChunk(float* left, float* right, int frames, float* const* divisions, int offset) {
     for (auto& division : bus)
         for (auto& channel : division)
             for (int i = 0; i < frames; ++i) channel[static_cast<std::size_t>(i)] = 0.0f;
@@ -1201,23 +1205,35 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
             }
         }
     }
+    const int late = Min(output.DelaySamples(), kApartSize - 1);
     for (int i = 0; i < frames; ++i) {
         const auto at = static_cast<std::size_t>(i);
         float sound[2];
         boxLowGain += kGainStep * (boxLowTarget - boxLowGain);
         boxHighGain += kGainStep * (boxHighTarget - boxHighGain);
+        apartGain += (apartTarget > apartGain ? kGainRise : kGainStep) * (apartTarget - apartGain);
         // What the church hears from the divisions after the first, in
         // their order: the Positiv, the Recit through its box, the Pedal.
         float apart[kDivisions - 1] = {};
         for (std::size_t c = 0; c < 2; ++c) {
             const float enclosed = bus[kRecit][c][at];
             boxLow[c] += kBoxPole * (enclosed - boxLow[c]);
+            const float boxed = boxLowGain * boxLow[c] + boxHighGain * (enclosed - boxLow[c]);
             sound[c] = bus[kHauptwerk][c][at] + bus[kPositiv][c][at] + bus[kPedal][c][at]
                 + boxLowGain * boxLow[c] + boxHighGain * (enclosed - boxLow[c]);
             apart[kPositiv - 1] += 0.5f * bus[kPositiv][c][at];
-            apart[kRecit - 1] += 0.5f * (boxLowGain * boxLow[c] + boxHighGain * (enclosed - boxLow[c]));
+            apart[kRecit - 1] += 0.5f * boxed;
             apart[kPedal - 1] += 0.5f * bus[kPedal][c][at];
+            // Kept running with nobody listening, so that an output taken
+            // up while the organ sounds starts on what was just played.
+            for (std::size_t d = 0; d < kDivisions; ++d) {
+                auto& line = apartLine[2 * d + c];
+                line[static_cast<std::size_t>(apartAt)] = apartGain * (d == kRecit ? boxed : bus[d][c][at]);
+                if (divisions != nullptr)
+                    divisions[2 * d + c][offset + i] = line[static_cast<std::size_t>((apartAt - late) & (kApartSize - 1))];
+            }
         }
+        apartAt = (apartAt + 1) & (kApartSize - 1);
         knocks.Process(sound[0], sound[1]);
         if (hum > 0.0f || hiss > 0.0f || rub > 0.0f) windNoise.Process(hum, hiss, rub, sound[0], sound[1]);
         float roomLeft, roomRight;
@@ -1232,14 +1248,16 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
     }
 }
 
-void Engine::Render(float* left, float* right, int frames) {
+void Engine::Render(float* left, float* right, int frames, float* const* divisions) {
+    int from = 0;
     while (frames > 0) {
         if (untilTick == 0) {
             Tick();
             untilTick = kChunk;
         }
         const int chunk = Min(frames, untilTick);
-        RenderChunk(left, right, chunk);
+        RenderChunk(left, right, chunk, divisions, from);
+        from += chunk;
         left += chunk;
         right += chunk;
         frames -= chunk;

@@ -120,7 +120,13 @@ public:
     // they sound, gliding; reeds, whose tongues set their pitch, do not.
     void SetBend(double bend);
     static constexpr double kBendDegrees = 10.0;
-    void Render(float* left, float* right, int frames);
+    // With `divisions`, kDivisionOutputs more buffers of `frames`, each
+    // division's left then right in kHauptwerk .. kPedal order: what its
+    // pipes give before the church, the seat, the noises and the output
+    // stage (the Recit through its box), at the Volume and as late as the
+    // main output. The main output is the same with or without them.
+    static constexpr int kDivisionOutputs = 2 * kDivisions;
+    void Render(float* left, float* right, int frames, float* const* divisions = nullptr);
 
     // The output stage's look-ahead, samples: a front end reports it to its
     // host as latency.
@@ -169,7 +175,7 @@ private:
     void Design(int slot);
     void Place(Slot& slot);
     void Tick();
-    void RenderChunk(float* left, float* right, int frames);
+    void RenderChunk(float* left, float* right, int frames, float* const* divisions, int offset);
     double Cents(const Slot& slot) const;
 
     Controls controls;
@@ -247,6 +253,12 @@ private:
     int untilTick = 0;
     float boxLow[2] {}, boxLowGain = 1.0f, boxHighGain = 1.0f, boxLowTarget = 1.0f, boxHighTarget = 1.0f;
     float dry = 0.0f, wet = 0.0f, dryTarget = 0.0f, wetTarget = 0.0f;
+    // The divisions' own outputs: the Volume alone, and a delay as long as
+    // the output stage's.
+    static constexpr int kApartSize = 2048;
+    float apartGain = 0.0f, apartTarget = 0.0f;
+    std::array<std::array<float, kApartSize>, kDivisionOutputs> apartLine {};
+    int apartAt = 0;
     float presence = 0.0f, hum = 0.0f, hiss = 0.0f, rub = 0.0f;
     Knocks knocks;
     WindNoise windNoise;

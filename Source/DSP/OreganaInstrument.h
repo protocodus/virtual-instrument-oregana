@@ -89,17 +89,22 @@ public:
         engine.AllSoundOff();
     }
 
-    void Render(float* left, float* right, int frames) {
+    // `divisions`: Engine::kDivisionOutputs more buffers, or none
+    // (Engine::Render).
+    void Render(float* left, float* right, int frames, float* const* divisions = nullptr) {
         if (direct) {
-            engine.Render(left, right, frames);
+            engine.Render(left, right, frames, divisions);
             return;
         }
+        float* fresher[Engine::kDivisionOutputs];
+        for (int n = 0; n < Engine::kDivisionOutputs; ++n) fresher[n] = &history[static_cast<std::size_t>(2 + n)][kTaps];
+        int done = 0;
         while (frames > 0) {
             const int count = Min(frames, kChunk);
             // The engine's samples these frames pass, after the kTaps the
             // last ones left.
             const int fresh = static_cast<int>((phase + static_cast<std::uint64_t>(count) * kEngineRate) / rate);
-            engine.Render(&history[0][kTaps], &history[1][kTaps], fresh);
+            engine.Render(&history[0][kTaps], &history[1][kTaps], fresh, divisions != nullptr ? fresher : nullptr);
             int passed = 0;
             for (int i = 0; i < count; ++i) {
                 phase += kEngineRate;
@@ -122,10 +127,18 @@ public:
                 }
                 left[i] = l;
                 right[i] = r;
+                if (divisions != nullptr)
+                    for (int n = 0; n < Engine::kDivisionOutputs; ++n) {
+                        const float* z = &history[static_cast<std::size_t>(2 + n)][static_cast<std::size_t>(passed)];
+                        float sum = 0.0f;
+                        for (int k = 0; k < kTaps; ++k) sum += (a[k] + mix * (b[k] - a[k])) * z[k];
+                        divisions[n][done + i] = sum;
+                    }
             }
             for (auto& channel : history) std::memmove(channel.data(), channel.data() + fresh, kTaps * sizeof(float));
             left += count;
             right += count;
+            done += count;
             frames -= count;
         }
     }
@@ -209,7 +222,8 @@ private:
     bool direct = true;
     std::uint64_t phase = 0;                                        // the output's place between two engine samples, in 1 / rate
     float phaseScale = 0.0f;
-    std::array<std::array<float, kTaps + kFresh>, 2> history {};
+    // The main pair, then the divisions' own outputs.
+    std::array<std::array<float, kTaps + kFresh>, 2 + Engine::kDivisionOutputs> history {};
     std::array<float, (kPhases + 1) * kTaps> kernel {};
 };
 

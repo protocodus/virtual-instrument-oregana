@@ -41,6 +41,19 @@ and plenty.
 
 ## Version history
 
+### 0.6.0 — 2026-11-13 — each division's own output
+
+- **Each division can be taken on its own pair** (owner's request):
+  `Engine::Render` and `Instrument::Render` fill eight more buffers when
+  given them, the Hauptwerk's, the Positiv's, the Récit's and the Pedal's
+  left and right. A pair carries what that division's pipes give before the
+  church, the seat, the noises and the output stage, the Récit's through its
+  swell box, at the Volume and as late as the main output. A pipe is on its
+  own division's pair whichever keyboard a coupler plays it from. The main
+  output is the same samples with or without them, so a mix of the pairs
+  with the church alone needs Room turned full
+  (`DivisionsHaveTheirOwnOutputs`, `DivisionOutputsAtEveryRate`).
+
 ### 0.5.0 — 2026-11-13 — pipes that hear each other, divisions in their places
 
 - **Neighbouring flue pipes hear each other.** A flue hears the nearest

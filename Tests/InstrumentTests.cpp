@@ -272,6 +272,43 @@ void EveryKeySounds() {
     Expect(strays == 0, "EveryKeySounds", "keys outside them that sound", strays);
 }
 
+void DivisionOutputsAtEveryRate() {
+    // The divisions' own outputs through the resampler: with the church
+    // off they add up to the level the main output has, and taking them
+    // leaves the main output's samples alone.
+    for (const double rate : { 44100.0, 48000.0, 96000.0 }) {
+        std::vector<float> mains[2];
+        double own = 0.0, main = 0.0;
+        for (int taken = 0; taken < 2; ++taken) {
+            auto organ = std::make_unique<Instrument>();
+            organ->Prepare(rate);
+            Controls controls = kPresets[0].ToControls();
+            controls[kRoom] = controls[kBlower] = controls[kAction] = controls[kSeat] = 0.0;
+            organ->SetControls(controls);
+            for (int note : { 48, 60, 64, 67 }) organ->KeyDown(note, 90);
+            const int frames = static_cast<int>(rate);
+            std::vector<float> left(static_cast<std::size_t>(frames)), right(left);
+            std::vector<std::vector<float>> pairs(Engine::kDivisionOutputs, left);
+            float* to[Engine::kDivisionOutputs];
+            for (int done = 0; done < frames; done += 100) {
+                for (int n = 0; n < Engine::kDivisionOutputs; ++n) to[n] = &pairs[static_cast<std::size_t>(n)][static_cast<std::size_t>(done)];
+                organ->Render(&left[static_cast<std::size_t>(done)], &right[static_cast<std::size_t>(done)], Min(100, frames - done), taken ? to : nullptr);
+            }
+            mains[taken] = left;
+            if (!taken) continue;
+            for (int i = frames / 2; i < frames; ++i) {
+                double sum = 0.0;
+                for (int d = 0; d < kDivisions; ++d) sum += pairs[static_cast<std::size_t>(2 * d)][static_cast<std::size_t>(i)];
+                own += sum * sum;
+                main += static_cast<double>(left[static_cast<std::size_t>(i)]) * left[static_cast<std::size_t>(i)];
+            }
+        }
+        Expect(mains[0] == mains[1], "DivisionOutputsAtEveryRate", "the main output is the same samples with them taken, at Hz", rate);
+        Expect(own > 0.0 && std::abs(Db(std::sqrt(own / main))) < 1.5, "DivisionOutputsAtEveryRate", "together they are as loud as the main output with no church, dB",
+               Db(std::sqrt(own / main)));
+    }
+}
+
 } // namespace
 
 int main() {
@@ -282,6 +319,7 @@ int main() {
     TwoSourcesHoldOneKey();
     WheelAndExpression();
     EveryKeySounds();
+    DivisionOutputsAtEveryRate();
     std::printf("%d failure(s)\n", failures);
     return failures ? 1 : 0;
 }
