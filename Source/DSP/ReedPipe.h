@@ -62,6 +62,7 @@ struct ReedPipe {
     float tongue = 1.0f, speed = 0.0f;       // opening against rest, and its change per sample
     float massFlow = 0.0f, shallot = 0.0f;   // flow into the cone's mass, and the shallot's pressure
     float foot = 0.0f, wind = 0.0f;
+    float radiates = 1.0f;
     std::uint32_t random = 1u;
     int quiet = 0;
 
@@ -95,6 +96,11 @@ struct ReedPipe {
         const double perPeriod = 1.0 - kPi / v.q;
         const double walls = Min((v.cone ? perPeriod : std::sqrt(perPeriod)) / lpGain, 0.9999);
         loopGain = static_cast<float>(-walls);
+        // What the open end radiates of the wave inside, at the note: all
+        // that its low-pass does not turn back (Run, `out`).
+        double noteGain, noteLag;
+        detail::OnePole(lp, kTwoPi * hz / kPipeRate, noteGain, noteLag);
+        radiates = static_cast<float>(std::sqrt(1.0 + noteGain * noteGain - 2.0 * noteGain * std::cos(noteLag)));
 
         const double wt = kTwoPi * hz * tuning * v.tongue / kPipeRate;
         stiffness = static_cast<float>(wt * wt);
@@ -131,7 +137,11 @@ struct ReedPipe {
     void Tick() {
         // As a flue's (FluePipe::Tick).
         if (wind == 0.0f && foot < 1.0e-25f) foot = 0.0f;
-        const float level = Abs(lowpassOut) + Abs(allpassOut) + Abs(speed) + foot;
+        // A reed is judged by what it radiates. A bass resonator turns
+        // nearly all of its wave back, so the wave inside outlasts the sound
+        // by seconds: a 16' trumpet was kept 7.6 s, its sound 116 dB down.
+        // The tongue, swinging on in an empty boot, makes none.
+        const float level = radiates * (Abs(lowpassOut) + Abs(allpassOut)) + foot;
         quiet = level < FluePipe::kPipeSilent ? quiet + 1 : 0;
     }
     bool Silent() const { return wind == 0.0f && quiet > 16; }

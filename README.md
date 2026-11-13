@@ -67,7 +67,10 @@ and plenty.
   speech, where it rang 20 dB further (owner, 2026-11-13: past hearing): a
   quarter to a half fewer pipes ring on in a release. A pipe struck again
   after that starts from rest, so a render differs from 0.4.0's in how
-  near-unison pipes beat, not in their levels.
+  near-unison pipes beat, not in their levels. A reed is judged by what its
+  resonator gives the room, not by the wave inside it: the lowest Trompete
+  is let go 2.3 s after its key where it was kept 7.6 s, its sound by then
+  116 dB down.
 - **Brighter trumpets.** The Trompetes, the Posaunes, the Trompette and the
   Clairon pass three times the wind under their open tongues, so the flow is
   cut only in the short time a tongue is nearly shut, as in a real reed. The
