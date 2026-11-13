@@ -82,6 +82,32 @@ What is left that keeps the samples is small. The 10 % target for full
 organ needs steps 3 and 4 above, which change the sound and need a
 listening set.
 
+## A third pass (2026-11-13, afternoon)
+
+Since the table above, released pipes are let go about 105 dB under their
+speech and reeds by what they radiate, which shortens every release; held
+chords cost what they did. A profile of the Tutti demo at `ce101d7`
+(callgrind, 12.2 thousand million instructions): the flues' kernels 50 %,
+the church 12 %, the reeds' 9 %, the chunk's listing, hearing and summing
+about 15 %, the tick 4 %.
+
+One more change that keeps the samples was tried and not kept. Each lane's
+loop was read and written in unbroken runs, with its place worked out once a
+run instead of stepped and wrapped every sample, in the flues' and the
+reeds' kernels. The four demos compared came out byte for byte the same and
+the Tutti demo took 7.5 % fewer instructions, but in 24 paired renders its
+time did not fall (median 1.14 s before, 1.18 s after, the runs scattering
+by 3 %): the instructions saved were whole-number steps the processor does
+beside the arithmetic. What bounds a flue kernel on this machine is the
+moving of four pipes' samples between their own delay lines and one
+register (some 35 such moves a sample) and its 35 live values against 16
+registers, which this change does not touch. An Apple or other ARM processor
+has 32 registers and may differ; it was not measured.
+
+So nothing is left on this path that a measurement here can show. What
+remains is steps 3 and 4 above and, on x86 only, eight pipes to an
+instruction where the processor has AVX2, chosen when the engine starts.
+
 ## Not on the table
 
 Replacing a settled pipe by a stored period of its own sound, or sharing one
