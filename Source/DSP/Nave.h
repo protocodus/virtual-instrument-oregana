@@ -5,8 +5,10 @@
 // First the reflections a listener gets before the church as a whole
 // answers, by image sources up to the third order: the organ on a west
 // gallery 8 m up and 2 m from the wall behind it, a nave 14 m wide and 18 m
-// to the vault, the listener seated on its axis 18 m from the organ. A
-// reflection from one side reaches the far ear later and weaker. The organ's
+// to the vault, the listener seated 18 m from the organ, on the nave's axis
+// or to one side of it (Seat). A reflection from one side reaches the far ear
+// later and weaker, and so does the organ's own sound from a seat off the
+// axis (Direct). The organ's
 // divisions do not stand in one place: each can be stood nearer or higher
 // than the first (Stand), and its reflections then come by its own paths,
 // after its own direct sound. Then the
@@ -22,7 +24,7 @@
 // The two ears' fields are read from two halves of the lines.
 //
 // Church Size stretches every path: the reflections' delays and the lines'
-// lengths. A new size or width is faded in over 50 ms from the same stored
+// lengths. A new size, width or seat is faded in over 50 ms from the same stored
 // sound, read at the new distances, so turning the knob neither clicks nor
 // bends the pitch of what is ringing; the decay's changes glide in 5 ms.
 //
@@ -61,6 +63,8 @@ public:
 
     // The church, m: see the head of the file.
     static constexpr double kNaveWide = 14.0, kToListener = 18.0, kFromWall = 2.0, kSoundSpeed = 343.0;
+    // The seat furthest from the axis: 1.5 m from a side wall.
+    static constexpr double kSeatMost = 5.5;
     // How far above the listener's ears the organ and its images in the
     // floor and the vault stand, how many surfaces each has met, and what
     // those leave of the sound: the organ itself, its image in the floor, in
@@ -102,8 +106,9 @@ public:
     // top `treble` of it. `size` stretches the church against the one above,
     // and `width` is how far apart the two ears hear: 0 one field for both,
     // 1 two fields with nothing in common, as ears (or microphones) a head
-    // apart have above a few hundred hertz.
-    void Set(double rt60, double bass, double treble, double size, double width) {
+    // apart have above a few hundred hertz. `seat` is how far to the right of
+    // the nave's axis the listener sits, m.
+    void Set(double rt60, double bass, double treble, double size, double width, double seat = 0.0) {
         const double k = std::tan(kPi * kBassCorner / kPipeRate), fit = std::tan(kPi * kTrebleFit / kPipeRate);
         for (std::size_t i = 0; i < kLines; ++i) {
             const double cost = -3.0 * size * kLineSamples[i] / (kPipeRate * rt60), mid = std::pow(10.0, cost);
@@ -132,7 +137,7 @@ public:
         const double rho = 1.0 - Clamp(width, 0.0, 1.0);
         lateMidAsked = static_cast<float>(std::sqrt(0.5 * (1.0 + rho)));
         lateSideAsked = static_cast<float>(std::sqrt(0.5 * (1.0 - rho)));
-        asked = { size, Clamp(width, 0.0, 1.0) };
+        asked = { size, Clamp(width, 0.0, 1.0), Clamp(seat, -kSeatMost, kSeatMost) };
         // A silent church has nothing to fade or glide.
         if (resting) {
             loss = wanted;
@@ -169,6 +174,7 @@ public:
         write = 0;
         untilTurn = 0;
         earlyLeft = earlyRight = late = 0.0f;
+        for (auto& ear : directBuffer) ear.fill(0.0f);
         Build(shapes[1], asked);
         fade = 1.0f;
         resting = true;
@@ -198,7 +204,7 @@ public:
         // shape comes in at such a step.
         const std::size_t ahead = static_cast<std::size_t>(write & (kAhead - 1));
         if (ahead == 0) {
-            if (fade >= 1.0f && (asked.size != shapes[1].size || asked.width != shapes[1].width)) {
+            if (fade >= 1.0f && (asked.size != shapes[1].size || asked.width != shapes[1].width || asked.seat != shapes[1].seat)) {
                 shapes[0] = shapes[1];
                 Build(shapes[1], asked);
                 fade = 0.0f;
@@ -324,7 +330,32 @@ public:
         }
     }
 
+    // The organ's own sound as the seat hears it, after Process: on the axis
+    // as it is, and from one side with the far ear later and weaker, as a
+    // reflection from that side is.
+    void Direct(float& left, float& right) {
+        const auto at = static_cast<std::size_t>(directAt);
+        directBuffer[0][at] = left;
+        directBuffer[1][at] = right;
+        directAt = (directAt + 1) & (kDirectSize - 1);
+        const bool fading = fade < 1.0f;
+        if (!fading && shapes[1].seat == 0.0) return;
+        float* const ears[2] = { &left, &right };
+        for (std::size_t ear = 0; ear < 2; ++ear) {
+            const auto heard = [&](const Shape& shape) {
+                return shape.directGain[ear] * directBuffer[ear][(at - static_cast<std::size_t>(shape.directLate[ear])) & (kDirectSize - 1)];
+            };
+            float now = heard(shapes[1]);
+            if (fading) {
+                const float before = heard(shapes[0]);
+                now = before + fade * (now - before);
+            }
+            *ears[ear] = now;
+        }
+    }
+
 private:
+    static constexpr int kDirectSize = 64;   // over kHeadSamples
     static constexpr float kMixGain = 0.17677669f;   // 1 / sqrt(kLines): the Hadamard matrix loses nothing
     // The sound enters half the lines turned over, in no order the matrix
     // would gather into one line: a set bit is a line that takes it so.
@@ -334,12 +365,14 @@ private:
     // The church at one size and width: where its reflections fall and how
     // long its lines are.
     struct Shape {
-        double size = 0.0, width = 0.0;
+        double size = 0.0, width = 0.0, seat = 0.0;
+        std::array<int, 2> directLate {};      // each ear's lag of the organ's own sound, samples
+        std::array<float, 2> directGain { { 1.0f, 1.0f } };
         std::array<std::array<Reflection, kMostReflections>, kSources> reflections {};
         int count = 0;   // of each source's: every source meets the same surfaces
         std::array<float, kLines> length {};
     };
-    struct Asked { double size = 1.0, width = 1.0; };
+    struct Asked { double size = 1.0, width = 1.0, seat = 0.0; };
     struct Place { double forward = 0.0, higher = 0.0; };
     // A line's two shelves: the bass's, with the line's gain in it, and the air's.
     // A line's loss each pass: the bass shelf (b0, b1, a1) and the air's (t0, t1, ta).
@@ -355,6 +388,17 @@ private:
     void Build(Shape& shape, const Asked& to) const {
         shape.size = to.size;
         shape.width = to.width;
+        shape.seat = to.seat;
+        // The first source's bearing stands for the organ's: the divisions
+        // are within 3 m of one another and 18 m away.
+        const double ahead = kToListener - places[0].forward, top = kHeights[0].rise + places[0].higher;
+        const double far = to.width * Abs(to.seat) / std::sqrt(to.seat * to.seat + ahead * ahead + top * top);
+        // Seated to the right, the organ is to the left and the right ear is the far one.
+        const std::size_t farEar = to.seat > 0.0 ? 1 : 0;
+        shape.directLate = {};
+        shape.directGain = { { 1.0f, 1.0f } };
+        shape.directLate[farEar] = static_cast<int>(kHeadSamples * far + 0.5);
+        shape.directGain[farEar] = static_cast<float>(1.0 - far);
         for (std::size_t source = 0; source < kSources; ++source) Build(shape.reflections[source], shape.count, places[source], to);
         for (std::size_t i = 0; i < kLines; ++i) shape.length[i] = static_cast<float>(to.size * kLineSamples[i]);
     }
@@ -362,13 +406,13 @@ private:
     static void Build(std::array<Reflection, kMostReflections>& reflections, int& count, const Place& place, const Asked& asked) {
         count = 0;
         const double ahead = kToListener - place.forward, top = kHeights[0].rise + place.higher;
-        const double direct = std::sqrt(ahead * ahead + top * top);
+        const double direct = std::sqrt(asked.seat * asked.seat + ahead * ahead + top * top);
         for (int side = -2; side <= 2; ++side)
             for (int behind = 0; behind <= 1; ++behind)
                 for (const Height& height : kHeights) {
                     const int walls = (side < 0 ? -side : side) + behind, order = walls + height.order;
                     if (order == 0 || order > kMostOrder) continue;
-                    const double across = kNaveWide * side, along = ahead + 2.0 * (kFromWall + place.forward) * behind;
+                    const double across = kNaveWide * side - asked.seat, along = ahead + 2.0 * (kFromWall + place.forward) * behind;
                     const double rise = height.rise + height.lift * place.higher;
                     const double path = std::sqrt(across * across + along * along + rise * rise);
                     const double level = direct / path * std::pow(kWallFactor, walls) * height.factor;
@@ -519,6 +563,8 @@ private:
     std::array<std::array<std::array<float, kAhead>, 2>, 2> reflected {};   // the shape heard and the one fading out, each ear
     std::array<int, kSources> earlyQuiet {};
     std::array<Place, kSources> places {};
+    std::array<std::array<float, kDirectSize>, 2> directBuffer {};
+    int directAt = 0;
     // The shape fading out and the one heard; `fade` is how far the second
     // has come in, 1 when it is all there is.
     std::array<Shape, 2> shapes {};

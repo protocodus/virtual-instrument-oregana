@@ -984,6 +984,66 @@ void ChurchIsThePlayers() {
         before = left;
     }
     Expect(turning < 2.0 * steady, "ChurchIsThePlayers", "Church Size and Width turned under a held tone make no click, largest step against the tone's own", turning / steady);
+
+    // The seat. On the axis the organ's own sound is left as it is; 5.5 m to
+    // the right the organ is 16 degrees to the left, and the right ear has
+    // it 8 samples later and 0.725 as strong (5.5 m of the 20.0 m to it).
+    nave->Set(4.5, 1.0, 0.2, 1.0, 1.0);
+    nave->Clear();
+    float left = 0.3f, right = -0.7f;
+    nave->Direct(left, right);
+    Expect(left == 0.3f && right == -0.7f, "ChurchIsThePlayers", "on the nave's axis the organ's own sound is untouched", left);
+    // The reflections before the reverberant field (its shortest line is
+    // 2017 samples): a seat to the left hears what one to the right does,
+    // the ears changed over.
+    std::array<std::array<std::vector<float>, 2>, 2> heard;
+    int farEarCame = -1;
+    float farEar = 0.0f;
+    for (std::size_t side = 0; side < 2; ++side) {
+        nave->Set(4.5, 1.0, 0.2, 1.0, 1.0, side == 0 ? 5.5 : -5.5);
+        nave->Clear();
+        for (int i = 0; i < 2000; ++i) {
+            float in[2] = { i == 0 ? 1.0f : 0.0f, i == 0 ? 1.0f : 0.0f };
+            float roomLeft, roomRight;
+            nave->Process(in[0], in[1], roomLeft, roomRight);
+            nave->Direct(in[0], in[1]);
+            heard[side][0].push_back(roomLeft);
+            heard[side][1].push_back(roomRight);
+            if (side == 0 && in[1] != 0.0f && farEarCame < 0) {
+                farEarCame = i;
+                farEar = in[1];
+            }
+            if (side == 0 && i == 0) Expect(in[0] == 1.0f && in[1] == 0.0f, "ChurchIsThePlayers", "seated to the right, the left ear has the organ first", in[0]);
+        }
+    }
+    Expect(farEarCame == 8 && Abs(farEar - 0.725f) < 0.001f, "ChurchIsThePlayers", "and the right ear 8 samples later and weaker, level", farEar);
+    Expect(heard[0][0] == heard[1][1] && heard[0][1] == heard[1][0], "ChurchIsThePlayers", "a seat to the left is one to the right with the ears changed over", 0.0);
+    double energy[2] = {};
+    for (std::size_t ear = 0; ear < 2; ++ear)
+        for (const float x : heard[0][ear]) energy[ear] += static_cast<double>(x) * x;
+    // The organ, the floor's and the vault's reflections come from the left
+    // and the near wall's from the right, 1.0 m behind the organ's own sound
+    // where it was 4.6 m on the axis: together the right ear has a little more.
+    Expect(energy[1] > 1.05 * energy[0] && energy[1] < 1.2 * energy[0], "ChurchIsThePlayers", "the ear by the wall has a little more of the reflections, times", energy[1] / energy[0]);
+
+    // The seat moved across the nave under a held tone: no click in the
+    // organ's own sound or the church's.
+    nave->Set(4.5, 1.0, 0.2, 1.0, 1.0, -5.5);
+    nave->Clear();
+    steady = turning = 0.0;
+    float last[4] = {};
+    for (int i = 0; i < 6 * kRate; ++i) {
+        const float in = static_cast<float>(std::sin(kTwoPi * 220.0 * i / kRate));
+        if (i >= 3 * kRate && i % 480 == 0) nave->Set(4.5, 1.0, 0.2, 1.0, 1.0, -5.5 + 11.0 * (i - 3 * kRate) / (3.0 * kRate));
+        float now[4] = { in, in, 0.0f, 0.0f };
+        nave->Process(in, in, now[2], now[3]);
+        nave->Direct(now[0], now[1]);
+        for (std::size_t c = 0; c < 4; ++c) {
+            if (i >= 2 * kRate) (i < 3 * kRate ? steady : turning) = Max(i < 3 * kRate ? steady : turning, static_cast<double>(Abs(now[c] - last[c])));
+            last[c] = now[c];
+        }
+    }
+    Expect(turning < 2.0 * steady, "ChurchIsThePlayers", "the seat moved across the nave under a held tone makes no click, largest step against the tone's own", turning / steady);
 }
 
 // A short piece on three manuals and the pedal, with the stops, the roller and the wind supply moving.

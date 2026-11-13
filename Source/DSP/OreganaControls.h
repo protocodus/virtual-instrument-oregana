@@ -56,6 +56,7 @@ enum Control : int {
     kDecayTreble,                   // and at the top of the range (Nave.h)
     kKeyboard,                      // the manual a single keyboard plays (OreganaInstrument.h): Hauptwerk, Positiv or Recit
     kPedalMode,                     // and what of it plays the Pedal: kPedalOff, kPedalBass or kPedalSplit
+    kSeat,                          // where across the nave the listener sits: -1 by the left wall .. 0 on the axis .. 1 by the right (Nave.h)
     kControlCount
 };
 
@@ -139,6 +140,7 @@ constexpr std::array<ControlInfo, kControlCount> MakeControlInfo() {
         { "keyboard", "Keyboard", 0.0, 2.0, 0.0, 3, Curve::kStepped, "" },
         { "pedal_keys", "Pedal Keys", 0.0, static_cast<double>(kPedalModes - 1), static_cast<double>(kPedalBass), kPedalModes,
           Curve::kStepped, "" },
+        { "seat", "Seat", -1.0, 1.0, 0.0, 0, Curve::kLinear, "" },
     };
     for (int i = kStopCount; i < kControlCount; ++i) info[static_cast<std::size_t>(i)] = rest[i - kStopCount];
     return info;

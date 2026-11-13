@@ -438,8 +438,9 @@ void Engine::Apply(const Controls& before, bool all) {
 
     if (changed(kTremulantRate))
         for (Tremulant& t : tremulants) t.Design(controls[kTremulantRate], kStepSeconds);
-    if (changed(kDecay) || changed(kDecayBass) || changed(kDecayTreble) || changed(kRoomSize) || changed(kWidth))
-        nave.Set(controls[kDecay], controls[kDecayBass], controls[kDecayTreble], controls[kRoomSize], controls[kWidth]);
+    if (changed(kDecay) || changed(kDecayBass) || changed(kDecayTreble) || changed(kRoomSize) || changed(kWidth) || changed(kSeat))
+        nave.Set(controls[kDecay], controls[kDecayBass], controls[kDecayTreble], controls[kRoomSize], controls[kWidth],
+                 controls[kSeat] * Nave::kSeatMost);
     if (all) {
         widthSet = controls[kWidth];
         pressureSet = controls[kPressure];
@@ -1171,6 +1172,7 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
         if (hum > 0.0f || hiss > 0.0f || rub > 0.0f) windNoise.Process(hum, hiss, rub, sound[0], sound[1]);
         float roomLeft, roomRight;
         nave.Process(sound[0], sound[1], roomLeft, roomRight, apart);
+        nave.Direct(sound[0], sound[1]);
         dry += kGainStep * (dryTarget - dry);
         wet += kGainStep * (wetTarget - wet);
         std::array<float, 2> frame { dry * sound[0] + wet * roomLeft, dry * sound[1] + wet * roomRight };
