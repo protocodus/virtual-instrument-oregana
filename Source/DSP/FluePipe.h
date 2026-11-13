@@ -140,6 +140,9 @@ struct FluePipe {
     float attack = 1.0f, release = 1.0f, radiation = 0.0f;
     float gainLeft = 0.0f, gainRight = 0.0f;
     double air = 0.0;   // the wind it takes at nominal pressure, against an 8' C principal
+    // What a neighbour a metre away hears of this pipe, against its own wave,
+    // for each unit of its radiation filter's output (Run, `told`).
+    float telling = 0.0f;
 
     float* loop = nullptr;
     float* jet = nullptr;
@@ -295,6 +298,15 @@ struct FluePipe {
         radiation = static_cast<float>(std::exp(-kTwoPi * corner / kPipeRate));
         // Wind through the flue: its area goes with the diameter squared.
         air = 4.0 * radius * radius / (0.1555 * 0.1555);
+        // The mouth is a small source: a flow Q changing at dQ/dt makes a
+        // pressure rho / (4 pi d) dQ/dt at d metres. With the flow as the
+        // pipe's area times its wave over rho c, that is r^2 / (4 d c) of the
+        // wave's rate of change, here per sample and for d = 1. That holds
+        // while the opening is small against the wavelength, as far as the
+        // radiation filter differentiates, so the neighbour hears that
+        // filter's output: scaled here to the same figure below its corner,
+        // and level above it, where a rate of change would grow without end.
+        telling = static_cast<float>(radius * radius * kPipeRate / (4.0 * kSoundSpeed) * (1.0 - radiation) / radiation);
     }
 
     // How fast the key opens the pallet: 1 is an ordinary stroke.
@@ -340,8 +352,11 @@ struct FluePipe {
         }
     }
 
-    // `frames` samples of the pipe's sound, before its gains.
-    void Run(float* out, int frames) {
+    // `frames` samples of the pipe's sound, before its gains. A pipe with
+    // neighbours near enough to matter is given what it hears of them at its
+    // mouth, `heard`, and writes what they will hear of it, `told` (at a
+    // metre: the listener divides by its distance).
+    void Run(float* out, int frames, const float* heard = nullptr, float* told = nullptr) {
         float* const loopBuffer = loop;
         float* const jetBuffer = jet;
         float* const upperBuffer = upper;
@@ -395,7 +410,9 @@ struct FluePipe {
             // midway through the foot's filling.
             const float blown = -source * pressure * JetShape(jetGain * jetLp + offset + turbulence)
                 + (gap > 0.0f ? puff * gap * pressure : 0.0f);
-            const float leaving = returned + blown - shed * Abs(returned) * returned;
+            float leaving = returned + blown - shed * Abs(returned) * returned;
+            // The pressure a neighbour makes at the mouth enters as a wave.
+            if (heard != nullptr) leaving += heard[i];
             loopBuffer[at] = leaving;
             if (++at == loopLength) at = 0;
 
@@ -404,6 +421,7 @@ struct FluePipe {
             const float flow = returned + leaving;
             radOut = radiation * (radOut + flow - radIn);
             radIn = flow;
+            if (told != nullptr) told[i] = telling * radOut;
             out[i] = radOut;
             transit += jetStep;
         }
@@ -428,9 +446,11 @@ struct FluePipe {
 
 #if defined(OREGANA_FOUR)
     // Run for four pipes at once, lane for lane the same arithmetic. `Upper`:
-    // all four have a pipe beyond a junction, else none has.
-    template <bool Upper>
-    static void RunFour(FluePipe* const pipe[4], float* const out[4], int frames) {
+    // all four have a pipe beyond a junction, else none has. `Hears`: all
+    // four hear neighbours and tell them, else none does.
+    template <bool Upper, bool Hears>
+    static void RunFour(FluePipe* const pipe[4], float* const out[4], int frames, const float* const heard[4] = nullptr,
+                        float* const told[4] = nullptr) {
 #define OREGANA_LANES(field) Float4 { pipe[0]->field, pipe[1]->field, pipe[2]->field, pipe[3]->field }
         const Float4 allpassC = OREGANA_LANES(allpass), lowpassC = OREGANA_LANES(lowpass), loopGainC = OREGANA_LANES(loopGain);
         const Float4 dcPoleC = OREGANA_LANES(dcPole), jetLowpassC = OREGANA_LANES(jetLowpass), jetGainC = OREGANA_LANES(jetGain);
@@ -440,6 +460,7 @@ struct FluePipe {
         const Float4 downFromBelowC = OREGANA_LANES(downFromBelow), downFromAboveC = OREGANA_LANES(downFromAbove);
         const Float4 upperLowpassC = OREGANA_LANES(upperLowpass), upperGainC = OREGANA_LANES(upperGain), upperAllpassC = OREGANA_LANES(upperAllpass);
         const Float4 target = OREGANA_LANES(wind), rise = OREGANA_LANES(attack), fall = OREGANA_LANES(release);
+        const Float4 tellingC = OREGANA_LANES(telling);
         Float4 upperLp = OREGANA_LANES(upperOut), upperApIn = OREGANA_LANES(upperAllpassIn), upperApOut = OREGANA_LANES(upperAllpassOut);
         Float4 apIn = OREGANA_LANES(allpassIn), apOut = OREGANA_LANES(allpassOut), lpOut = OREGANA_LANES(lowpassOut);
         Float4 blockIn = OREGANA_LANES(dcIn), blockOut = OREGANA_LANES(dcOut), jetLp = OREGANA_LANES(jetOut);
@@ -519,7 +540,8 @@ struct FluePipe {
             const Float4 shape = Choose(swing > Four(3.0f), one,
                                         Choose(swing < Four(-3.0f), -one, swing * (27.0f + swing2) / (27.0f + 9.0f * swing2)));
             const Float4 blown = -sourceC * pressure * shape + Choose(filling, puffC * gap * pressure, zero);
-            const Float4 leaving = returned + blown - shedC * Abs(returned) * returned;
+            Float4 leaving = returned + blown - shedC * Abs(returned) * returned;
+            if (Hears) leaving += Float4 { heard[0][i], heard[1][i], heard[2][i], heard[3][i] };
             for (int l = 0; l < 4; ++l) {
                 loopBuffer[l][at[l]] = leaving[l];
                 if (++at[l] == loopSize[l]) at[l] = 0;
@@ -528,6 +550,13 @@ struct FluePipe {
             const Float4 flow = returned + leaving;
             radOut = radiationC * (radOut + flow - radIn);
             radIn = flow;
+            if (Hears) {
+                const Float4 tells = tellingC * radOut;
+                told[0][i] = tells[0];
+                told[1][i] = tells[1];
+                told[2][i] = tells[2];
+                told[3][i] = tells[3];
+            }
             out[0][i] = radOut[0];
             out[1][i] = radOut[1];
             out[2][i] = radOut[2];

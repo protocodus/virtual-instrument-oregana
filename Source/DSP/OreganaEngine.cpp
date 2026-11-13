@@ -28,6 +28,31 @@ constexpr double kRowMetres = 0.12, kOffRowMetres = 1.5;
 // small for the Hauptwerk, which a player hears his own keys through.
 constexpr double kDivisionMetres[kDivisions] = { 0.5, 0.0, 3.0, 1.5 };
 
+// Neighbouring flue pipes hear each other (Mitnahme). The pipes of one key
+// stand along its channel, rank behind rank, kRowMetres apart and no nearer
+// than they can stand (their radii and kClearance). Each hears the nearest
+// speaking flue in front and behind, up to two rows off, by FluePipe's
+// `telling` over the distance, as late as sound takes to cross it. Close and
+// nearly in tune they lock to one pitch in antiphase and nearly cancel, and
+// near that they pull each other. The strength is derived and not fitted:
+// two of these pipes alone, at 740 Hz, locked within 2.8 Hz either way at
+// 5 cm, 1.7 Hz at 10 cm and 0.4 Hz at 20 and 40 cm, where 6 Hz across at the
+// nearest and "marginal" at 40 cm were measured on pipes of 720 Hz (Fischer,
+// in Sawicki, Abel and Schoell, arXiv:1708.06571); in the organ the Octave
+// and the Gamba of one key lock within about 3 cents (PipesHearEachOther).
+// Antiphase is what Abel, Bergweiler and Gerhard-Multhaupt measured side by
+// side (JASA 119, 2006): that measurement sets the sign. Assumed: both pipes' waves are as strong
+// (they stand on one wind), the neighbour's pressure enters the mouth as a
+// wave of its own size, reeds neither hear nor are heard (their tongues hold
+// their pitch), and a beating rank stands apart, as builders place one so
+// that it is not drawn into tune.
+// A locked pair is heard as two sources a row apart, so each row's sound is
+// that much later than the row in front: the rows fold back every fourth so
+// that the row buses stay short, which keeps a row's step to its neighbours.
+constexpr double kClearance = 0.02;
+constexpr int kHearRows = 2;
+constexpr int kLongestHearing = 48;    // samples: a ring's length less a hearing block
+
 // The flattest a pipe is ever made against its regulated pitch (a1 at 415 Hz
 // in meantone, a cold church and the worst drift come to 0.907), and what its
 // delay lines are given room for.
@@ -187,6 +212,11 @@ Engine::Engine() {
             const PipePlan plan = PlanPipe(rank, key);
             if (!plan.exists) continue;
             s.reed = plan.reed;
+            s.row = static_cast<std::uint8_t>(rank - kDivisionRank[static_cast<std::size_t>(division)]);
+            constexpr int fold[4] = { 0, 1, 2, 1 };
+            s.outDelay = static_cast<std::uint8_t>(plan.reed ? 0 : kRowSamples * fold[s.row & 3]);
+            s.apart = kRanks[rank].cents != 0.0f;
+            s.radius = static_cast<float>(0.5 * PipeDiameter(plan.flue.scale, plan.hz));
             const double metres = kDivisionMetres[division] + kRowMetres * (rank - kDivisionRank[static_cast<std::size_t>(division)])
                 + kOffRowMetres * Unit(PipePlace(rank, key), kOffRow);
             s.delay = static_cast<std::uint16_t>(std::lround(metres / kSoundSpeed * kPipeRate));
@@ -213,8 +243,11 @@ Engine::Engine() {
     active.reserve(static_cast<std::size_t>(kPipeCount));
     pending.reserve(static_cast<std::size_t>(4 * kPipeCount));
     scratch.assign(static_cast<std::size_t>(kPipeCount) * kChunk, 0.0f);
+    hearScratch.assign(static_cast<std::size_t>(kPipeCount) * kHearBlock, 0.0f);
+    toldRing.assign(flues.size() * kRingSize, 0.0f);
     for (auto& list : flueList) list.reserve(flues.size());
     for (auto& list : flueSound) list.reserve(flues.size());
+    for (auto& list : flueAt) list.reserve(flues.size());
     reedList.reserve(reeds.size());
     reedSound.reserve(reeds.size());
     float* next = arena.data();
@@ -254,7 +287,7 @@ Engine::Engine() {
 void Engine::Reset() {
     for (std::size_t i = 0; i < slots.size(); ++i) {
         Slot& s = slots[i];
-        s.active = s.resting = false;
+        s.active = s.resting = s.coupled = false;
         s.offered = s.share = 0.0f;
         s.lastDue = 0;
         if (s.index < 0) continue;
@@ -281,6 +314,8 @@ void Engine::Reset() {
         demand[d] = unrest[d] = unrestSlow[d] = 0.0;
         pressure[d] = 1.0f;
         for (auto& channel : bus[d]) channel.fill(0.0f);
+        for (auto& rows : rowBus[d])
+            for (auto& channel : rows) channel.fill(0.0f);
     }
     touch.fill(1.0f);
     for (Tremulant& t : tremulants) t.Reset();
@@ -546,6 +581,7 @@ bool Engine::Take(int index, float given) {
         FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
         pipe.Clear();
         pipe.wind = wind;
+        s.coupled = false;
     }
     Place(s);
     s.active = true;
@@ -781,6 +817,41 @@ void Engine::Tick() {
     }
     diag.pipes = static_cast<int>(speaking);
 
+    // Who hears whom, now that the speaking pipes are known.
+    for (const int index : active) {
+        Slot& s = slots[static_cast<std::size_t>(index)];
+        if (s.reed) continue;
+        const bool was = s.coupled;
+        s.coupled = false;
+        s.hears[0] = s.hears[1] = -1;
+        // A pipe without wind has no jet to be drawn along: it rings out
+        // alone, and comes to rest.
+        if (s.resting || s.apart || flues[static_cast<std::size_t>(s.index)].wind <= 0.0f) continue;
+        const int firstRank = kDivisionRank[s.division], endRank = kDivisionRank[static_cast<std::size_t>(s.division) + 1];
+        for (int side = 0; side < 2; ++side) {
+            for (int rows = 1; rows <= kHearRows; ++rows) {
+                const int rank = s.rank + (side == 0 ? -rows : rows);
+                if (rank < firstRank || rank >= endRank) break;
+                const Slot& near = slots[static_cast<std::size_t>(kRankFirst[static_cast<std::size_t>(rank)] + s.key)];
+                if (near.index < 0 || near.reed || !near.active || near.resting || near.apart
+                    || flues[static_cast<std::size_t>(near.index)].wind <= 0.0f)
+                    continue;
+                const double metres = Max(kRowMetres * rows, static_cast<double>(s.radius + near.radius) + kClearance);
+                const int after = Max(kRowSamples, static_cast<int>(metres / kSoundSpeed * kPipeRate + 0.5));
+                if (after <= kLongestHearing) {
+                    s.hears[side] = near.index;
+                    s.hearGain[side] = static_cast<float>(-1.0 / metres);
+                    s.hearDelay[side] = static_cast<std::uint8_t>(after);
+                    s.coupled = true;
+                }
+                break;
+            }
+        }
+        // What it told before anyone listened is not known.
+        if (s.coupled && !was)
+            for (int i = 0; i < kRingSize; ++i) toldRing[static_cast<std::size_t>(s.index) * kRingSize + static_cast<std::size_t>(i)] = 0.0f;
+    }
+
     // The wind is heard while the organ is played and a little after: the
     // blower's hum as it turns, the chests' hiss as they hold pressure.
     // The blower is heard coming up to speed and running down as well.
@@ -815,18 +886,28 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
     // first, four pipes of a kind at a time where there are four, and then
     // added to its division in the list's order.
     const auto add = [&](const Slot& s, const float* sound, int from) {
-        float* const busLeft = bus[s.division][0].data() + from;
-        float* const busRight = bus[s.division][1].data() + from;
+        float* busLeft = bus[s.division][0].data() + from;
+        float* busRight = bus[s.division][1].data() + from;
         const float gainLeft = s.reed ? reeds[static_cast<std::size_t>(s.index)].gainLeft : flues[static_cast<std::size_t>(s.index)].gainLeft;
         const float gainRight = s.reed ? reeds[static_cast<std::size_t>(s.index)].gainRight : flues[static_cast<std::size_t>(s.index)].gainRight;
+        // A row behind the front one is heard its distance later, through
+        // its own bus: every sample of that bus is then summed in one call
+        // and in the list's order, however the frames are cut.
+        if (s.outDelay > 0) {
+            auto& rows = rowBus[s.division][s.outDelay / kRowSamples - 1];
+            busLeft = rows[0].data() + from + s.outDelay;
+            busRight = rows[1].data() + from + s.outDelay;
+        }
         for (int i = 0; i < frames - from; ++i) {
             busLeft[i] += gainLeft * sound[i];
             busRight[i] += gainRight * sound[i];
         }
     };
-    // Open flues, flues with a pipe beyond a junction, and reeds.
+    // Open flues, flues with a pipe beyond a junction, either hearing
+    // neighbours or not, and reeds.
     for (auto& list : flueList) list.clear();
     for (auto& list : flueSound) list.clear();
+    for (auto& list : flueAt) list.clear();
     reedList.clear();
     reedSound.clear();
     const std::size_t count = active.size();
@@ -839,20 +920,86 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
             reedSound.push_back(sound);
         } else {
             FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
-            const std::size_t kind = pipe.upperLength > 0 ? 1 : 0;
+            const std::size_t kind = (pipe.upperLength > 0 ? 1 : 0) + (s.coupled ? 2 : 0);
             flueList[kind].push_back(&pipe);
             flueSound[kind].push_back(sound);
+            if (s.coupled) flueAt[kind - 2].push_back(j);
         }
     }
     for (std::size_t kind = 0; kind < 2; ++kind) {
         std::size_t done = 0;
 #if defined(OREGANA_FOUR)
         for (; done + 4 <= flueList[kind].size(); done += 4) {
-            if (kind == 0) FluePipe::RunFour<false>(flueList[kind].data() + done, flueSound[kind].data() + done, frames);
-            else FluePipe::RunFour<true>(flueList[kind].data() + done, flueSound[kind].data() + done, frames);
+            if (kind == 0) FluePipe::RunFour<false, false>(flueList[kind].data() + done, flueSound[kind].data() + done, frames);
+            else FluePipe::RunFour<true, false>(flueList[kind].data() + done, flueSound[kind].data() + done, frames);
         }
 #endif
         for (; done < flueList[kind].size(); ++done) flueList[kind][done]->Run(flueSound[kind][done], frames);
+    }
+    // The hearing flues go a hearing block at a time: no neighbour is nearer
+    // than a block of samples, so all that one hears in a block was told
+    // before it began, however the pipes are ordered or the frames are cut.
+    // A tick begins on a multiple of kChunk samples, so a chunk's place in a
+    // ring never wraps, and a ring's first block is kept again after its
+    // last, so nor does a block that is read.
+    if (!flueAt[0].empty() || !flueAt[1].empty()) {
+        for (int sub = 0; sub < frames; sub += kHearBlock) {
+            const int n = Min(kHearBlock, frames - sub);
+            const std::size_t at = static_cast<std::size_t>((now + static_cast<std::uint64_t>(sub)) & (kRing - 1));
+            for (const auto& places : flueAt) {
+                for (const std::size_t j : places) {
+                    const Slot& s = slots[static_cast<std::size_t>(active[j])];
+                    float* const heard = hearScratch.data() + j * kHearBlock;
+                    for (int i = 0; i < kHearBlock; ++i) heard[i] = 0.0f;
+                    for (int side = 0; side < 2; ++side) {
+                        if (s.hears[side] < 0) continue;
+                        const float* const told = toldRing.data() + static_cast<std::size_t>(s.hears[side]) * kRingSize
+                            + ((at + kRing - s.hearDelay[side]) & (kRing - 1));
+                        const float gain = s.hearGain[side];
+#if defined(OREGANA_FOUR)
+                        for (int i = 0; i < kHearBlock; i += 4) {
+                            Float4 sum, from;
+                            __builtin_memcpy(&sum, heard + i, sizeof sum);
+                            __builtin_memcpy(&from, told + i, sizeof from);
+                            sum += gain * from;
+                            __builtin_memcpy(heard + i, &sum, sizeof sum);
+                        }
+#else
+                        for (int i = 0; i < kHearBlock; ++i) heard[i] += gain * told[i];
+#endif
+                    }
+                }
+            }
+            for (std::size_t kind = 2; kind < 4; ++kind) {
+                const auto& places = flueAt[kind - 2];
+                const auto heardOf = [&](std::size_t m) { return hearScratch.data() + places[m] * kHearBlock; };
+                const auto toldOf = [&](std::size_t m) {
+                    return toldRing.data() + static_cast<std::size_t>(slots[static_cast<std::size_t>(active[places[m]])].index) * kRingSize + at;
+                };
+                std::size_t done = 0;
+#if defined(OREGANA_FOUR)
+                for (; done + 4 <= places.size(); done += 4) {
+                    float* sound[4];
+                    const float* heard[4];
+                    float* told[4];
+                    for (std::size_t l = 0; l < 4; ++l) {
+                        sound[l] = flueSound[kind][done + l] + sub;
+                        heard[l] = heardOf(done + l);
+                        told[l] = toldOf(done + l);
+                    }
+                    if (kind == 2) FluePipe::RunFour<false, true>(flueList[kind].data() + done, sound, n, heard, told);
+                    else FluePipe::RunFour<true, true>(flueList[kind].data() + done, sound, n, heard, told);
+                }
+#endif
+                for (; done < places.size(); ++done)
+                    flueList[kind][done]->Run(flueSound[kind][done] + sub, n, heardOf(done), toldOf(done));
+                if (at < kHearBlock)
+                    for (std::size_t m = 0; m < places.size(); ++m) {
+                        float* const told = toldOf(m);
+                        for (int i = 0; i < n; ++i) told[kRing + i] = told[i];
+                    }
+            }
+        }
     }
     std::size_t done = 0;
 #if defined(OREGANA_FOUR)
@@ -875,6 +1022,17 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
     }
     pending.erase(pending.begin(), pending.begin() + static_cast<std::ptrdiff_t>(arrived));
     now += static_cast<std::uint64_t>(frames);
+    for (std::size_t d = 0; d < kDivisions; ++d) {
+        for (auto& rows : rowBus[d]) {
+            for (std::size_t c = 0; c < 2; ++c) {
+                float* const row = rows[c].data();
+                for (int i = 0; i < frames; ++i) bus[d][c][static_cast<std::size_t>(i)] += row[i];
+                const int kept = static_cast<int>(rows[c].size()) - frames;
+                for (int i = 0; i < kept; ++i) row[i] = row[i + frames];
+                for (int i = kept; i < kept + frames; ++i) row[i] = 0.0f;
+            }
+        }
+    }
     for (int i = 0; i < frames; ++i) {
         const auto at = static_cast<std::size_t>(i);
         float sound[2];

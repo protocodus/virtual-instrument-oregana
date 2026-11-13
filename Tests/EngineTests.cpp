@@ -581,8 +581,8 @@ void FourPipesAreFourPipes() {
                 }
             }
             if (isReed) ReedPipe::RunFour(reeds, out, frames);
-            else if (kind == 1) FluePipe::RunFour<true>(flues, out, frames);
-            else FluePipe::RunFour<false>(flues, out, frames);
+            else if (kind == 1) FluePipe::RunFour<true, false>(flues, out, frames);
+            else FluePipe::RunFour<false, false>(flues, out, frames);
             for (std::size_t l = 0; l < 4; ++l)
                 same = same && std::memcmp(sound[l].data(), sound[l + 4].data(), static_cast<std::size_t>(frames) * sizeof(float)) == 0;
         }
@@ -1064,6 +1064,44 @@ void ExtremesStayFinite() {
 
 } // namespace
 
+// Neighbouring pipes hear each other: two of one key standing a row apart
+// and nearly in tune draw into one pitch and stop beating; further out of
+// tune they beat as before.
+void PipesHearEachOther() {
+    const auto ripple = [](int key, double& apart) {
+        Bench bench;
+        bench.Set(kTuning, 1.0);
+        bench.Draw({ kHwOctave8, kHwGamba8 });
+        apart = CentsBetween(bench.organ->PipeHz(2, key), bench.organ->PipeHz(1, key));
+        bench.organ->KeyDown(kHauptwerk, key, 80);
+        const Take take = bench.Play(8.0);
+        double low = 1.0e9, high = -1.0e9;
+        for (double t = 2.0; t < 7.95; t += 0.05) {
+            const double level = Db(take.Rms(t, t + 0.05));
+            low = Min(low, level);
+            high = Max(high, level);
+        }
+        return high - low;
+    };
+    // Tuning at 1 leaves the Octave and the Gamba up to 14 cents apart, a
+    // different distance on each key.
+    int near = 0, far = 0;
+    double mostLocked = 0.0, leastBeating = 1.0e9;
+    for (int key = 48; key <= 72; ++key) {
+        double apart = 0.0;
+        const double moved = ripple(key, apart);
+        if (Abs(apart) < 2.0) {
+            ++near;
+            mostLocked = Max(mostLocked, moved);
+        } else if (Abs(apart) > 4.0) {
+            ++far;
+            leastBeating = Min(leastBeating, moved);
+        }
+    }
+    Expect(near >= 3 && mostLocked < 1.0, "PipesHearEachOther", "neighbours within 2 cents sing as one, the level's largest swing in dB", mostLocked);
+    Expect(far >= 10 && leastBeating > 3.0, "PipesHearEachOther", "and over 4 cents apart they beat as before, the smallest swing in dB", leastBeating);
+}
+
 int main() {
     SilentUntilPlayed();
     PipesSoundAtTheirPitch();
@@ -1076,6 +1114,7 @@ int main() {
     Imperfections();
     MechanismIsHeard();
     FourPipesAreFourPipes();
+    PipesHearEachOther();
     EveryKeySounds();
     StopsSlide();
     RegistersSpeakApart();

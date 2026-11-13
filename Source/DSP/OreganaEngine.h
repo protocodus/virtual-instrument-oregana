@@ -137,6 +137,15 @@ private:
         float share = 0.0f;           // and the share that has reached it
         float gain = 0.0f;            // its regulated level
         float air = 0.0f;             // the wind it takes
+        // A flue pipe among its neighbours (OreganaEngine.cpp, kHearMetres).
+        std::uint8_t row = 0;         // its rank's row on the chest, from the division's first
+        std::uint8_t outDelay = 0;    // samples its sound is heard later for its row
+        bool apart = false;           // a beating rank stands away from the others
+        bool coupled = false;         // it hears a neighbour, and is heard
+        float radius = 0.0f;          // metres
+        std::int16_t hears[2] = { -1, -1 };   // the flues it hears, towards the front and the back: -1 none
+        float hearGain[2] = {};       // each one's sign and 1 / distance
+        std::uint8_t hearDelay[2] = {};   // and its sound's way here, samples
         float* buffer = nullptr;      // its delay lines, and the room each has
         int loopRoom = 0, jetRoom = 0, upperRoom = 0;
     };
@@ -194,11 +203,21 @@ private:
     // From the pipes to the listener.
     static constexpr int kChunk = FluePipe::kTick;
     std::array<std::array<std::array<float, kChunk>, 2>, kDivisions> bus {};
+    // The rows one and two steps behind the front, on their way to the bus.
+    static constexpr int kRowSamples = 17;   // a row's 12 cm at the pipes' rate
+    std::array<std::array<std::array<std::array<float, kChunk + 2 * kRowSamples>, 2>, 2>, kDivisions> rowBus {};
     // Each speaking pipe's sound for a chunk, made before any is added up,
     // and the pipes of each kind that are stepped four at a time.
     std::vector<float> scratch;
-    std::array<std::vector<FluePipe*>, 2> flueList;
-    std::array<std::vector<float*>, 2> flueSound;
+    // Flues by kind: with a pipe beyond a junction (+1), hearing neighbours (+2).
+    std::array<std::vector<FluePipe*>, 4> flueList;
+    std::array<std::vector<float*>, 4> flueSound;
+    std::array<std::vector<std::size_t>, 2> flueAt;    // the hearing flues' places among the speaking pipes
+    // The last kRing samples of what each flue tells its neighbours, by the
+    // sample's number, with the first block again after the last; and each
+    // hearing flue's block of what it hears.
+    static constexpr int kRing = 64, kHearBlock = 16, kRingSize = kRing + kHearBlock;
+    std::vector<float> toldRing, hearScratch;
     std::vector<ReedPipe*> reedList;
     std::vector<float*> reedSound;
     int untilTick = 0;
