@@ -70,6 +70,14 @@ and plenty.
   which also found a weakness of the principals that voicing cannot mend
   (Known gaps). Every pipe was regulated again and fourteen presets' Volume
   trims moved by 1 dB.
+- **A preset's building follows its size** (owner, 2026-11-13: the smaller
+  the organ, the less reverberation). Room, Church Size, Decay, Decay Bass
+  and Width are set from the number of stops a preset draws: three stops
+  stand in a chapel (1.3 s), fifteen in the church as it loads (4.5 s),
+  twenty-two and more in a cathedral (8 s). A single stop no longer rings
+  as long as full organ, the Tutti rings longer than it did, and Cathedral
+  Fonds, fifteen stops, lost its long nave. The Volume trims were read
+  again.
 - A session sounds a little different: locked pipes are steadier and the
   early reflections changed. No control was added or renamed.
 
