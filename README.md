@@ -41,6 +41,32 @@ and plenty.
 
 ## Version history
 
+### 0.5.0 — 2026-11-13 — pipes that hear each other, divisions in their places
+
+- **Neighbouring flue pipes hear each other.** A flue hears the nearest
+  speaking flues of its own key up to two rows away on the chest. Two that
+  are within about 3 cents pull into one pitch and stop beating (a ripple
+  of 0.1 to 0.3 dB where it was 5 dB); further apart they beat as before.
+  Ranks meant to beat (the Voix celeste) and the reeds stay out of it.
+- **Each division sounds from where it stands**: the Positiv before and
+  below the Hauptwerk, the Récit above and behind it, the Pedal behind. The
+  church reflects each from its own place, and a rank further back on its
+  chest is heard a third of a millisecond later for each row.
+- **More of the machine is heard** on Action and Wind Noise: a coupled key
+  knocks again at each chest it pulls, a pedal key lands lower and longer,
+  the swell's shutters knock at the ends of their travel, the tremulant's
+  valve thumps once a beat, a slider rubs while it travels, and the blower
+  is heard starting and running down.
+- **About half the CPU**: the Tutti demo's worst block went from 37 % of a
+  core to 21 %, the Plenum's from 14 % to 9 %, with the same samples before
+  the changes above.
+- **The first comparison with a recorded organ**
+  ([Docs/research/benchmark-burea-2026-11-13.md](Docs/research/benchmark-burea-2026-11-13.md)).
+  It changed nothing in the engine and found two things voicing cannot mend
+  (Known gaps).
+- A session sounds a little different: locked pipes are steadier and the
+  early reflections changed. No control was added or renamed.
+
 ### 0.4.0 — 2026-11-12 — twenty organs
 
 - **Twenty organ presets** after the 17 registrations: five chapel organs
@@ -234,6 +260,17 @@ driven by the wind they are given:
   1.5 it is 24 cents sharp and louder. A little under 0.6 the flues stop
   speaking, which is where the range ends.
 
+- *Pipes hear each other.* A flue pipe's mouth takes in the sound of its
+  neighbours. Each flue hears the nearest speaking flue of its own key up to
+  two rows before and behind it on the chest, at a strength that falls with
+  the distance and grows with the neighbour's width. Two pipes within about
+  3 cents of each other pull into one pitch, as close ranks on a real chest
+  do: an Octave 8' and a Gamba 8' 2 cents apart ripple by under 1 dB, and
+  4 cents apart they beat by more than 3 dB (`PipesHearEachOther`). The
+  Voix celeste, the reeds and pipes without wind neither hear nor are heard.
+  The strength is an estimate from the pipes' sizes and spacing, not a
+  measured coupling.
+
 None of these figures is measured on an organ. The times, the slack and the
 supply's sizes are estimates from written accounts of such actions and
 winding; the pitch and level figures are what the pipe models then do.
@@ -253,6 +290,13 @@ organ sounds:
 | Decay Bass | the decay below 250 Hz against that, from half to twice | 1.3 |
 | Decay Treble | the decay at the very top against it, 0.1 to 0.6: the air's share | 0.2, which leaves 2.7 s at 4 kHz |
 | Width | from one field for both ears to the organ's breadth and two fields a head apart | 0.8 |
+
+The divisions stand apart in it. The Hauptwerk is the organ's place above;
+the Positiv stands half a metre before it and 2 m lower, the Récit 2.5 m
+higher and as far behind as the wall allows, the Pedal a metre behind, and
+each has its own 33 reflections. They share the reverberant field. On the
+chest a rank two rows back is heard 0.7 ms after the front one. The places
+are typical of such a case, not a measured organ's.
 
 A new size or width fades in over 50 ms from the sound already in the
 church, so nothing clicks and the tail's pitch does not bend. It is a voiced
@@ -280,8 +324,8 @@ and each pipe keeps its own share of it whatever is played:
 | Temperature | flue pipes follow the air, 2.95 cents a degree, and reeds do not, so the reeds go out against the flues | 0: the 20 C the organ was tuned at |
 | Voicing | every pipe off its rank's level (up to 3 dB), speech, chiff and wind noise | 0.3 |
 | Wind | how far the reservoirs' sag, dip and bounce reach the pipes, with a slow unrest of the pressure | 0.5: as modelled |
-| Wind Noise | the blower's hum, the chests' hiss and the bellows' thud | 0.2 |
-| Action | how worn the action is: the knocks of keys, pallets and stop knobs, and the couplers' lost motion | 0.25 |
+| Wind Noise | the blower's hum (lower while it starts or runs down), the chests' hiss and the bellows' thud | 0.2 |
+| Action | how worn the action is: the knocks of keys, coupled pallets, pedals, stop knobs, the swell's shutters and the tremulant's valve, a slider's rub, and the couplers' lost motion | 0.25 |
 | Dead Pipes | pipes that do not speak, up to one in sixteen | none |
 | Ciphers | pallets that hang part open when their key is let go, up to one key in 25: the note whines on until its stops go in or all sound is cut | none |
 | Runnings | wind leaking into the channel a whole tone away, whose pipes whisper along, up to one channel in twelve | none |
@@ -310,9 +354,9 @@ it still brings on the whole stop list, a chapel organ's too.
   for a main build. The Rack Extension over it is development source in the
   Rack repository, not yet built with the SDK.
 - **CPU is above the portfolio's 10 % target for large registrations.** One
-  256-frame block takes at most 4 % of a core on a single stop, 14 % on the
-  Plenum demo (198 pipes) and 37 % on the Tutti demo (468 pipes); sixteen
-  keys of full organ take 60 %. Development container, GCC 13, Release, one
+  256-frame block takes at most 4 % of a core on a single stop, 9 % on the
+  Plenum demo (198 pipes) and 21 % on the Tutti demo (468 pipes); sixteen
+  keys of full organ take 37 %. Development container, GCC 13, Release, one
   thread. The plan is in
   [Docs/plans/cpu-optimisation-2026-11-12.md](Docs/plans/cpu-optimisation-2026-11-12.md).
 - **The engine is 48 kHz only.** At another rate `OreganaInstrument.h`
@@ -334,13 +378,33 @@ it still brings on the whole stop list, a chapel organ's too.
   for each 1 % of pressure, so it wavers under a heavy registration.
 - **A reed's resonator does not follow the temperature.** In a real reed the
   warming resonator pulls the pitch up a little; here a reed does not move
-  with Temperature at all.
-- **Nothing is measured from an organ.** Scales, voicing, winding, the swell
-  box, the church and the noises are typical values and estimates, stated as
-  such beside the code. No comparison against recordings has been made.
-- **The pipes do not hear each other.** Neighbouring pipes neither pull each
-  other's pitch nor share a chest's resonance, and the church is one voiced
-  room.
+  with Temperature at all. Letting the resonator's air warm was tried
+  (2026-11-13) and taken out: the model's trumpets then moved 27 of the
+  flues' 29.5 cents for 10 degrees, because here the resonator and not the
+  tongue sets a reed's pitch, which is the reverse of a real reed.
+- **The trumpet is too dull.** Against a recorded Trumpet 8' the model's
+  eighth harmonic is 20 to 27 dB weaker in the bass and tenor
+  ([benchmark](Docs/research/benchmark-burea-2026-11-13.md)). The tongue
+  swings almost sinusoidally where a real one rolls shut and stays shut for
+  much of its cycle; more flow does not mend it.
+- **A principal's second harmonic is about 10 dB too weak** against the same
+  organ's Principal 8'. The jet swings symmetrically about a small offset;
+  a larger offset stops the pipe speaking before it gives the harmonic.
+- **Real pipes are noisier and less even** than these: 9 to 16 dB more of a
+  recorded pipe's power lies outside its harmonics, and the notes of a
+  recorded octave differ by 1.4 to 5 dB where these differ by under 1 dB as
+  loaded (part of the recorded spread is the room).
+- **Nothing is fitted to an organ.** Scales, voicing, winding, the swell
+  box, the church, the divisions' places, the pipes' hearing and the noises
+  are typical values and estimates, stated as such beside the code. One
+  organ has been compared (the benchmark above) and nothing was changed to
+  match it.
+- **The listener cannot move** across the church or choose a seat off the
+  axis: the divisions' places are heard from the one seat Room moves along
+  the nave.
+- **The new sound has not been listened to.** The pipes' hearing, the
+  divisions' places and the mechanism's noises were added with A against B
+  listening sets that no one has yet judged.
 
 ## Build
 

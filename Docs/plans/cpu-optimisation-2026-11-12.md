@@ -46,6 +46,34 @@ These are development-machine figures, not Reason or DAW CPU.
    noise generator, and pipes that ring far below audibility for seconds
    before they are let go (a 32' pipe's loop takes long to fall 120 dB).
 
+## Where it stands after 0.5.0 (2026-11-13)
+
+The same command, container and compiler:
+
+| Render | Worst block at 0.4.0 | At 0.5.0 |
+| --- | --- | --- |
+| Principal 8 demo | 1.7 % | 2.4 % |
+| Trompete demo | 4.5 % | 3.5 % |
+| Plenum demo | 14.6 % | 8.7 % |
+| Tutti demo | 38.6 % | 20.8 % |
+| Stress phrase, Plenum | 20.7 % | 13.6 % |
+| Stress phrase, Tutti | 65.9 % | 37.3 % |
+
+Step 2 is done: flues and reeds run four to an instruction (`RunFour`), with
+the same bits as one at a time. The church worked its 33 reflections out
+sample by sample; it now does sixteen samples ahead at once, and it reflects
+four divisions instead of one. A single stop costs a little more than it did
+because of that and of the pipes' hearing (a neighbour's sound is gathered
+every 16 samples); a large registration costs about half.
+
+A profile of the Tutti demo (callgrind, instructions, before the church's
+last change): the church 30 %, the flues' kernels 35 %, the reeds' 10 %, the
+tick's summing and hearing 18 %, the tick's bookkeeping 3.5 %.
+
+What is left, in order: the church's 32 lines stepped four at a time; the
+adds into the buses and the hearing's gather; steps 3 and 4 above, which
+change the sound and need a listening set.
+
 ## Not on the table
 
 Replacing a settled pipe by a stored period of its own sound, or sharing one

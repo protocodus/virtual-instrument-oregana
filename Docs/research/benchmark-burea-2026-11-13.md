@@ -148,4 +148,4 @@ Measured on the raw files, so only as good as the set's own levelling:
    Rendering Oregana through its church at the microphone's distance would
    be the comparison, and the microphone's distance is not known.
 
-The first two are now Known gaps in the README.
+The first two, the noise and the evenness are Known gaps in the README.
