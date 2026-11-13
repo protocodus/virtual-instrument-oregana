@@ -942,6 +942,23 @@ void RepeatedKeysDoNotClick() {
     Expect(brief < 2.0, "RepeatedKeysDoNotClick", "nor does a note of 1 to 6 ms, times", brief);
 }
 
+void QuietRegistrationDoesNotLiftTheLoud() {
+    // Tutti to Voix celeste under a held chord: the quiet registration's
+    // Volume is 10 dB higher, and it must not arrive before Tutti's stops
+    // have gone in.
+    Controls controls = kPresets[16].ToControls();   // Tutti
+    controls[kBlower] = controls[kAction] = 0.0;
+    Bench bench(controls);
+    for (int note : { 43, 55, 60, 64, 67 }) bench.organ->KeyDown(kHauptwerk, note, 100);
+    bench.Play(1.5);
+    const double loud = bench.Play(0.5).Peak();
+    controls = kPresets[4].ToControls();   // Voix celeste
+    controls[kBlower] = controls[kAction] = 0.0;
+    bench.organ->SetControls(controls);
+    const double change = bench.Play(0.5).Peak();
+    Expect(change < 1.3 * loud, "QuietRegistrationDoesNotLiftTheLoud", "the change peaks no higher than Tutti did, times", change / loud);
+}
+
 void CrescendoIsSmooth() {
     // The roller thrown from nothing to full organ: the organ swells over
     // most of a second, never by a step.
@@ -1538,6 +1555,7 @@ int main() {
     FluesWaver();
     ReedsWaver();
     RepeatedKeysDoNotClick();
+    QuietRegistrationDoesNotLiftTheLoud();
     CrescendoIsSmooth();
     ChurchIsThePlayers();
     BlockPartitionInvariance();

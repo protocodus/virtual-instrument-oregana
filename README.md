@@ -93,6 +93,12 @@ and plenty.
   puff of wind with a step, a click as large as the pipe's whole sound; a
   note under 10 ms ended its puff with the same step. The puff now begins
   from nothing and dies with the foot (`RepeatedKeysDoNotClick`).
+- **Fixed: a quiet patch chosen under a held chord no longer swells first.**
+  A quiet registration's Volume, up to 10 dB above a loud one's, arrived in
+  20 ms while the loud stops took 0.15 s to go in, so Tutti to Voix celeste
+  peaked 6 dB over Tutti for a moment. A rising Volume now takes about 0.2 s
+  (2 dB over, `QuietRegistrationDoesNotLiftTheLoud`); a falling one is as
+  quick as before.
 - **Brighter trumpets.** The Trompetes, the Posaunes, the Trompette and the
   Clairon pass three times the wind under their open tongues, so the flow is
   cut only in the short time a tongue is nearly shut, as in a real reed. The

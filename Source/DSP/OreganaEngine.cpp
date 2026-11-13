@@ -169,6 +169,10 @@ constexpr double kCouplerSeconds = 0.016;
 constexpr float kBoxPole = 0.0634f;
 constexpr double kBoxLowDb = -8.0, kBoxHighDb = -24.0;
 constexpr float kGainStep = 0.001f;   // output gains glide in about 20 ms
+// A rising Volume takes about 0.2 s, as long as the sliders: a quiet
+// registration's higher trim must not lift the loud one's stops while they
+// are still going in.
+constexpr float kGainRise = 0.0001f;
 
 // The noises at Action and Blower 1: a key's knock peaks near -38 dBFS and
 // the wind noise sits at -50 dBFS RMS, at the pipes (estimates).
@@ -1211,8 +1215,8 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
         float roomLeft, roomRight;
         nave.Process(sound[0], sound[1], roomLeft, roomRight, apart);
         nave.Direct(sound[0], sound[1]);
-        dry += kGainStep * (dryTarget - dry);
-        wet += kGainStep * (wetTarget - wet);
+        dry += (dryTarget > dry ? kGainRise : kGainStep) * (dryTarget - dry);
+        wet += (wetTarget > wet ? kGainRise : kGainStep) * (wetTarget - wet);
         std::array<float, 2> frame { dry * sound[0] + wet * roomLeft, dry * sound[1] + wet * roomRight };
         output.Process(frame);
         left[i] = frame[0];
