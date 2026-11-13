@@ -29,7 +29,8 @@ constexpr double kRowMetres = 0.12, kOffRowMetres = 1.5;
 constexpr double kDivisionMetres[kDivisions] = { 0.5, 0.0, 3.0, 1.5 };
 // And at its own height against the Hauptwerk: the Positiv below it at the
 // gallery's rail, the Recit's box above and behind. Estimates too. The
-// church reflects each division from where it stands (Nave::Stand).
+// church reflects each division from where it stands (Nave::Stand); its wall
+// is 2 m behind the Hauptwerk, so the Recit's box is taken to stand against it.
 constexpr double kDivisionHigher[kDivisions] = { 0.0, -2.0, 2.5, 0.0 };
 
 // Neighbouring flue pipes hear each other (Mitnahme). The pipes of one key

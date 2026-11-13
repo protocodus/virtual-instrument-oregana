@@ -915,6 +915,19 @@ void ChurchIsThePlayers() {
             if (left != 0.0f) came = i;
         }
         Expect(came == 109, "ChurchIsThePlayers", "a division nearer and lower is reflected by its own paths, samples", came);
+        // One asked behind the wall stands half a metre before it, and the
+        // wall's reflection is the first: a metre further, 0.91 m as the
+        // listener sees it.
+        apart->Stand(2, -2.5, 2.5);
+        apart->Clear();
+        came = -1;
+        for (int i = 0; i < 2000 && came < 0; ++i) {
+            const float back[Nave::kSources - 1] = { 0.0f, i == 0 ? 1.0f : 0.0f, 0.0f };
+            float left, right;
+            apart->Process(back[1], back[1], left, right, back);
+            if (left != 0.0f) came = i;
+        }
+        Expect(came == 127, "ChurchIsThePlayers", "a division at the back wall is first returned by that wall, samples", came);
     }
 
     // The time a band's tail takes to fall 60 dB: a second of sixteen tones

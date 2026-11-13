@@ -78,6 +78,7 @@ public:
     // head's width at the speed of sound.
     static constexpr double kHeadSamples = 30.0;
     static constexpr int kEarlySize = 16384;
+    static constexpr int kAhead = 16;   // samples: under the soonest reflection's delay in the smallest church
     // The air and the people take the treble off a reflection and off what
     // enters the reverberant field: one-poles at 5 and 6 kHz, voiced.
     static constexpr double kEarlyCorner = 5000.0, kLateCorner = 6000.0;
@@ -140,8 +141,12 @@ public:
     }
 
     // Source `source` stands `forward` metres nearer the listener and
-    // `higher` metres above the first source's place. Before Clear.
-    void Stand(int source, double forward, double higher) { places[static_cast<std::size_t>(source)] = { forward, higher }; }
+    // `higher` metres above the first source's place. Before Clear. None
+    // stands behind the wall: one asked further back than half a metre
+    // before it stands there.
+    void Stand(int source, double forward, double higher) {
+        places[static_cast<std::size_t>(source)] = { Max(forward, 0.5 - kFromWall), higher };
+    }
 
     void Clear() {
         for (std::size_t i = 0; i < kLines; ++i) {
@@ -157,6 +162,7 @@ public:
         for (auto& buffer : diffuserBuffer) buffer.fill(0.0f);
         for (auto& buffer : earlyBuffer) buffer.fill(0.0f);
         earlyQuiet.fill(kEarlySize);
+        reflected = {};
         write = 0;
         untilTurn = 0;
         earlyLeft = earlyRight = late = 0.0f;
@@ -184,10 +190,18 @@ public:
             untilTurn = kTurn;
         }
         --untilTurn;
-        if (fade >= 1.0f && (asked.size != shapes[1].size || asked.width != shapes[1].width)) {
-            shapes[0] = shapes[1];
-            Build(shapes[1], asked);
-            fade = 0.0f;
+        // The reflections are worked out kAhead samples at a time: none comes
+        // sooner than that after its sound, so all they need is stored. A new
+        // shape comes in at such a step.
+        const std::size_t ahead = static_cast<std::size_t>(write & (kAhead - 1));
+        if (ahead == 0) {
+            if (fade >= 1.0f && (asked.size != shapes[1].size || asked.width != shapes[1].width)) {
+                shapes[0] = shapes[1];
+                Build(shapes[1], asked);
+                fade = 0.0f;
+            }
+            Reflect(shapes[1], reflected[0]);
+            if (fade < 1.0f) Reflect(shapes[0], reflected[1]);
         }
         const bool fading = fade < 1.0f;
 
@@ -215,11 +229,9 @@ public:
             Hear(source, from);
         }
         Hear(0, first);
-        float reflectedLeft = 0.0f, reflectedRight = 0.0f;
-        Reflect(shapes[1], reflectedLeft, reflectedRight);
+        float reflectedLeft = reflected[0][0][ahead], reflectedRight = reflected[0][1][ahead];
         if (fading) {
-            float beforeLeft = 0.0f, beforeRight = 0.0f;
-            Reflect(shapes[0], beforeLeft, beforeRight);
+            const float beforeLeft = reflected[1][0][ahead], beforeRight = reflected[1][1][ahead];
             reflectedLeft = beforeLeft + fade * (reflectedLeft - beforeLeft);
             reflectedRight = beforeRight + fade * (reflectedRight - beforeRight);
             fade += 1.0f / kFadeSamples;
@@ -320,7 +332,8 @@ private:
                     // How far to one side it arrives from: the far ear hears
                     // it later and weaker.
                     const double aside = asked.width * across / path, far = aside < 0.0 ? -aside : aside;
-                    const int near = static_cast<int>(samples + 0.5), late = static_cast<int>(samples + kHeadSamples * far + 0.5);
+                    const int near = Max(kAhead, static_cast<int>(samples + 0.5));
+                    const int late = Max(kAhead, static_cast<int>(samples + kHeadSamples * far + 0.5));
                     const auto strong = static_cast<float>(level), weak = static_cast<float>(level * (1.0 - far));
                     reflections[static_cast<std::size_t>(count++)] =
                         aside < 0.0 ? Reflection { near, late, strong, weak } : Reflection { late, near, weak, strong };
@@ -330,7 +343,11 @@ private:
     // A source's sound goes into its own store; one that has been silent
     // for the store's whole length holds only zeros and is passed over.
     void Hear(std::size_t source, float sound) {
-        earlyBuffer[source][static_cast<std::size_t>(write & (kEarlySize - 1))] = sound;
+        const auto at = static_cast<std::size_t>(write & (kEarlySize - 1));
+        earlyBuffer[source][at] = sound;
+        // The store's first samples are kept again after its last, so that
+        // kAhead samples from any place in it lie in a row.
+        if (at < kAhead) earlyBuffer[source][at + kEarlySize] = sound;
         earlyQuiet[source] = sound != 0.0f ? 0 : Min(earlyQuiet[source] + 1, kEarlySize);
     }
 
@@ -345,16 +362,33 @@ private:
         return older + between * (newer - older);
     }
 
-    void Reflect(const Shape& shape, float& left, float& right) const {
+    // The next kAhead samples of a shape's reflections, each ear's.
+    void Reflect(const Shape& shape, std::array<std::array<float, kAhead>, 2>& ears) const {
+        ears[0].fill(0.0f);
+        ears[1].fill(0.0f);
         for (std::size_t source = 0; source < kSources; ++source) {
             if (earlyQuiet[source] >= kEarlySize) continue;
-            const auto& buffer = earlyBuffer[source];
+            const float* const buffer = earlyBuffer[source].data();
             for (int i = 0; i < shape.count; ++i) {
                 const Reflection& r = shape.reflections[source][static_cast<std::size_t>(i)];
-                left += r.leftGain * buffer[static_cast<std::size_t>((write - r.left) & (kEarlySize - 1))];
-                right += r.rightGain * buffer[static_cast<std::size_t>((write - r.right) & (kEarlySize - 1))];
+                Add(ears[0].data(), r.leftGain, buffer + ((write - r.left) & (kEarlySize - 1)));
+                Add(ears[1].data(), r.rightGain, buffer + ((write - r.right) & (kEarlySize - 1)));
             }
         }
+    }
+
+    static void Add(float* sum, float gain, const float* from) {
+#if defined(OREGANA_FOUR)
+        for (int i = 0; i < kAhead; i += 4) {
+            Float4 to, add;
+            __builtin_memcpy(&to, sum + i, sizeof to);
+            __builtin_memcpy(&add, from + i, sizeof add);
+            to += gain * add;
+            __builtin_memcpy(sum + i, &to, sizeof to);
+        }
+#else
+        for (int i = 0; i < kAhead; ++i) sum[i] += gain * from[i];
+#endif
     }
 
     // The fast Walsh-Hadamard transform, unscaled.
@@ -395,7 +429,8 @@ private:
     std::array<float, kLines> airIn {}, airOut {}, shelfOut {}, offset {}, offsetStep {};
     std::array<double, kLines> driftCos {}, driftSin {}, turnCos {}, turnSin {};
     std::array<std::array<float, kDiffuserSize>, 4> diffuserBuffer {};
-    std::array<std::array<float, kEarlySize>, kSources> earlyBuffer {};
+    std::array<std::array<float, kEarlySize + kAhead>, kSources> earlyBuffer {};
+    std::array<std::array<std::array<float, kAhead>, 2>, 2> reflected {};   // the shape heard and the one fading out, each ear
     std::array<int, kSources> earlyQuiet {};
     std::array<Place, kSources> places {};
     // The shape fading out and the one heard; `fade` is how far the second
