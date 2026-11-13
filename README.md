@@ -41,6 +41,22 @@ and plenty.
 
 ## Version history
 
+### 0.6.2 — 2026-11-13 — forty registrations by country and region
+
+- **Forty more presets** after the organs (owner, 2026-11-13), five for each
+  of eight schools: Germany (the north's choruses, reed consort and gapped
+  flutes), Saxony (the builders' Pleno, Cornet and Tertian combinations and
+  the 8' stops together), Bohemia (the Copulas, the Salicional, no reeds),
+  the Netherlands (the Prestant alone, the psalms' full organ), France (the
+  Plein jeu, Fonds and Cromorne at 415 Hz, the symphonic organ and its Grand
+  choeur), Italy (the Principale and the ripieno's ranks on bellows), Spain
+  (the Flautado, lleno, Corneta, nasardos and the battle trumpets) and
+  England (the Diapasons and the voluntaries without pedals, the Victorian
+  organ with its Swell). Each draws this organ's stops under their names
+  here, with a temperament, pitch and wind typical of the school: none
+  copies one organ, and none is a measurement. Their Volume trims are
+  `RenderOregana --levels`'s. No earlier preset changed.
+
 ### 0.6.1 — 2026-11-13 — the mod wheel is the crescendo roller
 
 - **The mod wheel turns the crescendo roller** for a front end with one
