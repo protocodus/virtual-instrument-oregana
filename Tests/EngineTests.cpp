@@ -847,6 +847,33 @@ void PressureBendsPitch() {
     Expect(cents[2] > 3.0 && cents[2] < 60.0 && level[2] > level[1] + 1.0, "PressureBendsPitch", "on half as much again it is sharp and loud, cents", cents[2]);
 }
 
+// How far a held note's level wanders, dB RMS over 200 ms windows: slower than
+// the turbulence in its tone.
+double Wander(const Take& take, double from, double to) {
+    double sum = 0.0, squares = 0.0;
+    int count = 0;
+    for (double t = from; t + 0.2 <= to; t += 0.2, ++count) {
+        const double level = Db(take.Rms(t, t + 0.2));
+        sum += level;
+        squares += level * level;
+    }
+    return std::sqrt(Max(squares / count - (sum / count) * (sum / count), 0.0));
+}
+
+void FluesWaver() {
+    double wander[2];
+    int at = 0;
+    for (double wind : { 0.0, 0.5 }) {
+        Bench bench;
+        bench.Set(kWind, wind);
+        bench.Draw({ kHwOctave8 });
+        bench.organ->KeyDown(kHauptwerk, 60, 80);
+        wander[at++] = Wander(bench.Play(9.0), 1.0, 9.0);
+    }
+    Expect(wander[1] > 0.03 && wander[1] < 0.3, "FluesWaver", "a held flue's level wanders as a recorded one's, dB RMS", wander[1]);
+    Expect(wander[0] < 0.5 * wander[1], "FluesWaver", "and with Wind at 0 it is the turbulence's alone", wander[0]);
+}
+
 void CrescendoIsSmooth() {
     // The roller thrown from nothing to full organ: the organ swells over
     // most of a second, never by a step.
@@ -1440,6 +1467,7 @@ int main() {
     CouplersPullLate();
     WindSupplies();
     PressureBendsPitch();
+    FluesWaver();
     CrescendoIsSmooth();
     ChurchIsThePlayers();
     BlockPartitionInvariance();

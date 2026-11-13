@@ -84,6 +84,24 @@ constexpr int kKeyOfC = kOrganC - kFirstNote;
 // The pressure's slow unrest: 0.3 % RMS as modelled (Wind at 0.5), noise
 // through two one-poles at 1 Hz, whose output is 0.0186 RMS.
 constexpr double kUnrest = 0.16, kUnrestPole = 0.0042;
+// A flue's own unrest. A held pipe is not steady: on a recorded organ the
+// fundamental of a single principal or flute wanders some 0.8 cents and
+// 0.14 dB RMS, evenly from 0.2 to 10 Hz and falling above, and where two
+// stops sound on one key each wanders by itself (the pitch tracks of a
+// principal and the flute an octave above it are unrelated, 0.04, where a
+// pipe's own harmonics follow each other, 0.83). So it is the pipe's jet and
+// not the division's wind (Verge et al., "Jet formation and jet velocity
+// fluctuations in a flue organ pipe", JASA 95, 1119, 1994, on the jet's
+// velocity). Cents and dB stand as 7 to 1, as they do for a change of the
+// foot's pressure here (0.55 cents and 0.08 dB for 1 %), so it is taken as
+// that: each pipe's wind through noise under kWaverHz, kWaverDepth RMS with
+// the Wind as modelled. Set by that recording and the measurement in
+// Tools/benchmark_steadiness.py, which reads 0.7 cents and 0.09 dB here; the
+// reeds, which the recording does not hold, have none.
+constexpr double kWaverHz = 8.0, kWaverDepth = 0.015;
+const float kWaverPole = static_cast<float>(1.0 - std::exp(-kTwoPi * kWaverHz * kStepSeconds));
+// Noise even in -1 .. 1 (0.577 RMS) through that pole leaves sqrt(pole / (2 - pole)) of it.
+const float kWaverGain = static_cast<float>(kWaverDepth / (0.57735 * std::sqrt(kWaverPole / (2.0 - kWaverPole))));
 // A channel's pipes share one pallet: with every stop drawn each gets 3 %
 // less pressure than a stop alone, falling with the square of the wind taken.
 constexpr float kRobbing = 0.03f;
@@ -342,6 +360,8 @@ void Engine::Reset() {
         if (s.index < 0) continue;
         // Each pipe's turbulence is its own.
         const std::uint32_t seed = Hash(static_cast<std::uint32_t>(PipePlace(s.rank, s.key)) + 0x51ED270Bu) | 1u;
+        s.waver = 0.0f;
+        s.waverRandom = Hash(seed) | 1u;
         if (s.reed) {
             reeds[static_cast<std::size_t>(s.index)].Clear();
             reeds[static_cast<std::size_t>(s.index)].random = seed;
@@ -815,6 +835,7 @@ void Engine::Tick() {
     rub = static_cast<float>(kRubLevel * controls[kAction] * Min(moving, 3) / 3.0);
 
     const double live = 2.0 * controls[kWind], depth = 0.01 * controls[kTremulantDepth];
+    const float waverDepth = kWaverGain * static_cast<float>(live);
 
     // The supply (kSpinUp and below): what it holds for every division.
     const int supply = static_cast<int>(controls[kWindSupply]);
@@ -882,7 +903,8 @@ void Engine::Tick() {
                 if (silent && s.share > 0.0f) pipe.Clear();
             } else {
                 FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
-                pipe.wind = wind;
+                s.waver += kWaverPole * (NextNoise(s.waverRandom) - s.waver);
+                pipe.wind = wind * (1.0f + waverDepth * s.waver);
                 pipe.Tick(stretch);
                 demand[s.division] += pipe.air * Sqrt(static_cast<double>(pipe.foot));
                 silent = pipe.Silent();

@@ -48,7 +48,8 @@
 //   Voicing      every pipe off its rank's level (up to 3 dB), speech, chiff
 //                and wind noise
 //   Wind         how far the reservoirs' sag, dip and bounce reach the pipes,
-//                with a slow unrest of the pressure itself
+//                with a slow unrest of the pressure itself, and how far
+//                each flue's own jet wavers
 //   Wind Noise   the blower's hum, the chests' hiss and the bellows' thud
 //   Action       the keys' and stop knobs' knocks (Mechanics.h), and the
 //                couplers' lost motion: none at 0, up to 36 ms at 1
@@ -142,6 +143,8 @@ private:
         float share = 0.0f;           // and the share that has reached it
         float gain = 0.0f;            // its regulated level
         float air = 0.0f;             // the wind it takes
+        float waver = 0.0f;           // a flue's own unrest (OreganaEngine.cpp, kWaverDepth)
+        std::uint32_t waverRandom = 1u;
         // A flue pipe among its neighbours (OreganaEngine.cpp, kHearMetres).
         std::uint8_t row = 0;         // its rank's row on the chest, from the division's first
         std::uint8_t outDelay = 0;    // samples its sound is heard later for its row

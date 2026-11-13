@@ -78,6 +78,13 @@ and plenty.
   ([Ilmenau](Docs/research/benchmark-ilmenau-2026-11-13.md),
   [Bureå](Docs/research/benchmark-burea-2026-11-13.md)). Soft flutes and
   single principals are airier; a full chorus changes little.
+- **A held pipe is no longer perfectly steady.** Each flue's own wind wavers
+  a little, as its jet does: a held note wanders some 0.7 cents and 0.09 dB,
+  where a recorded principal or flute wanders 0.8 cents and 0.14 dB, and no
+  two pipes wander together. It follows the Wind control and is gone at 0.
+  The reeds have none
+  ([Docs/research/known-gaps-2026-11-13.md](Docs/research/known-gaps-2026-11-13.md),
+  which also holds the research on every gap below).
 - **Brighter trumpets.** The Trompetes, the Posaunes, the Trompette and the
   Clairon pass three times the wind under their open tongues, so the flow is
   cut only in the short time a tongue is nearly shut, as in a real reed. The
@@ -262,7 +269,10 @@ sags the pressure by 2 to 3.5 %, a full chord's attack dips it by 6 to 9 %,
 and it bounces back at 3.8 to 6.5 Hz, the Pedal's large reservoir slowest. Every
 pipe's pitch and level follow, because the pipes are driven by that pressure
 and nothing else. The pipes of one key share a pallet, so a key with every
-stop drawn gives each pipe a little less. The Positiv and the Recit have a
+stop drawn gives each pipe a little less. The pressure of a division has a
+slow unrest of 0.3 %, and each flue's own wind wavers by 1.5 % under 8 Hz,
+its own and no other pipe's: that figure is set by a recorded organ's held
+notes (`Tools/benchmark_steadiness.py`). The Positiv and the Recit have a
 tremulant each. These constants are voiced to written accounts of such
 winding, not measured on an organ.
 
@@ -383,7 +393,7 @@ and each pipe keeps its own share of it whatever is played:
 | Tuning | every pipe off its pitch, flues by up to 10 cents and reeds by up to 20 | a quarter: a season after the tuner's visit |
 | Temperature | flue pipes follow the air, 2.95 cents a degree, and reeds do not, so the reeds go out against the flues | 0: the 20 C the organ was tuned at |
 | Voicing | every pipe off its rank's level (up to 3 dB), speech, chiff and wind noise | 0.3 |
-| Wind | how far the reservoirs' sag, dip and bounce reach the pipes, with a slow unrest of the pressure | 0.5: as modelled |
+| Wind | how far the reservoirs' sag, dip and bounce reach the pipes, with a slow unrest of the pressure, and how far each flue's own wind wavers | 0.5: as modelled |
 | Wind Noise | the blower's hum (lower while it starts or runs down), the chests' hiss and the bellows' thud | 0.2 |
 | Action | how worn the action is: the knocks of keys, coupled pallets, pedals, stop knobs, the swell's shutters and the tremulant's valve, a slider's rub, and the couplers' lost motion | 0.25 |
 | Dead Pipes | pipes that do not speak, up to one in sixteen | none |
@@ -438,6 +448,9 @@ it still brings on the whole stop list, a chapel organ's too.
   time it speaks.
 - **The Vox humana follows the wind more than the other reeds**: 2.3 cents
   for each 1 % of pressure, so it wavers under a heavy registration.
+- **A held reed is perfectly steady** but for its division's wind: only the
+  flues waver by themselves, because the one recording with held single
+  stops holds no reed alone.
 - **A reed's resonator does not follow the temperature.** In a real reed the
   warming resonator pulls the pitch up a little; here a reed does not move
   with Temperature at all. Letting the resonator's air warm was tried
@@ -455,9 +468,14 @@ it still brings on the whole stop list, a chapel organ's too.
   harmonic strong; here the even ones are 25 dB down, because the resonator
   and not the tongue leads the pipe. A voicing led by the tongue matched the
   recording and went 3 to 5 cents flat or sharp for each 1 % of wind, so it
-  was not kept.
+  was not kept. One published Krummhorn spectrum has its even harmonics
+  suppressed as here (Pykett), so the recorded stop is one kind of
+  Krummhorn and not every one.
 - **The Posaune 16' has too much fundamental**: 10 to 20 dB against its
-  harmonics in the bass octave, by a recorded Basun 16'.
+  harmonics in the bass octave, by a recorded Basun 16'. A resonator cut to
+  two thirds or half of its length takes 8 to 14 dB off the fundamental on
+  the bench; whether that organ's Basun is so built is not known, and a
+  full-length Posaune is the German kind, so it was not changed.
 - **The stopped pipes are too perfect.** A recorded Quintadena has its even
   harmonics 35 dB under the fundamental and these have them 70 dB under,
   with the fifth and seventh about 20 dB too strong in the bass; a recorded
@@ -465,11 +483,19 @@ it still brings on the whole stop list, a chapel organ's too.
 - **A principal's second harmonic is about 10 dB too weak** against the same
   organ's Principal 8'. The jet swings symmetrically about a small offset;
   a larger offset stops the pipe speaking before it gives the harmonic.
+  By Fletcher and Douglas (1980) such a jet's second harmonic can reach
+  about 10 dB under its first and no more, which is where this one is;
+  their own pipe radiated 3 dB more than that.
 - **Real ranks are less even** than these: the notes of a recorded octave
   differ by 1.4 to 5 dB where these differ by under 1 dB as loaded (part of
   the recorded spread is the room).
 - **The breath does not lead the tone.** A recorded pipe hisses for some
-  100 ms before its tone begins; these are silent until it does. And no
+  100 ms before its tone begins; these are silent until it does. The cause
+  is found: a pipe's foot fills here in 3 ms at 247 Hz, and with a foot
+  that fills in 10 to 26 ms, as measured ones do (Castellengo, 2004), the
+  model's breath leads its tone by 55 ms and the tone comes that much later.
+  How late a note should speak is a choice for the ear (a listening set,
+  not yet judged). And no
   short note has been compared with a recording: the one set with known key
   times holds only notes of 4 s
   ([benchmark](Docs/research/benchmark-ilmenau-2026-11-13.md)).
