@@ -252,11 +252,41 @@ Engine::Engine() {
     scratch.assign(static_cast<std::size_t>(kPipeCount) * kChunk, 0.0f);
     hearScratch.assign(static_cast<std::size_t>(kPipeCount) * kHearBlock, 0.0f);
     toldRing.assign(flues.size() * kRingSize, 0.0f);
-    for (auto& list : flueList) list.reserve(flues.size());
-    for (auto& list : flueSound) list.reserve(flues.size());
-    for (auto& list : flueAt) list.reserve(flues.size());
-    reedList.reserve(reeds.size());
-    reedSound.reserve(reeds.size());
+    for (auto& list : flueList) list.reserve(flues.size() + kSpares);
+    for (auto& list : flueSound) list.reserve(flues.size() + kSpares);
+    for (auto& list : flueAt) list.reserve(flues.size() + kSpares);
+    reedList.reserve(reeds.size() + kSpares);
+    reedSound.reserve(reeds.size() + kSpares);
+    {
+        FlueVoicing plain, chimneyed;
+        chimneyed.stopped = true;
+        chimneyed.chimney = 0.3;
+        std::size_t spareRoom = 0;
+        for (std::size_t upper = 0; upper < 2; ++upper)
+            for (FluePipe& pipe : spareFlue[upper]) {
+                pipe.Design(upper ? chimneyed : plain, 440.0, 1.0);
+                spareRoom += static_cast<std::size_t>(pipe.loopLength + pipe.jetLength + pipe.upperLength);
+            }
+        for (ReedPipe& pipe : spareReed) {
+            pipe.Design(ReedVoicing {}, 440.0, 1.0);
+            spareRoom += static_cast<std::size_t>(pipe.loopLength);
+        }
+        spareArena.assign(spareRoom, 0.0f);
+        float* spot = spareArena.data();
+        for (auto& kind : spareFlue)
+            for (FluePipe& pipe : kind) {
+                pipe.loop = spot;
+                pipe.jet = spot + pipe.loopLength;
+                pipe.upper = pipe.jet + pipe.jetLength;
+                spot = pipe.upper + pipe.upperLength;
+                pipe.Clear();
+            }
+        for (ReedPipe& pipe : spareReed) {
+            pipe.loop = spot;
+            spot += pipe.loopLength;
+            pipe.Clear();
+        }
+    }
     float* next = arena.data();
     for (Slot& s : slots) {
         if (s.index < 0) continue;
@@ -933,6 +963,20 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
             if (s.coupled) flueAt[kind - 2].push_back(j);
         }
     }
+#if defined(OREGANA_FOUR)
+    // Two or three left over of a kind are made a four with silent pipes: a
+    // lane's arithmetic is its pipe's own, so theirs is as it would be alone.
+    for (std::size_t kind = 0; kind < 4; ++kind)
+        for (std::size_t spare = 0; flueList[kind].size() % 4 >= 2; ++spare) {
+            flueList[kind].push_back(&spareFlue[kind & 1][spare]);
+            flueSound[kind].push_back(spareSound[spare].data());
+            if (kind >= 2) flueAt[kind - 2].push_back(count + spare);
+        }
+    for (std::size_t spare = 0; reedList.size() % 4 >= 2; ++spare) {
+        reedList.push_back(&spareReed[spare]);
+        reedSound.push_back(spareSound[spare].data());
+    }
+#endif
     for (std::size_t kind = 0; kind < 2; ++kind) {
         std::size_t done = 0;
 #if defined(OREGANA_FOUR)
@@ -955,6 +999,7 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
             const std::size_t at = static_cast<std::size_t>((now + static_cast<std::uint64_t>(sub)) & (kRing - 1));
             for (const auto& places : flueAt) {
                 for (const std::size_t j : places) {
+                    if (j >= count) continue;   // a spare
                     const Slot& s = slots[static_cast<std::size_t>(active[j])];
                     float* const heard = hearScratch.data() + j * kHearBlock;
                     for (int i = 0; i < kHearBlock; ++i) heard[i] = 0.0f;
@@ -979,8 +1024,11 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
             }
             for (std::size_t kind = 2; kind < 4; ++kind) {
                 const auto& places = flueAt[kind - 2];
-                const auto heardOf = [&](std::size_t m) { return hearScratch.data() + places[m] * kHearBlock; };
+                const auto heardOf = [&](std::size_t m) {
+                    return places[m] >= count ? spareHeard.data() : hearScratch.data() + places[m] * kHearBlock;
+                };
                 const auto toldOf = [&](std::size_t m) {
+                    if (places[m] >= count) return spareTold[places[m] - count].data();
                     return toldRing.data() + static_cast<std::size_t>(slots[static_cast<std::size_t>(active[places[m]])].index) * kRingSize + at;
                 };
                 std::size_t done = 0;
@@ -1002,6 +1050,7 @@ void Engine::RenderChunk(float* left, float* right, int frames) {
                     flueList[kind][done]->Run(flueSound[kind][done] + sub, n, heardOf(done), toldOf(done));
                 if (at < kHearBlock)
                     for (std::size_t m = 0; m < places.size(); ++m) {
+                        if (places[m] >= count) continue;
                         float* const told = toldOf(m);
                         for (int i = 0; i < n; ++i) told[kRing + i] = told[i];
                     }

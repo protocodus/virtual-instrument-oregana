@@ -220,6 +220,16 @@ private:
     std::vector<float> toldRing, hearScratch;
     std::vector<ReedPipe*> reedList;
     std::vector<float*> reedSound;
+    // Silent pipes that make up a four when two or three of a kind are left
+    // over (flues without and with a pipe beyond a junction, and reeds):
+    // they take no wind, and their sound goes nowhere.
+    static constexpr int kSpares = 2;
+    std::array<std::array<FluePipe, kSpares>, 2> spareFlue;
+    std::array<ReedPipe, kSpares> spareReed;
+    std::vector<float> spareArena;
+    std::array<std::array<float, kChunk>, kSpares> spareSound {};
+    std::array<std::array<float, kHearBlock>, kSpares> spareTold {};
+    std::array<float, kHearBlock> spareHeard {};
     int untilTick = 0;
     float boxLow[2] {}, boxLowGain = 1.0f, boxHighGain = 1.0f, boxLowTarget = 1.0f, boxHighTarget = 1.0f;
     float dry = 0.0f, wet = 0.0f, dryTarget = 0.0f, wetTarget = 0.0f;
