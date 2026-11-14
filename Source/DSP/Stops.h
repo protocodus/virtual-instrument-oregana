@@ -85,7 +85,10 @@ constexpr RankSpec kRanks[] = {
     // Hauptwerk
     { Family::Principal, OREGANA_PLAIN(0.5f), 0.0f, -1.0f, 0, 0.0f },      //  0 Principal 16'
     { Family::Principal, OREGANA_PLAIN(1.0f), 0.0f, 0.0f, 0, 0.0f },       //  1 Octave 8'
-    { Family::String, OREGANA_PLAIN(1.0f), 0.0f, -7.0f, 0, 0.0f },         //  2 Viola da Gamba 8'
+    // Silbermann's broad gamba, 6 halftones wider than the family: chosen by
+    // ear against 4 wider and the family's scale (Docs/decisions.md, 2026-11-14),
+    // so it stands apart from the Recit's keen Gambe.
+    { Family::String, OREGANA_PLAIN(1.0f), 6.0f, -7.0f, 0, 0.0f },         //  2 Viola da Gamba 8'
     { Family::Chimney, OREGANA_PLAIN(1.0f), 0.0f, -6.0f, 0, 0.0f },        //  3 Rohrfloete 8'
     { Family::Principal, OREGANA_PLAIN(2.0f), -1.0f, -2.0f, 0, 0.0f },     //  4 Octave 4'
     { Family::Taper, OREGANA_PLAIN(2.0f), 0.0f, -8.0f, 0, 0.0f },          //  5 Spitzfloete 4'
@@ -96,11 +99,13 @@ constexpr RankSpec kRanks[] = {
     { Family::Flute, OREGANA_PLAIN(3.0f), 0.0f, -7.0f, 24, 0.0f },         // 10   2 2/3'
     { Family::Flute, OREGANA_PLAIN(4.0f), 0.0f, -8.0f, 24, 0.0f },         // 11   2'
     { Family::Flute, OREGANA_PLAIN(5.0f), 0.0f, -7.0f, 24, 0.0f },         // 12   1 3/5'
-    { Family::Principal, { 6, 4, 3, 2, 1, 1 }, -2.0f, -7.0f, 0, 0.0f },    // 13 Mixtur V: 1 1/3' at C
-    { Family::Principal, { 8, 6, 4, 3, 2, 2 }, -2.0f, -7.0f, 0, 0.0f },    // 14   1'
-    { Family::Principal, { 12, 8, 6, 4, 2, 2 }, -2.0f, -7.5f, 0, 0.0f },   // 15   2/3'
-    { Family::Principal, { 16, 12, 8, 6, 3, 3 }, -2.0f, -8.0f, 0, 0.0f },  // 16   1/2'
-    { Family::Principal, { 24, 16, 12, 8, 4, 4 }, -2.0f, -8.5f, 0, 0.0f }, // 17   1/3'
+    // A narrow, sharp German mixture, 4 halftones under the principals:
+    // chosen by ear (Docs/decisions.md, 2026-11-14).
+    { Family::Principal, { 6, 4, 3, 2, 1, 1 }, -4.0f, -7.0f, 0, 0.0f },    // 13 Mixtur V: 1 1/3' at C
+    { Family::Principal, { 8, 6, 4, 3, 2, 2 }, -4.0f, -7.0f, 0, 0.0f },    // 14   1'
+    { Family::Principal, { 12, 8, 6, 4, 2, 2 }, -4.0f, -7.5f, 0, 0.0f },   // 15   2/3'
+    { Family::Principal, { 16, 12, 8, 6, 3, 3 }, -4.0f, -8.0f, 0, 0.0f },  // 16   1/2'
+    { Family::Principal, { 24, 16, 12, 8, 4, 4 }, -4.0f, -8.5f, 0, 0.0f }, // 17   1/3'
     { Family::Principal, { 16, 12, 8, 4, 2, 2 }, -3.0f, -9.0f, 0, 0.0f },  // 18 Scharff III: 1/2' at C
     { Family::Principal, { 24, 16, 12, 6, 3, 3 }, -3.0f, -9.5f, 0, 0.0f }, // 19   1/3'
     { Family::Principal, { 32, 24, 16, 8, 4, 4 }, -3.0f, -10.0f, 0, 0.0f },// 20   1/4'
@@ -129,16 +134,21 @@ constexpr RankSpec kRanks[] = {
     // Sharp by 6 cents: against the Principal it beats once a second at c1.
     { Family::Principal, OREGANA_PLAIN(1.0f), -2.0f, -5.0f, 12, 6.0f },    // 40 Voce umana 8' from c0
     { Family::Harmonic, OREGANA_PLAIN(1.0f), 0.0f, -3.0f, 0, 0.0f },       // 41 Flute harmonique 8'
-    { Family::String, OREGANA_PLAIN(1.0f), 1.0f, -7.0f, 0, 0.0f },         // 42 Gambe 8'
-    { Family::String, OREGANA_PLAIN(1.0f), 1.0f, -8.0f, 12, 9.0f },        // 43 Voix celeste 8' from c0
+    // Cavaille-Coll's keen gambe and its celeste, 4 halftones narrower than the
+    // family: chosen by ear against 3 narrower (Docs/decisions.md, 2026-11-14).
+    { Family::String, OREGANA_PLAIN(1.0f), -4.0f, -7.0f, 0, 0.0f },        // 42 Gambe 8'
+    { Family::String, OREGANA_PLAIN(1.0f), -4.0f, -8.0f, 12, 9.0f },       // 43 Voix celeste 8' from c0
     { Family::Harmonic, OREGANA_PLAIN(2.0f), -1.0f, -6.0f, 0, 0.0f },      // 44 Flute octaviante 4'
     { Family::Harmonic, OREGANA_PLAIN(4.0f), -2.0f, -8.0f, 0, 0.0f },      // 45 Octavin 2'
-    { Family::Principal, { 4, 4, 3, 2, 2, 2 }, -2.0f, -8.0f, 0, 0.0f },    // 46 Plein jeu IV: 2' at C
-    { Family::Principal, { 6, 6, 4, 3, 3, 3 }, -2.0f, -8.0f, 0, 0.0f },    // 47   1 1/3'
-    { Family::Principal, { 8, 8, 6, 4, 4, 4 }, -2.0f, -8.5f, 0, 0.0f },    // 48   1'
-    { Family::Principal, { 12, 12, 8, 6, 6, 6 }, -2.0f, -9.0f, 0, 0.0f },  // 49   2/3'
+    // A progressive Plein jeu at the principals' scale: its two highest ranks
+    // enter at c0 and c1, so the bass is a fuller, darker chorus than the
+    // Mixtur's (chosen by ear, Docs/decisions.md, 2026-11-14).
+    { Family::Principal, { 4, 4, 3, 2, 2, 2 }, 0.0f, -8.0f, 0, 0.0f },     // 46 Plein jeu IV: 2' at C
+    { Family::Principal, { 6, 6, 4, 3, 3, 3 }, 0.0f, -8.0f, 0, 0.0f },     // 47   1 1/3'
+    { Family::Principal, { 8, 8, 6, 4, 4, 4 }, 0.0f, -8.5f, 12, 0.0f },    // 48   1'
+    { Family::Principal, { 12, 12, 8, 6, 6, 6 }, 0.0f, -9.0f, 24, 0.0f },  // 49   2/3'
     { Family::Hautbois, OREGANA_PLAIN(0.5f), 2.0f, -4.0f, 0, 0.0f },       // 50 Basson 16'
-    { Family::Trompette, OREGANA_PLAIN(1.0f), 0.0f, 1.0f, 0, 0.0f },       // 51 Trompette 8'
+    { Family::Trompette, OREGANA_PLAIN(1.0f), -4.0f, 1.0f, 0, 0.0f },      // 51 Trompette 8'
     { Family::Hautbois, OREGANA_PLAIN(1.0f), 0.0f, -5.0f, 0, 0.0f },       // 52 Basson-Hautbois 8'
     // A reed's tongue cannot be made for the top of a 4': the French Clairon
     // repeats an octave lower from c3.
@@ -310,25 +320,30 @@ inline const FlueFamily& Flue(Family family) {
 inline const ReedFamily& Reed(Family family) {
     // A reed's flow falls towards the treble, as the voicer thins the
     // tongues there: the top of a trumpet joins the chorus and does not lead it.
-    // A trumpet's flow in the bass is an estimate from typical sizes: a slit
-    // of some 48 mm2 under the resting tongue into a shallot 12 mm wide on
-    // 70 mm of wind gives 8 (c sqrt(2 rho / p) times the areas' ratio). The
-    // open tongue then passes more than the shallot takes, so the flow is cut
-    // only in the short time the tongue is nearly shut, and that short gap is
-    // the trumpet's brightness: at 2 the eighth harmonic of 8' C was 24 dB
-    // under the first, at 6 it is 4 dB under, where a recorded Trumpet 8' has
-    // it level (Docs/research/benchmark-burea-2026-11-13.md). Above 6 a bass
-    // pipe takes longer to speak (80 ms to half at 6, 132 ms at 8), so 6 it is.
+    // A trumpet's flow in the bass sets its brightness: the flow is cut only in
+    // the short time the tongue is nearly shut, and that short gap is the
+    // brightness. Typical sizes (a slit of some 48 mm2 under the resting tongue
+    // into a shallot 12 mm wide on 70 mm of wind) give about 8, and above 6 a
+    // bass pipe speaks late (80 ms to half at 6, 132 ms at 8). 0.4.0 had 2,
+    // whose eighth harmonic of 8' C was 24 dB under the first; 6 had it 4 dB
+    // under, where a recorded Trumpet 8' has it level
+    // (Docs/research/benchmark-burea-2026-11-13.md). Between those two the
+    // owner chose half way by ear (Docs/decisions.md, 2026-11-14): a voicer's
+    // choice of how far the tongue is curved, not a measurement.
     static const ReedFamily trumpet { true,
-        { 1.06, 0.15, 0.0, 25.0, 6.0, 0.5, 0.01, 1.03, 40.0, 0.2, 0.01, 1.0 },
-        { 1.06, 0.15, 0.0, 25.0, 1.6, 0.5, 0.01, 1.03, 40.0, 0.2, 0.01, 1.0 } };
+        { 1.06, 0.15, 0.0, 25.0, 3.5, 0.5, 0.01, 1.03, 40.0, 0.2, 0.01, 1.0 },
+        { 1.06, 0.15, 0.0, 25.0, 1.4, 0.5, 0.01, 1.03, 40.0, 0.2, 0.01, 1.0 } };
     static const ReedFamily posaune { true,
-        { 1.06, 0.15, 3.0, 20.0, 5.0, 0.5, 0.03, 1.03, 40.0, 0.25, 0.012, 1.3 },
-        { 1.06, 0.15, 3.0, 20.0, 1.6, 0.5, 0.03, 1.03, 40.0, 0.25, 0.012, 1.3 } };
-    // The French trumpet's tongue is flatter and shuts at once: brassier.
+        { 1.06, 0.15, 3.0, 20.0, 3.3, 0.5, 0.03, 1.03, 40.0, 0.25, 0.012, 1.3 },
+        { 1.06, 0.15, 3.0, 20.0, 1.5, 0.5, 0.03, 1.03, 40.0, 0.25, 0.012, 1.3 } };
+    // The French trumpet's tongue is flatter and shuts at once: brassier. It is
+    // set closer by the wind (closing 0.7), and its treble keeps more of the
+    // bass's flow, as on Cavaille-Coll's higher treble pressure: the top is
+    // half as much again as the trumpets' law gives (chosen by ear,
+    // Docs/decisions.md, 2026-11-14).
     static const ReedFamily trompette { true,
-        { 1.06, 0.15, -1.0, 28.0, 6.5, 0.5, 0.004, 1.03, 40.0, 0.2, 0.01, 1.0 },
-        { 1.06, 0.15, -1.0, 28.0, 2.0, 0.5, 0.004, 1.03, 40.0, 0.2, 0.01, 1.0 } };
+        { 1.06, 0.15, -1.0, 28.0, 3.8, 0.7, 0.004, 1.03, 40.0, 0.2, 0.01, 1.0 },
+        { 1.06, 0.15, -1.0, 28.0, 2.6, 0.7, 0.004, 1.03, 40.0, 0.2, 0.01, 1.0 } };
     static const ReedFamily hautbois { true,
         { 1.06, 0.15, -8.0, 22.0, 1.0, 0.6, 0.02, 1.03, 40.0, 0.2, 0.012, 1.0 },
         { 1.06, 0.15, -8.0, 22.0, 0.7, 0.6, 0.02, 1.03, 40.0, 0.2, 0.012, 1.0 } };

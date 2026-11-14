@@ -41,6 +41,28 @@ and plenty.
 
 ## Version history
 
+### 0.8.0 — 2026-11-14 — similar stops set apart, trumpets half way, by ear
+
+Every change here was chosen by the owner by ear from lettered sets
+([Docs/decisions.md](Docs/decisions.md)); none is a measurement.
+
+- **The two trumpets, the two gambas and the two mixtures sound less alike.**
+  The Récit's Trompette has a resonator 4 halftones narrower, its tongue set
+  closer by the wind, and more wind in its treble; the Hauptwerk's Viola da
+  Gamba is 6 halftones wider (Silbermann's broad gamba) and the Récit's Gambe
+  and Voix céleste 4 narrower (Cavaillé-Coll's keen one); the Plein jeu is
+  progressive (its 1' rank from c0, its 2/3' from c1) and 2 halftones wider,
+  the Mixtur 2 narrower. The Clairon shares the Trompette's tongue.
+- **The trumpets are half as bright as 0.5.0 made them.** The flow under the
+  open tongue is now half way between 0.4.0's and 0.5.0's (Trompete 3.5 to
+  1.4, Posaune 3.3 to 1.5, Trompette 3.8 in the bass). The Trompete 8's
+  eighth harmonic at C is 9 dB lower than in 0.7.0 (`ProbePipe`).
+- Every pipe was regulated again, and the presets' Volume trims taken again
+  from `RenderOregana --levels` (eight moved by 1 dB).
+- The other open sets are recorded as they stand: the mechanism's noises,
+  pipes that hear each other, each division's place in the church and the
+  0.2.0 church were all kept as shipped.
+
 ### 0.7.0 — 2026-11-14 — a level for each division, and its meter
 
 - **Four new controls, a level for each division** (`level_hauptwerk`,
@@ -524,11 +546,12 @@ it still brings on the whole stop list, a chapel organ's too.
   (2026-11-13) and taken out: the model's trumpets then moved 27 of the
   flues' 29.5 cents for 10 degrees, because here the resonator and not the
   tongue sets a reed's pitch, which is the reverse of a real reed.
-- **The trumpets are still a little dull in the bass.** Against a recorded
-  Trumpet 8' the eighth harmonic of the two lowest octaves is 8 dB weaker
-  (it was up to 27 dB before 0.5.0), and no weaker above them
-  ([benchmark](Docs/research/benchmark-burea-2026-11-13.md)). More flow
-  would close the rest and makes the bass pipes slow to speak. The shallot
+- **The trumpets are duller in the bass than a recorded one, by choice.**
+  Against a recorded Trumpet 8' the eighth harmonic of the two lowest
+  octaves was 8 dB weaker at 0.5.0's flow (up to 27 dB before it)
+  ([benchmark](Docs/research/benchmark-burea-2026-11-13.md)); the owner chose
+  half that flow by ear in 0.8.0, which takes the bench's eighth harmonic
+  9 dB lower again. That organ is one organ, not a verdict. The shallot
   has no resonance of its own here, and the Dulcian, Vox humana and Hautbois
   have been compared with no recording.
 - **The Krummhorn has only its odd harmonics.** A recorded one has every
@@ -569,8 +592,8 @@ it still brings on the whole stop list, a chapel organ's too.
 - **Nothing is fitted to an organ.** Scales, voicing, winding, the swell
   box, the church, the divisions' places, the pipes' hearing and the noises
   are typical values and estimates, stated as such beside the code. Two
-  organs have been compared (the benchmarks above); the trumpets' flow and
-  the flue pipes' noise spectrum were set by them, and nothing else.
+  organs have been compared (the benchmarks above); the flue pipes' noise
+  spectrum was set by them, and the trumpets' flow bounded by them.
 - **The seat moves across the nave only.** Along it, Room mixes the organ
   and the church and the reflections stay those of a seat 18 m away. From a
   side seat the far ear has the organ later and weaker at every frequency

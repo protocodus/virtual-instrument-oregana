@@ -225,7 +225,13 @@ void StopsCouplersAndCrescendo() {
         grows = grows && roller.organ->Diag().pipes >= before;
         before = roller.organ->Diag().pipes;
     }
-    Expect(grows && before > 80, "StopsCouplersAndCrescendo", "the crescendo roller builds to full organ, pipes on two keys", before);
+    // Counted once the last stages' sliders have travelled and their pipes
+    // spoken: read 0.05 s after the last step, the count hung on how fast the
+    // slowest pipes speak, and 0.8.0's voicing took it from 81 to 79
+    // of the 95 that full organ settles at.
+    roller.Play(1.0);
+    before = roller.organ->Diag().pipes;
+    Expect(grows && before > 90, "StopsCouplersAndCrescendo", "the crescendo roller builds to full organ, pipes on two keys", before);
 }
 
 void WindSagsAndBounces() {
@@ -1516,7 +1522,11 @@ void PipesHearEachOther() {
         return high - low;
     };
     // Tuning at 1 leaves the Octave and the Gamba up to 14 cents apart, a
-    // different distance on each key.
+    // different distance on each key. How far apart a pair still locks
+    // follows the strength each mouth radiates: 0.8.0's Gamba, 6 halftones
+    // wider, locks with the Octave up to about 4.3 cents (4.26 locked, 4.40
+    // beat), where the narrower one of 0.7.0 stopped near 3, so "far" starts
+    // at 5 cents now.
     int near = 0, far = 0;
     double mostLocked = 0.0, leastBeating = 1.0e9;
     for (int key = 48; key <= 72; ++key) {
@@ -1525,13 +1535,13 @@ void PipesHearEachOther() {
         if (Abs(apart) < 2.0) {
             ++near;
             mostLocked = Max(mostLocked, moved);
-        } else if (Abs(apart) > 4.0) {
+        } else if (Abs(apart) > 5.0) {
             ++far;
             leastBeating = Min(leastBeating, moved);
         }
     }
     Expect(near >= 3 && mostLocked < 1.0, "PipesHearEachOther", "neighbours within 2 cents sing as one, the level's largest swing in dB", mostLocked);
-    Expect(far >= 10 && leastBeating > 3.0, "PipesHearEachOther", "and over 4 cents apart they beat as before, the smallest swing in dB", leastBeating);
+    Expect(far >= 10 && leastBeating > 3.0, "PipesHearEachOther", "and over 5 cents apart they beat as before, the smallest swing in dB", leastBeating);
 }
 
 // A pipe let go rings on long after its foot has emptied. The foot must reach
