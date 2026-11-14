@@ -424,6 +424,8 @@ void Engine::Reset() {
     dry = dryTarget;
     wet = wetTarget;
     apartGain = apartTarget;
+    levelGain = levelTarget;
+    peaks.fill(0.0f);
     for (auto& line : apartLine) line.fill(0.0f);
     apartAt = 0;
     presence = hum = hiss = rub = 0.0f;
@@ -503,6 +505,9 @@ void Engine::Apply(const Controls& before, bool all) {
         wetTarget = static_cast<float>(volume * std::sqrt(controls[kRoom]));
         apartTarget = static_cast<float>(volume);
     }
+    for (int d = 0; d < kDivisions; ++d)
+        if (changed(kLevelHauptwerk + d))
+            levelTarget[static_cast<std::size_t>(d)] = static_cast<float>(std::pow(10.0, controls[kLevelHauptwerk + d] / 20.0));
     if (registration) Register();
 }
 
@@ -1212,23 +1217,30 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
         boxLowGain += kGainStep * (boxLowTarget - boxLowGain);
         boxHighGain += kGainStep * (boxHighTarget - boxHighGain);
         apartGain += (apartTarget > apartGain ? kGainRise : kGainStep) * (apartTarget - apartGain);
+        // At 0 dB a level is exactly 1, so the sound is the same sample for sample as without it.
+        for (std::size_t d = 0; d < kDivisions; ++d)
+            levelGain[d] += (levelTarget[d] > levelGain[d] ? kGainRise : kGainStep) * (levelTarget[d] - levelGain[d]);
         // What the church hears from the divisions after the first, in
         // their order: the Positiv, the Recit through its box, the Pedal.
         float apart[kDivisions - 1] = {};
         for (std::size_t c = 0; c < 2; ++c) {
-            const float enclosed = bus[kRecit][c][at];
+            float level[kDivisions];
+            for (std::size_t d = 0; d < kDivisions; ++d) level[d] = levelGain[d] * bus[d][c][at];
+            const float enclosed = level[kRecit];
             boxLow[c] += kBoxPole * (enclosed - boxLow[c]);
             const float boxed = boxLowGain * boxLow[c] + boxHighGain * (enclosed - boxLow[c]);
-            sound[c] = bus[kHauptwerk][c][at] + bus[kPositiv][c][at] + bus[kPedal][c][at]
+            sound[c] = level[kHauptwerk] + level[kPositiv] + level[kPedal]
                 + boxLowGain * boxLow[c] + boxHighGain * (enclosed - boxLow[c]);
-            apart[kPositiv - 1] += 0.5f * bus[kPositiv][c][at];
+            apart[kPositiv - 1] += 0.5f * level[kPositiv];
             apart[kRecit - 1] += 0.5f * boxed;
-            apart[kPedal - 1] += 0.5f * bus[kPedal][c][at];
+            apart[kPedal - 1] += 0.5f * level[kPedal];
             // Kept running with nobody listening, so that an output taken
             // up while the organ sounds starts on what was just played.
             for (std::size_t d = 0; d < kDivisions; ++d) {
                 auto& line = apartLine[2 * d + c];
-                line[static_cast<std::size_t>(apartAt)] = apartGain * (d == kRecit ? boxed : bus[d][c][at]);
+                const float own = apartGain * (d == kRecit ? boxed : level[d]);
+                line[static_cast<std::size_t>(apartAt)] = own;
+                peaks[d] = Max(peaks[d], own < 0.0f ? -own : own);
                 if (divisions != nullptr)
                     divisions[2 * d + c][offset + i] = line[static_cast<std::size_t>((apartAt - late) & (kApartSize - 1))];
             }
@@ -1246,6 +1258,12 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
         left[i] = frame[0];
         right[i] = frame[1];
     }
+}
+
+std::array<float, kDivisions> Engine::TakePeaks() {
+    const auto taken = peaks;
+    peaks.fill(0.0f);
+    return taken;
 }
 
 void Engine::Render(float* left, float* right, int frames, float* const* divisions) {

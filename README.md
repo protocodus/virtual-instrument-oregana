@@ -41,6 +41,18 @@ and plenty.
 
 ## Version history
 
+### 0.7.0 — 2026-11-14 — a level for each division, and its meter
+
+- **Four new controls, a level for each division** (`level_hauptwerk`,
+  `level_positiv`, `level_recit`, `level_pedal`, −24 to +6 dB, 0 dB in
+  every preset; owner, 2026-11-14): a mixer's fader on what that division's
+  pipes give, before the church, the noises and the output stage, and on the
+  division's own output. It is not part of the organ: it never reaches a pipe
+  or the wind. At 0 dB the sound is the same, sample for sample.
+- **`Engine::TakePeaks`**: each division's loudest sample on its own output
+  since it was last asked, for a front end's level meters, whether or not
+  those outputs are taken.
+
 ### 0.6.2 — 2026-11-13 — forty registrations by country and region
 
 - **Forty more presets** after the organs (owner, 2026-11-13), five for each

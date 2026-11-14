@@ -150,6 +150,8 @@ public:
     }
     double SampleRate() const { return rate; }
     const Engine& Organ() const { return engine; }
+    // Each division's peak since the last call, for a front end's meters.
+    std::array<float, kDivisions> TakePeaks() { return engine.TakePeaks(); }
 
 private:
     static constexpr std::uint32_t kEngineRate = 48000;

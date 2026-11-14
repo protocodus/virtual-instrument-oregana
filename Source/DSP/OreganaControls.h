@@ -57,6 +57,14 @@ enum Control : int {
     kKeyboard,                      // the manual a single keyboard plays (OreganaInstrument.h): Hauptwerk, Positiv or Recit
     kPedalMode,                     // and what of it plays the Pedal: kPedalOff, kPedalBass or kPedalSplit
     kSeat,                          // where across the nave the listener sits: -1 by the left wall .. 0 on the axis .. 1 by the right (Nave.h)
+    // Each division's level, dB, in kHauptwerk .. kPedal order: a mixer's
+    // fader on what its pipes give, not a part of the organ (owner,
+    // 2026-11-14). It acts on the division's sound and its own output,
+    // before the church, and never on the pipes or the wind.
+    kLevelHauptwerk,
+    kLevelPositiv,
+    kLevelRecit,
+    kLevelPedal,
     kControlCount
 };
 
@@ -141,6 +149,10 @@ constexpr std::array<ControlInfo, kControlCount> MakeControlInfo() {
         { "pedal_keys", "Pedal Keys", 0.0, static_cast<double>(kPedalModes - 1), static_cast<double>(kPedalBass), kPedalModes,
           Curve::kStepped, "" },
         { "seat", "Seat", -1.0, 1.0, 0.0, 0, Curve::kLinear, "" },
+        { "level_hauptwerk", "Hauptwerk Level", -24.0, 6.0, 0.0, 0, Curve::kLinear, "dB" },
+        { "level_positiv", "Positiv Level", -24.0, 6.0, 0.0, 0, Curve::kLinear, "dB" },
+        { "level_recit", "Recit Level", -24.0, 6.0, 0.0, 0, Curve::kLinear, "dB" },
+        { "level_pedal", "Pedal Level", -24.0, 6.0, 0.0, 0, Curve::kLinear, "dB" },
     };
     for (int i = kStopCount; i < kControlCount; ++i) info[static_cast<std::size_t>(i)] = rest[i - kStopCount];
     return info;

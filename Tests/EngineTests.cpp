@@ -1272,6 +1272,68 @@ void DivisionsHaveTheirOwnOutputs() {
            Db(soft.level[kHauptwerk] / open.level[kHauptwerk]));
 }
 
+void DivisionLevels() {
+    // Each division's level takes its own pipes up or down, in the main
+    // output and on its own pair, and no other's; at 0 dB nothing changes;
+    // the peaks a meter reads are each division's own pair's.
+    struct Heard { std::vector<float> main; std::array<double, kDivisions> level; std::array<float, kDivisions> peak; };
+    const auto play = [](int division, double db, int only) {
+        Bench bench;
+        bench.Draw({ kHwOctave8, kPosGedackt8, kRecGambe8, kPedSubbass16 });
+        bench.Set(kRoom, 0.0);
+        if (division >= 0) bench.Set(kLevelHauptwerk + division, db);
+        bench.organ->Reset();
+        const int notes[kDivisions] = { 60, 64, 67, 36 };
+        for (int d = 0; d < kDivisions; ++d)
+            if (only < 0 || only == d) bench.organ->KeyDown(d, notes[d], 100);
+        const int frames = static_cast<int>(kRate);
+        std::vector<float> out(static_cast<std::size_t>(2 * frames));
+        std::vector<std::vector<float>> own(Engine::kDivisionOutputs, std::vector<float>(static_cast<std::size_t>(frames)));
+        float* to[Engine::kDivisionOutputs];
+        for (int done = 0; done < frames; done += 256) {
+            for (int n = 0; n < Engine::kDivisionOutputs; ++n) to[n] = &own[static_cast<std::size_t>(n)][static_cast<std::size_t>(done)];
+            bench.organ->Render(&out[static_cast<std::size_t>(done)], &out[static_cast<std::size_t>(frames + done)], Min(256, frames - done), to);
+        }
+        Heard heard { out, {}, bench.organ->TakePeaks() };
+        for (int d = 0; d < kDivisions; ++d) {
+            double sum = 0.0, most = 0.0;
+            for (int c = 0; c < 2; ++c)
+                for (int i = 0; i < frames; ++i) {
+                    const double v = own[static_cast<std::size_t>(2 * d + c)][static_cast<std::size_t>(i)];
+                    if (i >= frames / 2) sum += v * v;
+                    most = Max(most, Abs(v));
+                }
+            heard.level[static_cast<std::size_t>(d)] = std::sqrt(sum / frames);
+            Expect(Abs(most - heard.peak[static_cast<std::size_t>(d)]) <= 1.0e-6 * Max(most, 1.0), "DivisionLevels",
+                   "a division's peak is its own pair's loudest sample, difference", Abs(most - heard.peak[static_cast<std::size_t>(d)]));
+        }
+        Expect(bench.organ->TakePeaks()[0] == 0.0f, "DivisionLevels", "taking the peaks starts them again", 0.0);
+        return heard;
+    };
+    const Heard plain = play(-1, 0.0, -1);
+    Expect(play(kPositiv, 0.0, -1).main == plain.main, "DivisionLevels", "a level at 0 dB is the same samples", 0.0);
+    for (int d = 0; d < kDivisions; ++d) {
+        const Heard soft = play(d, -12.0, -1);
+        Expect(Abs(Db(soft.level[static_cast<std::size_t>(d)] / plain.level[static_cast<std::size_t>(d)]) + 12.0) < 0.3, "DivisionLevels",
+               "a division's level takes its pair down, dB", Db(soft.level[static_cast<std::size_t>(d)] / plain.level[static_cast<std::size_t>(d)]));
+        for (int e = 0; e < kDivisions; ++e)
+            if (e != d)
+                Expect(soft.level[static_cast<std::size_t>(e)] == plain.level[static_cast<std::size_t>(e)], "DivisionLevels",
+                       "and no other division's", Db(soft.level[static_cast<std::size_t>(e)] / plain.level[static_cast<std::size_t>(e)]));
+        // In the main output too: the division played alone, its level down by 12 dB.
+        const auto rms = [](const std::vector<float>& v) {
+            double sum = 0.0;
+            for (std::size_t i = v.size() / 4; i < v.size() / 2; ++i) sum += static_cast<double>(v[i]) * v[i];
+            return std::sqrt(sum);
+        };
+        const double down = Db(rms(play(d, -12.0, d).main) / rms(play(-1, 0.0, d).main));
+        Expect(Abs(down + 12.0) < 0.5, "DivisionLevels", "and its sound in the main output, dB", down);
+    }
+    const Heard silent = play(-1, 0.0, kHauptwerk);
+    Expect(silent.peak[kHauptwerk] > 1.0e-3f && silent.peak[kPositiv] == 0.0f && silent.peak[kPedal] == 0.0f, "DivisionLevels",
+           "a division that does not play reads nothing, the Hauptwerk's peak", silent.peak[kHauptwerk]);
+}
+
 void ResetPlaysAsNew() {
     Controls controls = kPresets[8].ToControls();   // Krummhorn with the tremulant
     Bench bench(controls);
@@ -1311,6 +1373,9 @@ void ExtremesStayFinite() {
         if (which == 2) {
             for (int i = 0; i < kStopCount; ++i) controls[i] = 1.0;
             controls[kWindSupply] = kWindBlower;
+            // The divisions' levels are faders after the pipes, not the wind
+            // this case starves: at their least they would only hide it.
+            for (int d = 0; d < kDivisions; ++d) controls[kLevelHauptwerk + d] = 0.0;
         }
         Bench bench(controls);
         for (int key = 0; key < kManualKeys; key += 5) bench.organ->KeyDown(kHauptwerk, kFirstNote + key, 127);
@@ -1623,6 +1688,7 @@ int main() {
     ChurchIsThePlayers();
     BlockPartitionInvariance();
     DivisionsHaveTheirOwnOutputs();
+    DivisionLevels();
     ResetPlaysAsNew();
     ExtremesStayFinite();
     EveryControlTells();
