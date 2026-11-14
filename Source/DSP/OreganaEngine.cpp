@@ -418,7 +418,7 @@ void Engine::Reset() {
     for (Tremulant& t : tremulants) t.Reset();
     unrestRandom = 0x2545F491u;
     untilTick = 0;
-    boxLow[0] = boxLow[1] = 0.0f;
+    boxLow[0] = boxLow[1] = rawBoxLow[0] = rawBoxLow[1] = 0.0f;
     boxLowGain = boxLowTarget;
     boxHighGain = boxHighTarget;
     dry = dryTarget;
@@ -505,9 +505,17 @@ void Engine::Apply(const Controls& before, bool all) {
         wetTarget = static_cast<float>(volume * std::sqrt(controls[kRoom]));
         apartTarget = static_cast<float>(volume);
     }
-    for (int d = 0; d < kDivisions; ++d)
-        if (changed(kLevelHauptwerk + d))
-            levelTarget[static_cast<std::size_t>(d)] = static_cast<float>(std::pow(10.0, controls[kLevelHauptwerk + d] / 20.0));
+    bool mixer = false, soloed = false;
+    for (int d = 0; d < kDivisions; ++d) {
+        mixer = mixer || changed(kLevelHauptwerk + d) || changed(kMuteHauptwerk + d) || changed(kSoloHauptwerk + d);
+        soloed = soloed || controls[kSoloHauptwerk + d] >= 0.5;
+    }
+    // A mute or a solo takes the division's level to nothing, gliding as a level does, so it never clicks.
+    if (mixer)
+        for (int d = 0; d < kDivisions; ++d) {
+            const bool heard = controls[kMuteHauptwerk + d] < 0.5 && (!soloed || controls[kSoloHauptwerk + d] >= 0.5);
+            levelTarget[static_cast<std::size_t>(d)] = heard ? static_cast<float>(std::pow(10.0, controls[kLevelHauptwerk + d] / 20.0)) : 0.0f;
+        }
     if (registration) Register();
 }
 
@@ -1007,8 +1015,9 @@ void Engine::Tick() {
     const float noise = static_cast<float>(kBlowerLevel * controls[kBlower]) * presence;
     hum = noise * static_cast<float>(spin);
     hiss = noise * static_cast<float>(Min(head, 1.5));
-    for (float& low : boxLow)
-        if (Abs(low) < 1.0e-20f) low = 0.0f;
+    for (float* lows : { boxLow, rawBoxLow })
+        for (int c = 0; c < 2; ++c)
+            if (Abs(lows[c]) < 1.0e-20f) lows[c] = 0.0f;
 
     // Pipes made for an earlier tuning are remade a few at a time while
     // they are silent; one that is asked to speak first is remade then.
@@ -1236,11 +1245,16 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
             apart[kPedal - 1] += 0.5f * level[kPedal];
             // Kept running with nobody listening, so that an output taken
             // up while the organ sounds starts on what was just played.
+            // The Recit's own output is raw too, so it goes through a box of
+            // its own, ahead of the Recit's level.
+            const float bare = bus[kRecit][c][at];
+            rawBoxLow[c] += kBoxPole * (bare - rawBoxLow[c]);
+            const float rawBoxed = boxLowGain * rawBoxLow[c] + boxHighGain * (bare - rawBoxLow[c]);
             for (std::size_t d = 0; d < kDivisions; ++d) {
                 auto& line = apartLine[2 * d + c];
-                const float own = apartGain * (d == kRecit ? boxed : level[d]);
-                line[static_cast<std::size_t>(apartAt)] = own;
-                peaks[d] = Max(peaks[d], own < 0.0f ? -own : own);
+                const float metered = apartGain * (d == kRecit ? boxed : level[d]);
+                peaks[d] = Max(peaks[d], metered < 0.0f ? -metered : metered);
+                line[static_cast<std::size_t>(apartAt)] = d == kRecit ? rawBoxed : bus[d][c][at];
                 if (divisions != nullptr)
                     divisions[2 * d + c][offset + i] = line[static_cast<std::size_t>((apartAt - late) & (kApartSize - 1))];
             }

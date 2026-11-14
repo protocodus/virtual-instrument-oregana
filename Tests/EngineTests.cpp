@@ -1218,8 +1218,8 @@ void BlockPartitionInvariance() {
 void DivisionsHaveTheirOwnOutputs() {
     // A stop of each division and a key on each: every division's pair
     // carries its own pipes and nothing else, the Recit's follows its box,
-    // all follow the Volume, and the main output does not know they are
-    // taken.
+    // the Volume does not reach them (they are raw, owner 2026-11-14), and
+    // the main output does not know they are taken.
     struct Heard { std::vector<float> main; double level[kDivisions]; bool whole; };
     const auto play = [](bool taken, double swell, double volume, std::initializer_list<int> blocks, int only = -1) {
         Bench bench;
@@ -1274,20 +1274,30 @@ void DivisionsHaveTheirOwnOutputs() {
     Expect(Db(shut.level[kRecit] / open.level[kRecit]) < -6.0 && Abs(Db(shut.level[kPositiv] / open.level[kPositiv])) < 0.2,
            "DivisionsHaveTheirOwnOutputs", "the box shut takes the Recit's pair down and no other, dB", Db(shut.level[kRecit] / open.level[kRecit]));
     const Heard soft = play(true, 1.0, -12.0, { 256 });
-    Expect(Abs(Db(soft.level[kHauptwerk] / open.level[kHauptwerk]) + 12.0) < 0.3, "DivisionsHaveTheirOwnOutputs", "and they follow the Volume, dB",
+    bool same = true;
+    for (int d = 0; d < kDivisions; ++d) same = same && soft.level[d] == open.level[d];
+    Expect(same, "DivisionsHaveTheirOwnOutputs", "and the Volume does not reach them, the Hauptwerk's dB",
            Db(soft.level[kHauptwerk] / open.level[kHauptwerk]));
 }
 
 void DivisionLevels() {
-    // Each division's level takes its own pipes up or down, in the main
-    // output and on its own pair, and no other's; at 0 dB nothing changes;
-    // the peaks a meter reads are each division's own pair's.
-    struct Heard { std::vector<float> main; std::array<double, kDivisions> level; std::array<float, kDivisions> peak; };
-    const auto play = [](int division, double db, int only) {
+    // Each division's level, mute and solo take its own pipes up or down in
+    // the main output, and no other's; at 0 dB nothing changes; its own pair
+    // stays raw (owner, 2026-11-14); the peaks a meter reads are the
+    // division at its level, which at 0 dB is its own pair's.
+    struct Heard { std::vector<float> main; std::array<double, kDivisions> level; std::array<float, kDivisions> peak; std::array<float, kDivisions> most; };
+    const auto play = [](int division, double db, int only, int muted = 0, int soloed = 0) {
         Bench bench;
         bench.Draw({ kHwOctave8, kPosGedackt8, kRecGambe8, kPedSubbass16 });
         bench.Set(kRoom, 0.0);
+        // No knocks or blower: they are the organ's, after the divisions, and a muted division would still have them.
+        bench.Set(kAction, 0.0);
+        bench.Set(kBlower, 0.0);
         if (division >= 0) bench.Set(kLevelHauptwerk + division, db);
+        for (int d = 0; d < kDivisions; ++d) {
+            if (muted >> d & 1) bench.Set(kMuteHauptwerk + d, 1.0);
+            if (soloed >> d & 1) bench.Set(kSoloHauptwerk + d, 1.0);
+        }
         bench.organ->Reset();
         const int notes[kDivisions] = { 60, 64, 67, 36 };
         for (int d = 0; d < kDivisions; ++d)
@@ -1300,7 +1310,7 @@ void DivisionLevels() {
             for (int n = 0; n < Engine::kDivisionOutputs; ++n) to[n] = &own[static_cast<std::size_t>(n)][static_cast<std::size_t>(done)];
             bench.organ->Render(&out[static_cast<std::size_t>(done)], &out[static_cast<std::size_t>(frames + done)], Min(256, frames - done), to);
         }
-        Heard heard { out, {}, bench.organ->TakePeaks() };
+        Heard heard { out, {}, bench.organ->TakePeaks(), {} };
         for (int d = 0; d < kDivisions; ++d) {
             double sum = 0.0, most = 0.0;
             for (int c = 0; c < 2; ++c)
@@ -1310,31 +1320,47 @@ void DivisionLevels() {
                     most = Max(most, Abs(v));
                 }
             heard.level[static_cast<std::size_t>(d)] = std::sqrt(sum / frames);
-            Expect(Abs(most - heard.peak[static_cast<std::size_t>(d)]) <= 1.0e-6 * Max(most, 1.0), "DivisionLevels",
-                   "a division's peak is its own pair's loudest sample, difference", Abs(most - heard.peak[static_cast<std::size_t>(d)]));
+            heard.most[static_cast<std::size_t>(d)] = static_cast<float>(most);
         }
         Expect(bench.organ->TakePeaks()[0] == 0.0f, "DivisionLevels", "taking the peaks starts them again", 0.0);
         return heard;
     };
+    const auto rms = [](const std::vector<float>& v) {
+        double sum = 0.0;
+        for (std::size_t i = v.size() / 4; i < v.size() / 2; ++i) sum += static_cast<double>(v[i]) * v[i];
+        return std::sqrt(sum);
+    };
     const Heard plain = play(-1, 0.0, -1);
+    for (int d = 0; d < kDivisions; ++d)
+        Expect(Abs(plain.most[static_cast<std::size_t>(d)] - plain.peak[static_cast<std::size_t>(d)]) <= 1.0e-6f * Max(plain.most[static_cast<std::size_t>(d)], 1.0f),
+               "DivisionLevels", "at 0 dB a division's peak is its own pair's loudest sample, difference",
+               Abs(plain.most[static_cast<std::size_t>(d)] - plain.peak[static_cast<std::size_t>(d)]));
     Expect(play(kPositiv, 0.0, -1).main == plain.main, "DivisionLevels", "a level at 0 dB is the same samples", 0.0);
     for (int d = 0; d < kDivisions; ++d) {
+        const auto at = static_cast<std::size_t>(d);
         const Heard soft = play(d, -12.0, -1);
-        Expect(Abs(Db(soft.level[static_cast<std::size_t>(d)] / plain.level[static_cast<std::size_t>(d)]) + 12.0) < 0.3, "DivisionLevels",
-               "a division's level takes its pair down, dB", Db(soft.level[static_cast<std::size_t>(d)] / plain.level[static_cast<std::size_t>(d)]));
+        Expect(soft.level == plain.level, "DivisionLevels", "a division's level leaves every pair raw, its own's dB", Db(soft.level[at] / plain.level[at]));
+        Expect(Abs(Db(soft.peak[at] / plain.peak[at]) + 12.0) < 0.3, "DivisionLevels", "and takes its meter down, dB", Db(soft.peak[at] / plain.peak[at]));
         for (int e = 0; e < kDivisions; ++e)
             if (e != d)
-                Expect(soft.level[static_cast<std::size_t>(e)] == plain.level[static_cast<std::size_t>(e)], "DivisionLevels",
-                       "and no other division's", Db(soft.level[static_cast<std::size_t>(e)] / plain.level[static_cast<std::size_t>(e)]));
-        // In the main output too: the division played alone, its level down by 12 dB.
-        const auto rms = [](const std::vector<float>& v) {
-            double sum = 0.0;
-            for (std::size_t i = v.size() / 4; i < v.size() / 2; ++i) sum += static_cast<double>(v[i]) * v[i];
-            return std::sqrt(sum);
-        };
-        const double down = Db(rms(play(d, -12.0, d).main) / rms(play(-1, 0.0, d).main));
+                Expect(soft.peak[static_cast<std::size_t>(e)] == plain.peak[static_cast<std::size_t>(e)], "DivisionLevels", "and no other division's meter",
+                       Db(soft.peak[static_cast<std::size_t>(e)] / plain.peak[static_cast<std::size_t>(e)]));
+        // In the main output: the division played alone, its level down by 12 dB, up by 24, or muted.
+        const double alone = rms(play(-1, 0.0, d).main);
+        const double down = Db(rms(play(d, -12.0, d).main) / alone), up = Db(rms(play(d, 24.0, d).main) / alone);
         Expect(Abs(down + 12.0) < 0.5, "DivisionLevels", "and its sound in the main output, dB", down);
+        Expect(up > 12.0, "DivisionLevels", "a level at its most takes it up, past the output stage, dB", up);
+        const Heard muted = play(-1, 0.0, d, 1 << d);
+        Expect(Db(rms(muted.main) / alone) < -60.0 && muted.peak[at] == 0.0f && muted.level == play(-1, 0.0, d).level, "DivisionLevels",
+               "a muted division is out of the main output and its meter and still on its pair, dB", Db(rms(muted.main) / alone));
     }
+    // A solo leaves only the soloed divisions in; a mute still takes one out.
+    const Heard solo = play(-1, 0.0, -1, 0, 1 << kPositiv | 1 << kPedal);
+    Expect(solo.peak[kHauptwerk] == 0.0f && solo.peak[kRecit] == 0.0f && solo.peak[kPositiv] == plain.peak[kPositiv]
+               && solo.peak[kPedal] == plain.peak[kPedal] && solo.level == plain.level,
+           "DivisionLevels", "soloing the Positiv and the Pedal leaves only them in, the Hauptwerk's peak", solo.peak[kHauptwerk]);
+    const Heard both = play(-1, 0.0, -1, 1 << kPedal, 1 << kPositiv | 1 << kPedal);
+    Expect(both.peak[kPedal] == 0.0f && both.peak[kPositiv] == plain.peak[kPositiv], "DivisionLevels", "a soloed division that is muted is out", both.peak[kPedal]);
     const Heard silent = play(-1, 0.0, kHauptwerk);
     Expect(silent.peak[kHauptwerk] > 1.0e-3f && silent.peak[kPositiv] == 0.0f && silent.peak[kPedal] == 0.0f, "DivisionLevels",
            "a division that does not play reads nothing, the Hauptwerk's peak", silent.peak[kHauptwerk]);
@@ -1383,6 +1409,10 @@ void ExtremesStayFinite() {
             // this case starves: at their least they would only hide it.
             for (int d = 0; d < kDivisions; ++d) controls[kLevelHauptwerk + d] = 0.0;
         }
+        // The mutes at their most would silence the loudest organ this case is meant to be; every solo on leaves
+        // every division in, as none on does.
+        if (which == 1)
+            for (int d = 0; d < kDivisions; ++d) controls[kMuteHauptwerk + d] = 0.0;
         Bench bench(controls);
         for (int key = 0; key < kManualKeys; key += 5) bench.organ->KeyDown(kHauptwerk, kFirstNote + key, 127);
         for (int key = 0; key < kPedalKeys; key += 7) bench.organ->KeyDown(kPedal, kFirstNote + key, 127);

@@ -277,16 +277,18 @@ void EveryKeySounds() {
 
 void DivisionOutputsAtEveryRate() {
     // The divisions' own outputs through the resampler: with the church
-    // off they add up to the level the main output has, and taking them
-    // leaves the main output's samples alone.
+    // off they add up to the level the main output has before the Volume,
+    // which does not reach them (owner, 2026-11-14), and taking them leaves
+    // the main output's samples alone.
     for (const double rate : { 44100.0, 48000.0, 96000.0 }) {
         std::vector<float> mains[2];
-        double own = 0.0, main = 0.0;
+        double own = 0.0, main = 0.0, volume = 0.0;
         for (int taken = 0; taken < 2; ++taken) {
             auto organ = std::make_unique<Instrument>();
             organ->Prepare(rate);
             Controls controls = kPresets[0].ToControls();
             controls[kRoom] = controls[kBlower] = controls[kAction] = controls[kSeat] = 0.0;
+            volume = controls[kVolume];
             organ->SetControls(controls);
             for (int note : { 48, 60, 64, 67 }) organ->KeyDown(note, 90);
             const int frames = static_cast<int>(rate);
@@ -307,8 +309,8 @@ void DivisionOutputsAtEveryRate() {
             }
         }
         Expect(mains[0] == mains[1], "DivisionOutputsAtEveryRate", "the main output is the same samples with them taken, at Hz", rate);
-        Expect(own > 0.0 && std::abs(Db(std::sqrt(own / main))) < 1.5, "DivisionOutputsAtEveryRate", "together they are as loud as the main output with no church, dB",
-               Db(std::sqrt(own / main)));
+        Expect(own > 0.0 && std::abs(Db(std::sqrt(own / main)) + volume) < 1.5, "DivisionOutputsAtEveryRate",
+               "together they are as loud as the main output with no church and no Volume, dB", Db(std::sqrt(own / main)) + volume);
     }
 }
 

@@ -123,8 +123,9 @@ public:
     // With `divisions`, kDivisionOutputs more buffers of `frames`, each
     // division's left then right in kHauptwerk .. kPedal order: what its
     // pipes give before the church, the seat, the noises and the output
-    // stage (the Recit through its box), at the Volume and as late as the
-    // main output. The main output is the same with or without them.
+    // stage (the Recit through its box), raw: neither its level nor the
+    // Volume acts on it (owner, 2026-11-14). As late as the main output,
+    // which is the same with or without them.
     static constexpr int kDivisionOutputs = 2 * kDivisions;
     void Render(float* left, float* right, int frames, float* const* divisions = nullptr);
 
@@ -132,10 +133,10 @@ public:
     // host as latency.
     int LatencySamples() const { return output.DelaySamples(); }
     const Diagnostics& Diag() const { return diag; }
-    // The loudest sample of each division's own output (kDivisionOutputs'
-    // signal, both channels) since the last call, in kHauptwerk .. kPedal
-    // order, whether or not those outputs are taken; and it starts again.
-    // A front end's level meters read it.
+    // The loudest sample of each division, both channels, at its level and
+    // the Volume (what its own output gave before it was raw) since the
+    // last call, in kHauptwerk .. kPedal order; and it starts again. A front
+    // end's level meters read it.
     std::array<float, kDivisions> TakePeaks();
     // A pipe's sounding frequency as it is tuned now, Hz, or 0 where no pipe
     // stands: for tools and tests.
@@ -256,10 +257,10 @@ private:
     std::array<std::array<float, kHearBlock>, kSpares> spareTold {};
     std::array<float, kHearBlock> spareHeard {};
     int untilTick = 0;
-    float boxLow[2] {}, boxLowGain = 1.0f, boxHighGain = 1.0f, boxLowTarget = 1.0f, boxHighTarget = 1.0f;
+    float boxLow[2] {}, rawBoxLow[2] {}, boxLowGain = 1.0f, boxHighGain = 1.0f, boxLowTarget = 1.0f, boxHighTarget = 1.0f;
     float dry = 0.0f, wet = 0.0f, dryTarget = 0.0f, wetTarget = 0.0f;
-    // The divisions' own outputs: the Volume alone, and a delay as long as
-    // the output stage's.
+    // The divisions' own outputs, raw, with a delay as long as the output
+    // stage's; the Volume only scales what the meters read of them.
     static constexpr int kApartSize = 2048;
     float apartGain = 0.0f, apartTarget = 0.0f;
     // The divisions' levels (kLevelHauptwerk ..), gliding as the Volume does.

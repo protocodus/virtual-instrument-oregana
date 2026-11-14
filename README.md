@@ -41,6 +41,26 @@ and plenty.
 
 ## Version history
 
+### 0.9.0 — 2026-11-14 — raw division outputs, a mixer for each division, every preset at 440 Hz
+
+All three at the owner's request (2026-11-14).
+
+- **Each division's own output is raw**: what its pipes give (the Récit's
+  through its swell box), with neither its level nor the Volume on it. Its
+  meter still reads it at its level and the Volume, as the main output hears
+  it.
+- **A division's level runs from −24 to +24 dB**, 0 dB in the middle and in
+  every preset; it was −24 to +6.
+- **Eight new controls, a Mute and a Solo for each division** (`mute_*`,
+  `solo_*`): a muted division is out of the sound, and while any division is
+  soloed only the soloed ones are in it. Like the level they glide, never
+  click, and never reach a pipe, the wind or the division's own output.
+- **Every preset loads at a1 = 440 Hz.** The sixteen that set a historical
+  pitch (415 Hz for the Chapel Positive, Church French and three French
+  registrations, 466 Hz for Church Saxon and the Germany and Saxony sets)
+  keep their temperaments; Pitch still sets 415 to 466 Hz. Seven of them have a Volume trim 1 dB different from
+  `RenderOregana --levels` at the new pitch.
+
 ### 0.8.0 — 2026-11-14 — similar stops set apart, trumpets half way, by ear
 
 Every change here was chosen by the owner by ear from lettered sets

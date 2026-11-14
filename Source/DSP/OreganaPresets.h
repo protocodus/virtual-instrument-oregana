@@ -132,7 +132,7 @@ inline constexpr std::array<Preset, 77> kPresets { {
     // Five chapel organs: a handful of stops in a small room.
     Registration("Chapel Positive", { kPosGedackt8, kPosRohrfloete4, kPosOctave2, kCouplerPosHw },
                  { { kVolume, 12.0 }, { kPedalMode, kPedalOff },
-                   { kWindSupply, kWindBellows }, { kTemperament, 4 }, { kPitch, 415.0 }, { kAction, 0.5 } }),
+                   { kWindSupply, kWindBellows }, { kTemperament, 4 }, { kAction, 0.5 } }),
     Registration("Chapel Italian", { kRecPrincipal8, kHwOctave4, kHwSuperoctave2, kPosQuinte113, kCouplerRecHw, kCouplerPosHw,
                                      kPedSubbass16 },
                  { { kVolume, 6.0 }, { kWindSupply, kWindBellows }, { kTemperament, 4 }, { kVoicing, 0.4 } }),
@@ -156,13 +156,13 @@ inline constexpr std::array<Preset, 77> kPresets { {
                  { { kVolume, 0.0 }, { kTemperament, 1 } }),
     Registration("Church Saxon", { kHwOctave8, kHwRohrfloete8, kHwOctave4, kHwQuinte223, kHwSuperoctave2, kHwCornet, kHwMixtur,
                                    kHwTrompete8, kPedSubbass16, kPedPrincipal16, kPedOctave8, kPedPosaune16 },
-                 { { kTemperament, 3 }, { kPitch, 466.0 } }),
+                 { { kTemperament, 3 } }),
     Registration("Church Flutes", { kHwRohrfloete8, kHwSpitzfloete4, kPosGedackt8, kPosRohrfloete4, kCouplerPosHw,
                                     kPedSubbass16, kPedGedackt8 },
                  { { kVolume, 8.0 } }),
     Registration("Church French", { kHwCornet, kHwOctave4, kHwTrompete8, kPosKrummhorn8, kPosPrincipal4, kCouplerPosHw,
                                     kPedOctave8, kPedTrompete8 },
-                 { { kVolume, 2.0 }, { kTemperament, 2 }, { kPitch, 415.0 } }),
+                 { { kVolume, 2.0 }, { kTemperament, 2 } }),
     Registration("Church Italian", { kRecPrincipal8, kHwOctave8, kHwOctave4, kHwQuinte223, kHwSuperoctave2, kPosQuinte113,
                                      kPosSiffloete1, kCouplerRecHw, kCouplerPosHw, kPedSubbass16, kPedOctave8 },
                  { { kVolume, 3.0 }, { kTemperament, 4 } }),
@@ -217,42 +217,43 @@ inline constexpr std::array<Preset, 77> kPresets { {
                                      kPedUntersatz32, kPedPrincipal16, kPedOctave8, kPedOctave4, kPedMixtur, kPedPosaune16 },
                  { { kRoom, 0.95 } }),
     // Forty registrations by country or region (owner, 2026-11-13), five for each: what an organist of that school
-    // would draw for its own music, from this organ's stops under their names here, with the temperament, pitch and
-    // wind such an organ usually had. Typical of each school, not a copy of any one organ.
+    // would draw for its own music, from this organ's stops under their names here, with the temperament and wind
+    // such an organ usually had, at a1 = 440 Hz (owner, 2026-11-14: a patch loads at 440 Hz; Pitch on the back still
+    // sets a historical one). Typical of each school, not a copy of any one organ.
 
     // North Germany (the Hanseatic towns' organs): choruses on every division, reeds in consort, the gapped flutes.
     Registration("Germany Organo pleno", { kHwPrincipal16, kHwOctave8, kHwOctave4, kHwQuinte223, kHwSuperoctave2, kHwMixtur, kHwScharff,
                                            kPedPrincipal16, kPedOctave8, kPedOctave4, kPedMixtur, kPedPosaune16, kPedTrompete8 },
-                 { { kVolume, 1.0 }, { kTemperament, 1 }, { kPitch, 466.0 } }),
+                 { { kTemperament, 1 } }),
     Registration("Germany Consort", { kPosDulcian16, kPosKrummhorn8, kPosGedackt8, kPosRohrfloete4, kCouplerPosHw,
                                       kPedSubbass16, kPedTrompete8 },
-                 { { kVolume, 6.0 }, { kTemperament, 1 }, { kPitch, 466.0 } }),
+                 { { kVolume, 6.0 }, { kTemperament, 1 } }),
     Registration("Germany Chorale", { kPosGedackt8, kPosPrincipal4, kPosNasat223, kPosTerz135, kTremulantPos, kCouplerPosHw,
                                       kPedSubbass16, kPedOctave8 },
-                 { { kVolume, 7.0 }, { kTemperament, 1 }, { kPitch, 466.0 } }),
+                 { { kVolume, 8.0 }, { kTemperament, 1 } }),
     Registration("Germany Flutes", { kPosQuintadena8, kPosRohrfloete4, kPosSiffloete1, kCouplerPosHw, kPedGedackt8, kPedNachthorn2 },
-                 { { kVolume, 13.0 }, { kTemperament, 1 }, { kPitch, 466.0 } }),
+                 { { kVolume, 13.0 }, { kTemperament, 1 } }),
     Registration("Germany Toccata", { kHwPrincipal16, kHwOctave8, kHwOctave4, kHwQuinte223, kHwSuperoctave2, kHwMixtur, kHwScharff,
                                       kHwTrompete16, kHwTrompete8,
                                       kPosPrincipal4, kPosOctave2, kPosCimbel, kCouplerPosHw,
                                       kPedPrincipal16, kPedOctave8, kPedOctave4, kPedMixtur, kPedContraposaune32, kPedPosaune16,
                                       kPedTrompete8, kPedCornet2 },
-                 { { kTemperament, 1 }, { kPitch, 466.0 } }),
+                 { { kTemperament, 1 } }),
 
     // Saxony and Thuringia: the builders' own named combinations, and the many 8' stops drawn together.
     Registration("Saxony Pleno", { kHwOctave8, kHwRohrfloete8, kHwOctave4, kHwQuinte223, kHwSuperoctave2, kHwMixtur,
                                    kPedPrincipal16, kPedOctave8, kPedPosaune16 },
-                 { { kVolume, 3.0 }, { kTemperament, 3 }, { kPitch, 466.0 } }),
+                 { { kVolume, 3.0 }, { kTemperament, 3 } }),
     Registration("Saxony Cornet", { kHwOctave8, kHwRohrfloete8, kHwOctave4, kHwCornet, kPedSubbass16, kPedOctave8 },
-                 { { kVolume, 5.0 }, { kTemperament, 3 }, { kPitch, 466.0 } }),
+                 { { kVolume, 5.0 }, { kTemperament, 3 } }),
     Registration("Saxony Tertian", { kHwOctave8, kHwRohrfloete8, kHwOctave4, kHwQuinte223, kHwSuperoctave2, kPosTerz135, kCouplerPosHw,
                                      kPedSubbass16, kPedOctave8 },
-                 { { kVolume, 5.0 }, { kTemperament, 3 }, { kPitch, 466.0 } }),
+                 { { kVolume, 4.0 }, { kTemperament, 3 } }),
     Registration("Saxony Gravity", { kHwOctave8, kHwGamba8, kHwRohrfloete8, kPosGedackt8, kPosQuintadena8, kCouplerPosHw,
                                      kPedSubbass16, kPedOctave8 },
-                 { { kVolume, 4.0 }, { kTemperament, 3 }, { kPitch, 466.0 } }),
+                 { { kVolume, 5.0 }, { kTemperament, 3 } }),
     Registration("Saxony Gamba", { kHwGamba8, kHwRohrfloete8, kHwSpitzfloete4, kPedSubbass16 },
-                 { { kVolume, 10.0 }, { kTemperament, 3 }, { kPitch, 466.0 } }),
+                 { { kVolume, 9.0 }, { kTemperament, 3 } }),
 
     // Bohemia: gentle 8' colours, the two Copulas, low mixtures and no reeds, on a small Pedal.
     Registration("Bohemia Copula", { kPosGedackt8, kPosRohrfloete4, kCouplerPosHw, kPedSubbass16 },
@@ -280,15 +281,15 @@ inline constexpr std::array<Preset, 77> kPresets { {
                                         kPedPrincipal16, kPedOctave8, kPedOctave4, kPedPosaune16, kPedTrompete8 },
                  { { kTemperament, 4 } }),
 
-    // France: three of the classical school's registrations at its low pitch, two of the symphonic organ's.
+    // France: three of the classical school's registrations, two of the symphonic organ's.
     Registration("France Plein jeu", { kHwPrincipal16, kHwOctave8, kHwRohrfloete8, kHwOctave4, kHwSuperoctave2, kHwMixtur, kHwScharff,
                                        kPosGedackt8, kPosPrincipal4, kPosOctave2, kPosCimbel, kCouplerPosHw,
                                        kPedOctave8, kPedTrompete8 },
-                 { { kVolume, 1.0 }, { kTemperament, 2 }, { kPitch, 415.0 } }),
+                 { { kVolume, 1.0 }, { kTemperament, 2 } }),
     Registration("France Fonds", { kHwOctave8, kHwRohrfloete8, kHwOctave4, kPosGedackt8, kPosPrincipal4, kCouplerPosHw, kPedOctave8 },
-                 { { kVolume, 5.0 }, { kTemperament, 2 }, { kPitch, 415.0 } }),
+                 { { kVolume, 6.0 }, { kTemperament, 2 } }),
     Registration("France Cromorne", { kPosKrummhorn8, kPosGedackt8, kPosPrincipal4, kCouplerPosHw, kPedGedackt8 },
-                 { { kVolume, 8.0 }, { kTemperament, 2 }, { kPitch, 415.0 } }),
+                 { { kVolume, 7.0 }, { kTemperament, 2 } }),
     Registration("France Symphonique", { kHwPrincipal16, kHwOctave8, kHwGamba8, kHwRohrfloete8, kHwOctave4,
                                          kRecPrincipal8, kRecFluteHarmonique8, kRecGambe8, kRecFluteOctaviante4, kRecOctavin2,
                                          kRecBasson16, kRecTrompette8, kRecHautbois8, kRecClairon4, kCouplerRecHw, kCouplerRecPed,

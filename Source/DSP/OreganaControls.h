@@ -59,12 +59,26 @@ enum Control : int {
     kSeat,                          // where across the nave the listener sits: -1 by the left wall .. 0 on the axis .. 1 by the right (Nave.h)
     // Each division's level, dB, in kHauptwerk .. kPedal order: a mixer's
     // fader on what its pipes give, not a part of the organ (owner,
-    // 2026-11-14). It acts on the division's sound and its own output,
-    // before the church, and never on the pipes or the wind.
+    // 2026-11-14), from -24 to +24 dB with 0 dB in the middle. It acts on
+    // the division's sound before the church, never on the pipes, the wind
+    // or the division's own output, which is raw.
     kLevelHauptwerk,
     kLevelPositiv,
     kLevelRecit,
     kLevelPedal,
+    // Each division's mute and solo, in kHauptwerk .. kPedal order (owner,
+    // 2026-11-14), on the same fader as its level: a muted division is out
+    // of the sound, and while any division is soloed only the soloed ones
+    // are in it. Like the level they never reach the pipes, the wind or the
+    // division's own output.
+    kMuteHauptwerk,
+    kMutePositiv,
+    kMuteRecit,
+    kMutePedal,
+    kSoloHauptwerk,
+    kSoloPositiv,
+    kSoloRecit,
+    kSoloPedal,
     kControlCount
 };
 
@@ -149,10 +163,18 @@ constexpr std::array<ControlInfo, kControlCount> MakeControlInfo() {
         { "pedal_keys", "Pedal Keys", 0.0, static_cast<double>(kPedalModes - 1), static_cast<double>(kPedalBass), kPedalModes,
           Curve::kStepped, "" },
         { "seat", "Seat", -1.0, 1.0, 0.0, 0, Curve::kLinear, "" },
-        { "level_hauptwerk", "Hauptwerk Level", -24.0, 6.0, 0.0, 0, Curve::kLinear, "dB" },
-        { "level_positiv", "Positiv Level", -24.0, 6.0, 0.0, 0, Curve::kLinear, "dB" },
-        { "level_recit", "Recit Level", -24.0, 6.0, 0.0, 0, Curve::kLinear, "dB" },
-        { "level_pedal", "Pedal Level", -24.0, 6.0, 0.0, 0, Curve::kLinear, "dB" },
+        { "level_hauptwerk", "Hauptwerk Level", -24.0, 24.0, 0.0, 0, Curve::kLinear, "dB" },
+        { "level_positiv", "Positiv Level", -24.0, 24.0, 0.0, 0, Curve::kLinear, "dB" },
+        { "level_recit", "Recit Level", -24.0, 24.0, 0.0, 0, Curve::kLinear, "dB" },
+        { "level_pedal", "Pedal Level", -24.0, 24.0, 0.0, 0, Curve::kLinear, "dB" },
+        { "mute_hauptwerk", "Hauptwerk Mute", 0.0, 1.0, 0.0, 2, Curve::kStepped, "" },
+        { "mute_positiv", "Positiv Mute", 0.0, 1.0, 0.0, 2, Curve::kStepped, "" },
+        { "mute_recit", "Recit Mute", 0.0, 1.0, 0.0, 2, Curve::kStepped, "" },
+        { "mute_pedal", "Pedal Mute", 0.0, 1.0, 0.0, 2, Curve::kStepped, "" },
+        { "solo_hauptwerk", "Hauptwerk Solo", 0.0, 1.0, 0.0, 2, Curve::kStepped, "" },
+        { "solo_positiv", "Positiv Solo", 0.0, 1.0, 0.0, 2, Curve::kStepped, "" },
+        { "solo_recit", "Recit Solo", 0.0, 1.0, 0.0, 2, Curve::kStepped, "" },
+        { "solo_pedal", "Pedal Solo", 0.0, 1.0, 0.0, 2, Curve::kStepped, "" },
     };
     for (int i = kStopCount; i < kControlCount; ++i) info[static_cast<std::size_t>(i)] = rest[i - kStopCount];
     return info;
