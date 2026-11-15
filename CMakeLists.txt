@@ -174,7 +174,16 @@ if(BUILD_TESTING)
         target_compile_options(OreganaDspFuzz PRIVATE
             -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
         target_link_options(OreganaDspFuzz PRIVATE -fsanitize=fuzzer,address,undefined)
-        add_test(NAME Oregana.DspFuzz COMMAND OreganaDspFuzz -seed=1 -max_total_time=60 ${OREGANA_FUZZ_REGRESSIONS})
+        # libFuzzer fuzzes only when it is given a corpus directory: given
+        # files, it runs each once and exits (the fixtures, replayed by
+        # Oregana.DspFuzzReplay, were one empty .gitkeep). The corpus grows in
+        # the build tree, and a crash's input is written to the build
+        # directory, where the sanitizers job uploads crash-*, oom-*,
+        # timeout-* and leak-* from.
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fuzz-corpus")
+        add_test(NAME Oregana.DspFuzz
+                 COMMAND OreganaDspFuzz -seed=1 -max_total_time=60 "-artifact_prefix=${CMAKE_CURRENT_BINARY_DIR}/"
+                         "${CMAKE_CURRENT_BINARY_DIR}/fuzz-corpus")
         set_tests_properties(Oregana.DspFuzz PROPERTIES TIMEOUT 600 LABELS fuzz)
     endif()
 

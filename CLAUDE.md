@@ -238,9 +238,10 @@ device, through the Instrument, changed while a chord is held and twice more
 by automation after long play, `OreganaParameterReachTests --reach`, where
 `--case <control id>` runs one and the rules beside `ReachFor` say which
 controls take only new notes and in what setting each is heard),
-`AudioDemos` (`audio`), `DspFuzz` (`fuzz`, with `-DOREGANA_BUILD_FUZZER=ON`
-and Clang) and `CpuBudget` (`perf`, Release without sanitizers only). There
-is no `ParameterMatrix` yet (README, Known gaps). Select the suites that cover a change with `-R`,
+`AudioDemos` (`audio`), `DspFuzz` (`fuzz`, a minute of libFuzzer from a
+corpus in the build tree, with `-DOREGANA_BUILD_FUZZER=ON` and Clang) and
+`CpuBudget` (`perf`, Release without sanitizers only). There is no
+`ParameterMatrix` yet (README, Known gaps). Select the suites that cover a change with `-R`,
 build `OreganaDSPCxx17` for any `Source/DSP/` change, then run the `unit`,
 `audio` and `perf` tiers before a substantive DSP change is called done.
 
