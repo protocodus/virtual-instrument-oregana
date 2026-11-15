@@ -18,23 +18,36 @@ repository has no release.
 
 ## Audio demos
 
-No audio is committed yet. Eight phrases, one for each of eight registrations
-from a single stop to full organ, are committed in `Docs/audio/midi/` and
-written by `Tools/write_preset_midi.py`:
+Eight registrations from a single stop to full organ, each playing a phrase
+written for it (`Tools/write_preset_midi.py`, committed in
+`Docs/audio/midi/`) through the shipping engine as the registration loads: a
+hymn phrase in four parts on the one open 8' rank, a pastorale on the softest
+stop, slow chords on two string ranks tuned apart under the swell pedal, a
+solo on the five-rank Cornet over a flute, a tenor solo on a short-resonator
+reed with the tremulant, a trumpet tune over the principals, the opening of a
+praeludium on the principal chorus and mixtures, and the first flourish and
+chord of Bach's Toccata in D minor, BWV 565, on the Tutti.
 
-| # | Registration | Phrase |
-| --- | --- | --- |
-| 1 | Principal 8 | a hymn phrase in four parts on the one open 8' rank |
-| 2 | Gedackt 8 | a pastorale on the softest stop, a stopped flute |
-| 5 | Voix celeste | slow chords on two string ranks tuned apart, under the swell pedal |
-| 7 | Cornet | a solo on the five-rank Cornet over a flute accompaniment |
-| 9 | Krummhorn | a tenor solo on a short-resonator reed with the tremulant |
-| 12 | Trompete | a trumpet tune on a chorus reed over the principals |
-| 14 | Plenum | the opening of a praeludium on the principal chorus and mixtures |
-| 17 | Tutti | the first flourish and chord of Bach's Toccata in D minor, BWV 565 |
+<!-- audio-demos-begin -->
+
+| # | Preset | Demo | Length | Peak |
+| --- | --- | --- | --- | --- |
+| 1 | Principal 8 | [01-principal-8.wav](Docs/audio/01-principal-8.wav) | 12.0 s | -14.4 dBFS |
+| 2 | Gedackt 8 | [02-gedackt-8.wav](Docs/audio/02-gedackt-8.wav) | 12.0 s | -17.1 dBFS |
+| 5 | Voix celeste | [05-voix-celeste.wav](Docs/audio/05-voix-celeste.wav) | 12.0 s | -14.9 dBFS |
+| 7 | Cornet | [07-cornet.wav](Docs/audio/07-cornet.wav) | 12.0 s | -15.6 dBFS |
+| 9 | Krummhorn | [09-krummhorn.wav](Docs/audio/09-krummhorn.wav) | 12.0 s | -17.2 dBFS |
+| 12 | Trompete | [12-trompete.wav](Docs/audio/12-trompete.wav) | 12.0 s | -13.6 dBFS |
+| 14 | Plenum | [14-plenum.wav](Docs/audio/14-plenum.wav) | 12.0 s | -12.8 dBFS |
+| 17 | Tutti | [17-tutti.wav](Docs/audio/17-tutti.wav) | 12.0 s | -9.3 dBFS |
+
+<!-- audio-demos-end -->
 
 `build-dsp/RenderOreganaPresetDemos Docs/audio/midi <out-dir>` renders them,
-12 s each. `python3 Tools/render_showcase.py build-dsp <out-dir>` renders the
+12 s of 48 kHz 24-bit stereo each, with the `demos.json` from which
+`python3 Tools/update_readme_blocks.py demos --readme README.md --manifest
+<out-dir>/demos.json` writes the table.
+`python3 Tools/render_showcase.py build-dsp <out-dir>` renders the
 longer listening set to a directory outside the checkout: the Toccata's
 opening on full organ, a hymn under the crescendo roller from one stop to all
 of them, and one phrase with the imperfection controls at none, as loaded
