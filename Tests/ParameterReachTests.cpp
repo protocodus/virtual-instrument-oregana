@@ -146,9 +146,11 @@ public:
         // ran. R, T and the run then differ by that alone: a Recit stop
         // drawn with no coupler to bring it, which no pipe follows, put
         // probe 1 0.94 dB from R over the one 8' rank (2026-11-15). Such a
-        // control is tested with the Action at 0, so all three share every
-        // knock; its knock is the Action's, which is tested on its own and
-        // in Oregana.Engine (MechanismIsHeard). And it is tested with the
+        // control is tested with the Action at 0, so that no key or knob
+        // knocks and none of their knocks moves with it; the knocks are the
+        // Action's, whose reach is tested on its own, and Oregana.Engine
+        // (MechanismIsHeard) hears the shutters, the sliders and the
+        // tremulant's valve. And it is tested with the
         // base patch's stops put in, so that only the pipes it brings or
         // acts on sound: over the Octave 8' a soft 8' (the Quintadena, the
         // Unda maris) moved probe 1 by 0.8 dB, too little to tell from what
