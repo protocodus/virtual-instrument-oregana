@@ -135,8 +135,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      # The fuzz tier is Oregana.DspFuzz, a one-minute fixed-seed libFuzzer run.
-      # OREGANA_ENABLE_SANITIZERS adds -fsanitize=address,undefined,float-cast-overflow
+      # The fuzz tier is Oregana.DspFuzz, the libFuzzer target over the
+      # instrumented DSP. OREGANA_ENABLE_SANITIZERS adds -fsanitize=address,undefined,float-cast-overflow
       # -fno-sanitize-recover=all -fno-omit-frame-pointer to every target.
       - name: Configure the instrumented DSP, tests and libFuzzer target
         run: >-
