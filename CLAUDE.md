@@ -5,9 +5,9 @@
 This is Oregana's canonical repository: it owns the DSP engine in
 `Source/DSP/`, a physically modelled church organ of 51 stops on three
 manuals and pedal. It is a first pass (README, Known gaps): there is no JUCE
-plug-in, no CI and no release yet. When a plug-in is added it wraps the same
+plug-in and no release yet. When a plug-in is added it wraps the same
 engine, with plug-in parameter IDs taken from the control ids in
-`Source/DSP/OreganaControls.h`. A Reason Rack Extension would live in the
+`Source/DSP/OreganaControls.h`. The Reason Rack Extension lives in the
 private `protocodus/reason-rack-extensions` repository as a thin adapter that
 mounts this repository as the pinned submodule `Examples/Oregana/Instrument`
 and compiles `Source/DSP/OreganaEngine.cpp` directly. DSP and playing-model
@@ -17,8 +17,8 @@ MIDI/CV, routing, host latency, patches and panels stay in the adapter.
 Repository layout, naming, CI, versions and the `Docs/` taxonomy follow the
 Protocodus portfolio standard kept in the project, not in this repository;
 `python3 Tools/check_repo_standard.py <checkout>` in the Rack repository
-reports what this first pass does not yet meet (the plug-in, CI, the
-parameter matrix and the generated README parts).
+reports how a checkout stands against it. Oregana is Rack-first (P4, owner
+2026-11-15): the plug-in rules apply once a plug-in is added.
 
 - The DSP version is the product version: `project(Oregana VERSION X.Y.Z)` in
   `CMakeLists.txt`. Any DSP or behaviour change bumps it, and versions only go

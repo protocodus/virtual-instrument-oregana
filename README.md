@@ -12,8 +12,9 @@ dead, pallets hang or channels leak. The machine around the pipes is there
 too: stops that slide and can be left half drawn, couplers with lost motion, a
 blower that can be switched off under a held chord, or a calcant treading the
 bellows. This repository holds the JUCE-free C++17
-engine, its tools and its tests. It is a first pass: there is no plug-in and
-no release yet.
+engine, its tools and its tests. Oregana ships as a Rack Extension for Reason,
+which plays this engine; a plug-in front end is not built yet, and this
+repository has no release.
 
 ## Audio demos
 
@@ -526,10 +527,9 @@ it still brings on the whole stop list, a chapel organ's too.
 
 ## Known gaps
 
-- **No plug-in, no CI, no release.** This is the engine, its tools and
-  tests; the generated README parts (screenshot, demo table, downloads) wait
-  for a main build. The Rack Extension over it is development source in the
-  Rack repository, not yet built with the SDK.
+- **No plug-in and no release here.** This is the engine, its tools and
+  tests, which the Rack Extension in the Rack repository plays; the README's
+  screenshot and downloads wait for a plug-in and its main build.
 - **CPU is above the portfolio's 10 % target for large registrations.** One
   256-frame block takes at most 3 % of a core on a single stop, 8 % on the
   Plenum demo (198 pipes) and 20 % on the Tutti demo (468 pipes); sixteen
