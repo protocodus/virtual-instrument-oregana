@@ -232,11 +232,15 @@ cmake --build build-dsp --parallel 2
 ctest --test-dir build-dsp -L unit --output-on-failure
 ```
 
-Every test is `Oregana.<Suite>`: `Engine`, `Instrument`, `PipeRegulation`, `DspFuzzReplay`
-and `DemoMidiSources` (`unit`), `AudioDemos` (`audio`), `DspFuzz` (`fuzz`,
-with `-DOREGANA_BUILD_FUZZER=ON` and Clang) and `CpuBudget` (`perf`, Release
-without sanitizers only). There is no `ParameterMatrix` or `ParameterReach`
-yet (README, Known gaps). Select the suites that cover a change with `-R`,
+Every test is `Oregana.<Suite>`: `Engine`, `Instrument`, `PipeRegulation`, `DspFuzzReplay`,
+`DemoMidiSources` and `ParameterReach` (`unit`; every control of the Rack
+device, through the Instrument, changed while a chord is held and twice more
+by automation after long play, `OreganaParameterReachTests --reach`, where
+`--case <control id>` runs one and the rules beside `ReachFor` say which
+controls take only new notes and in what setting each is heard),
+`AudioDemos` (`audio`), `DspFuzz` (`fuzz`, with `-DOREGANA_BUILD_FUZZER=ON`
+and Clang) and `CpuBudget` (`perf`, Release without sanitizers only). There
+is no `ParameterMatrix` yet (README, Known gaps). Select the suites that cover a change with `-R`,
 build `OreganaDSPCxx17` for any `Source/DSP/` change, then run the `unit`,
 `audio` and `perf` tiers before a substantive DSP change is called done.
 

@@ -127,6 +127,15 @@ if(BUILD_TESTING)
     add_test(NAME Oregana.Instrument COMMAND OreganaInstrumentTests)
     set_tests_properties(Oregana.Instrument PROPERTIES TIMEOUT 600)
 
+    # U11: every control of the Rack device, through the Instrument, reaches
+    # held and new notes after long play: the shared matrix's --reach
+    # (Tests/ParameterMatrix.h is the shared portfolio copy; do not edit it here).
+    add_executable(OreganaParameterReachTests Tests/ParameterReachTests.cpp)
+    target_link_libraries(OreganaParameterReachTests PRIVATE OreganaDSP Threads::Threads)
+    target_compile_options(OreganaParameterReachTests PRIVATE ${OREGANA_WARNINGS})
+    add_test(NAME Oregana.ParameterReach COMMAND OreganaParameterReachTests --reach --jobs 4)
+    set_tests_properties(Oregana.ParameterReach PROPERTIES LABELS unit TIMEOUT 1800)
+
     # The Rack's SDK refuses a global whose value is worked out when the
     # module loads (0.5.0d2's first build failed on two). GCC folds std::exp
     # and std::sqrt of constants and hides them, so Clang is asked, with the

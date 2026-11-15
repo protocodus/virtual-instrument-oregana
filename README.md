@@ -545,13 +545,15 @@ it still brings on the whole stop list, a chapel organ's too.
   taken up when a key goes down, not when a slider opens.
 - **The bass decay is a little under what Decay Bass asks**: at 2 an 80 Hz
   tail lasts 1.9 times as long, at 0.5 it lasts 0.59 of it.
-- **No parameter matrix and no parameter-reach test yet** (U4, U11). The
-  engine suite checks the extremes of every control together, that each
-  control at its other end changes the sound and that none clicks when
-  thrown under held notes, and the fuzz target writes any value to any
-  control. Pitch, Temperament, Tuning,
-  Temperature and Voicing are the tuner's and voicer's work by design: a
-  speaking pipe keeps what it was made with, and takes a change the next
+- **No parameter matrix yet** (U4). The engine suite checks the extremes of
+  every control together, that each control at its other end changes the
+  sound and that none clicks when thrown under held notes, the fuzz target
+  writes any value to any control, and `Oregana.ParameterReach` (U11) holds
+  that after long play every control reaches the notes struck after it and,
+  unless its design says otherwise, the notes held through it. Pitch,
+  Temperament, Tuning, Temperature and Voicing are the tuner's and voicer's
+  work by design: a speaking pipe, or one still ringing when its key is
+  struck again, keeps what it was made with, and takes a change the next
   time it speaks.
 - **The Vox humana follows the wind more than the other reeds**: 2.3 cents
   for each 1 % of pressure, so it wavers under a heavy registration.
