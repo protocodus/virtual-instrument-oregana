@@ -95,8 +95,9 @@ From the rest of [the 2026-11-18 report](Docs/research/physical-gaps-2026-11-18.
   England Psalm's by 2, registrations that rest the swell pedal part open,
   and the rest by 1 (`RenderOregana --levels`).
 - Four listening sets put 0.10.0 against these
-  ([Docs/decisions.md](Docs/decisions.md)); until the owner judges them,
-  the candidates are taken as chosen.
+  ([Docs/decisions.md](Docs/decisions.md)). The owner chose the breath's
+  lead by ear; until the owner judges the other three, their candidates are
+  taken as chosen.
 
 ### 0.10.0 — 2026-11-18 — flue pipes driven by their jets' change, voiced against recorded organs
 

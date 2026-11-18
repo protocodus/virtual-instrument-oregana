@@ -378,7 +378,7 @@ chords. Nothing in the engine was changed.
 | --- | --- | --- |
 | 1 | Principal tone too odd | 0.10.0: the jet-drive source, every flue family voiced again |
 | 2 | The octave does not speak first | Open: the jet's response across frequency and speed must be derived anew (above) |
-| 3 | No mouth tones; the breath's lead | Mouth tones open, with gap 2. 0.11.0: the pallet's share is Castellengo's short attack (`3-breath-lead`, not yet judged) |
+| 3 | No mouth tones; the breath's lead | Mouth tones open, with gap 2. 0.11.0: the pallet's share is Castellengo's short attack (`3-breath-lead`: C, the owner's choice by ear) |
 | 4 | Ranks too even | 0.11.0: Voicing loads at 0.6 (`4-voicing`, not yet judged) |
 | 5 | The tremulant a fixed dip | 0.11.0: a motor on the trunk that spills wind (`5-tremulant`, not yet judged) |
 | 6 | Wind at the tick rate | Measured on a scratch copy, 66 dB under the wind: not shipped (above) |

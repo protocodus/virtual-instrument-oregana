@@ -14,23 +14,26 @@ letters matched on whole-file RMS with the louder trimmed down (at most
 
 | Set | A (0.10.0) | Candidates | Chosen |
 | --- | --- | --- | --- |
-| `3-breath-lead`: Principal 8 struck hard, ordinarily and softly, detached, in a run and a chord; a hymn; the Gedackt; the Plenum | a flue's foot fills through its pallet in 1.2 ms, five times faster than the fastest measured | B 8.6 ms and C 20.4 ms, Castellengo's measured impulsive and short attacks (2004) | not yet judged: **C** taken |
+| `3-breath-lead`: Principal 8 struck hard, ordinarily and softly, detached, in a run and a chord; a hymn; the Gedackt; the Plenum | a flue's foot fills through its pallet in 1.2 ms, five times faster than the fastest measured | B 8.6 ms and C 20.4 ms, Castellengo's measured impulsive and short attacks (2004) | **C**, by the owner's ear (2026-11-18) |
 | `4-voicing`: Principal 8 in a scale and a hymn; the Plenum | Voicing loads at 0.3 | B: at 0.6 | not yet judged: **B** taken |
 | `5-tremulant`: Krummhorn, Vox humana, Voix celeste, Full Swell | the tremulant a fixed dip on its division's pressure at exactly the Rate | B: a motor on the trunk that spills wind once a beat, the trunk ringing as the reservoir does | not yet judged: **B** taken |
 | `7-swell-box`: Full Swell's pedal opened and shut; Voix celeste; Church Evensong; Hautbois shut | two bands faded evenly in decibels | B: C. Pykett's measured wooden boxes, louvres opening as the sine of their angle | not yet judged: **B** taken |
 
-Each is taken by the standing rule that the candidate wins unless the owner
-says otherwise; of the breath's two candidates, C is the one recommended to
-the owner. Licensed until then:
+The owner chose the breath's lead by ear. The other three are taken by the
+standing rule that the candidate wins unless the owner says otherwise.
+Licensed, the breath's lead by that choice and the rest until the owner
+judges them:
 
-- **C, the breath's lead.** The pallet's share of a flue's fill is
-  Castellengo's short attack, so an ordinary stroke breathes before its tone
-  and a hard one is the impulsive attack. The times are measured, on one tin
-  pipe's chest; which of them an ordinary stroke is was left to the ear. C
-  is recommended because its breath is the nearer a recorded organ's: it
-  alone breathes 100 ms before the tone, in the bass. The pallet's share
-  counts only while the pallet opens, which was found after the set's first
-  rendering; B and C were rendered again with it.
+- **C, the breath's lead, chosen by ear.** The pallet's share of a flue's
+  fill is Castellengo's short attack, so an ordinary stroke breathes before
+  its tone and a hard one is the impulsive attack. The times are measured,
+  on one tin pipe's chest; which of them an ordinary stroke is, the owner
+  chose by ear. C was also the one recommended, its breath the nearer a
+  recorded organ's (it alone breathes 100 ms before the tone, in the bass),
+  but that comparison does not settle it: how fast the recorded organ's
+  pallets open is not known. The pallet's share counts only while the
+  pallet opens, which was found after the set's first rendering; B and C
+  were rendered again with it.
 - **B, Voicing 0.6.** Each pipe stands up to 1.8 dB off its rank's level as
   loaded, where recorded octaves differ by 1.4 to 5 dB, part of it the
   room's. Chapel Italian (0.4), Chapel Village (0.5) and Chapel Derelict
