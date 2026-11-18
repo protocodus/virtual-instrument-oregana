@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(Oregana VERSION 0.10.0 LANGUAGES CXX)
+project(Oregana VERSION 0.11.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -47,6 +47,7 @@ set(OREGANA_DSP_HEADERS
     Source/DSP/PipeRegulation.h
     Source/DSP/ReedPipe.h
     Source/DSP/Stops.h
+    Source/DSP/SwellBox.h
     Source/DSP/Temperament.h
     Source/DSP/Wind.h)
 
@@ -96,6 +97,11 @@ if(OREGANA_BUILD_TOOLS)
     add_executable(ProbePipe Tools/ProbePipe.cpp)
     target_include_directories(ProbePipe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Source")
     target_compile_options(ProbePipe PRIVATE ${OREGANA_WARNINGS})
+
+    # The church's answer to a click, for Tools/room_measures.py.
+    add_executable(NaveResponse Tools/NaveResponse.cpp)
+    target_include_directories(NaveResponse PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Source")
+    target_compile_options(NaveResponse PRIVATE ${OREGANA_WARNINGS})
 
     # The README demos from Docs/audio/midi (Tools/PresetDemoRenderer.h is
     # the shared portfolio copy; do not edit it here).

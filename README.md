@@ -32,14 +32,14 @@ chord of Bach's Toccata in D minor, BWV 565, on the Tutti.
 
 | # | Preset | Demo | Length | Peak |
 | --- | --- | --- | --- | --- |
-| 1 | Principal 8 | [01-principal-8.wav](Docs/audio/01-principal-8.wav) | 12.0 s | -14.9 dBFS |
-| 2 | Gedackt 8 | [02-gedackt-8.wav](Docs/audio/02-gedackt-8.wav) | 12.0 s | -17.5 dBFS |
-| 5 | Voix celeste | [05-voix-celeste.wav](Docs/audio/05-voix-celeste.wav) | 12.0 s | -14.7 dBFS |
-| 7 | Cornet | [07-cornet.wav](Docs/audio/07-cornet.wav) | 12.0 s | -16.4 dBFS |
-| 9 | Krummhorn | [09-krummhorn.wav](Docs/audio/09-krummhorn.wav) | 12.0 s | -16.9 dBFS |
-| 12 | Trompete | [12-trompete.wav](Docs/audio/12-trompete.wav) | 12.0 s | -13.1 dBFS |
-| 14 | Plenum | [14-plenum.wav](Docs/audio/14-plenum.wav) | 12.0 s | -13.2 dBFS |
-| 17 | Tutti | [17-tutti.wav](Docs/audio/17-tutti.wav) | 12.0 s | -9.8 dBFS |
+| 1 | Principal 8 | [01-principal-8.wav](Docs/audio/01-principal-8.wav) | 12.0 s | -14.8 dBFS |
+| 2 | Gedackt 8 | [02-gedackt-8.wav](Docs/audio/02-gedackt-8.wav) | 12.0 s | -17.6 dBFS |
+| 5 | Voix celeste | [05-voix-celeste.wav](Docs/audio/05-voix-celeste.wav) | 12.0 s | -13.6 dBFS |
+| 7 | Cornet | [07-cornet.wav](Docs/audio/07-cornet.wav) | 12.0 s | -16.2 dBFS |
+| 9 | Krummhorn | [09-krummhorn.wav](Docs/audio/09-krummhorn.wav) | 12.0 s | -17.0 dBFS |
+| 12 | Trompete | [12-trompete.wav](Docs/audio/12-trompete.wav) | 12.0 s | -12.2 dBFS |
+| 14 | Plenum | [14-plenum.wav](Docs/audio/14-plenum.wav) | 12.0 s | -11.6 dBFS |
+| 17 | Tutti | [17-tutti.wav](Docs/audio/17-tutti.wav) | 12.0 s | -9.1 dBFS |
 
 <!-- audio-demos-end -->
 
@@ -54,6 +54,49 @@ of them, and one phrase with the imperfection controls at none, as loaded
 and plenty.
 
 ## Version history
+
+### 0.11.0 — 2026-11-18 — pipes that breathe before they speak, a tremulant that spills wind, a measured swell box
+
+From the rest of [the 2026-11-18 report](Docs/research/physical-gaps-2026-11-18.md)'s gaps.
+
+- **A flue pipe breathes before it speaks.** Its foot fills as a measured
+  chest's pallet let one fill at a "short" attack (Castellengo, 2004): the
+  pallet's share of the filling is 20.4 ms where it was 1.2 ms, and a hard
+  stroke halves it. The breath stands 7 to 12 dB under its steady level in
+  the 40 ms before the tone, where there was none, and the tone comes later:
+  the Octave 8's fundamental reaches −6 dB of its level 89 ms after the key
+  on c1 and 212 ms on C, where it took 44 and 130 (velocity 80). The
+  pallet's share counts only while the pallet opens: a filled foot follows
+  its wind through its toe alone, and so does the foot of a stop drawn
+  under a held key. Reeds are as they were.
+- **The tremulant spills wind.** A motor on its division's trunk, driven by
+  the wind, lets a pulse of wind escape once a beat, and the pipes take the
+  winding's answer: the beat goes deepest where its rate meets the
+  reservoir's bounce, and the motor slows as its wind falls, so a chord's
+  attack pulls it about (after C. Pykett's account). It was a fixed dip on
+  the pressure at exactly the Rate.
+- **The swell box answers as measured wooden boxes do** (C. Pykett, several
+  boxes averaged): shut, it takes hardly anything of the lowest notes, 3 dB
+  at 160 Hz and 6 dB an octave more above that, some 35 dB at 8 kHz, and its
+  louvres let most of the treble out in the first tenth of the pedal's
+  travel. It took 8 dB below 500 Hz and 24 dB above, evenly with the pedal.
+  A registration resting the pedal part open is brighter and louder for it.
+- **Voicing loads at 0.6**, not 0.3: a Principal 8's notes now differ by
+  2.4 to 2.7 dB over an octave, dry (1.2 to 1.3 at 0.3), where recorded
+  octaves differ by 1.4 to 5 dB with their room. Chapel Italian and Chapel
+  Village set their own (0.4 and 0.5) and now load more even than the
+  default.
+- The church was measured against two churches' impulse responses
+  (`NaveResponse`, `Tools/room_measures.py`): set to Decay 2.2, Decay Bass
+  0.75 and Decay Treble 0.35, it decays within 0.2 s of Ilmenau's in every
+  octave from 63 Hz to 8 kHz. Its first echoes are too sparse (Known gaps).
+- Every pipe was regulated again, and seventeen presets' Volume trims moved:
+  Full Swell's and Chapel Romantic's by 4 dB, Church Evensong's by 3 and
+  England Psalm's by 2, registrations that rest the swell pedal part open,
+  and the rest by 1 (`RenderOregana --levels`).
+- Four listening sets put 0.10.0 against these
+  ([Docs/decisions.md](Docs/decisions.md)); until the owner judges them,
+  the candidates are taken as chosen.
 
 ### 0.10.0 — 2026-11-18 — flue pipes driven by their jets' change, voiced against recorded organs
 
@@ -434,15 +477,28 @@ its own and no other pipe's: that figure is set by a recorded organ's held
 notes (`Tools/benchmark_steadiness.py`). The eddies in a reed's gap push its
 tongue by a quarter of the boot's push, which walks its pitch as a recorded
 trumpet's walks. The Positiv and the Recit have a
-tremulant each. These constants are voiced to written accounts of such
-winding, not measured on an organ.
+tremulant each: a motor on the division's trunk, driven by its wind, whose
+pallet lets a pulse of wind escape once a beat (`Tremulant` in `Wind.h`).
+What reaches the pipes is the winding's answer to those pulses, so a beat
+goes deepest where its rate meets the reservoir's bounce, and the motor
+slows as its wind falls, so a chord's attack pulls the beat about (after
+C. Pykett's account of such tremulants). These constants are voiced to
+written accounts of such winding, not measured on an organ.
 
 **Keys and stops** (`OreganaEngine.cpp`). MIDI channels 1 to 4 play the
 Hauptwerk, Positiv, Recit and Pedal. Velocity is how fast the key opens the
 pallet, which a tracker action passes on to the pipes' speech: it changes
-the attack, never the level, and there is no sustaining pedal. CC11 is the
-swell pedal, whose shutters take 8 dB of the Recit's bass and 24 dB of its
-treble when shut. Each pipe is heard from where it stands: the keys
+the attack, never the level, and there is no sustaining pedal. A flue's
+foot fills through the opening pallet and its toe: the pallet's share is
+20 ms at an ordinary stroke and half that at a hard one, as a measured
+chest's was at a short and an impulsive attack (Castellengo, 2004), so the
+pipe breathes before its tone. A filled foot follows its wind through the
+toe alone. CC11 is the
+swell pedal. The Recit's box answers it as C. Pykett measured wooden boxes
+to (`SwellBox.h`): shut, it takes hardly anything of the lowest notes, 3 dB
+at 160 Hz and 6 dB an octave more above that, some 35 dB at 8 kHz; its
+shutters are louvres, so the first tenth of the pedal's travel lets out
+most of the treble and each tenth after it less. Each pipe is heard from where it stands: the keys
 alternate between the two sides of each chest, the Pedal in the towers, the
 Positiv at the front of the case, the Hauptwerk half a metre behind it, the
 Pedal a metre and a half and the Recit's box three metres, so each pipe's
@@ -458,7 +514,7 @@ driven by the wind they are given:
   roller turns to where the control is at a roller's speed, the whole way in
   0.8 s; each stop it reaches slides on like any other, and a stage that has
   come on stays until the control is 0.4 of a stage back below it. Thrown from one flute to full organ, the level
-  rises by 18 dB with no step larger than 2.2 dB in 25 ms.
+  rises by 19.5 dB with no step larger than 2.2 dB in 25 ms.
 - *Stops slide.* A stop is a slider under its rank with a hole for each
   pipe. A knob takes 0.1 to 0.2 s to travel, each knob its own time, and the
   pipes get more wind as the holes line up. A stop control anywhere between
@@ -555,7 +611,7 @@ and each pipe keeps its own share of it whatever is played:
 | --- | --- | --- |
 | Tuning | every pipe off its pitch, flues by up to 10 cents and reeds by up to 20 | a quarter: a season after the tuner's visit |
 | Temperature | flue pipes follow the air, 2.95 cents a degree, and reeds do not, so the reeds go out against the flues | 0: the 20 C the organ was tuned at |
-| Voicing | every pipe off its rank's level (up to 3 dB), speech, chiff and wind noise | 0.3 |
+| Voicing | every pipe off its rank's level (up to 3 dB), speech, chiff and wind noise | 0.6 |
 | Wind | how far the reservoirs' sag, dip and bounce reach the pipes, with a slow unrest of the pressure, and how far each flue's own wind wavers and each reed's tongue is pushed about | 0.5: as modelled |
 | Wind Noise | the blower's hum (lower while it starts or runs down), the chests' hiss and the bellows' thud | 0.2 |
 | Action | how worn the action is: the knocks of keys, coupled pallets, pedals, stop knobs, the swell's shutters and the tremulant's valve, a slider's rub, and the couplers' lost motion | 0.25 |
@@ -570,13 +626,13 @@ drive a pipe.
 
 No two ranks of one key speak alike, even on a well-kept organ: on c1 as
 loaded, eight ranks of three divisions are heard 6 to 19 ms after the key,
-each at its own moment, between 1.5 cents flat and 1.1 sharp, and take 13
-to 57 ms to speak (`RegistersSpeakApart` in the engine suite prints them).
+each at its own moment, between 1.5 cents flat and 1.1 sharp, and take 10
+to 151 ms to speak (`RegistersSpeakApart` in the engine suite prints them).
 
 **Output.** The engine runs at 48 kHz, the rate its pipes are tuned at, and
 ends in the portfolio's shared peak limiter at -1.5 dBFS, which full organ
 does not reach on the demos. The factory registrations carry a Volume trim so
-that a single stop is not 18 dB below full organ when it is loaded. The organ
+that a single stop is not 15 dB below full organ when it is loaded. The organ
 presets are trimmed the same way, and they do not limit the crescendo roller:
 it still brings on the whole stop list, a chapel organ's too.
 
@@ -586,12 +642,12 @@ it still brings on the whole stop list, a chapel organ's too.
   tests, which the Rack Extension in the Rack repository plays; the README's
   screenshot and downloads wait for a plug-in and its main build.
 - **CPU is above the portfolio's 10 % target for large registrations.** One
-  256-frame block takes at most 3 % of a core on a single stop, 13 % on the
-  Plenum demo (198 pipes) and 29 % on the Tutti demo (468 pipes); sixteen
-  keys of full organ take 50 to 68 %. Run in turn with it on the same
-  machine, 0.9.0 took 11 to 13, 26 and 48 to 54 %: the jet-drive pipes cost
-  full organ about a tenth more. Development container, GCC 13, Release, one
-  thread. The plan is in
+  256-frame block takes at most 4 % of a core on a single stop, 13 to 14 %
+  on the Plenum demo (198 pipes) and 30 to 33 % on the Tutti demo (468
+  pipes); sixteen keys of full organ take 62 to 64 %. Run in turn with it on
+  the same machine, 0.10.0 took 13, 30 to 31 and 66 to 77 %: 0.11.0's feet,
+  tremulant and swell box cost nothing measurable. Development container,
+  GCC 13, Release, one thread. The plan is in
   [Docs/plans/cpu-optimisation-2026-11-12.md](Docs/plans/cpu-optimisation-2026-11-12.md).
 - **The engine is 48 kHz only.** At another rate `OreganaInstrument.h`
   resamples it, which costs 32 engine samples of latency more.
@@ -648,10 +704,17 @@ it still brings on the whole stop list, a chapel organ's too.
 - **The octave does not speak first.** In a recorded principal the second
   harmonic reaches −6 dB of its steady level 199 to 225 ms before the
   fundamental on C, 81 to 86 ms on c0 and 38 ms on c1, and the fundamental
-  takes 246 to 277 ms from −20 to −6 dB on C (Heers). Here the second comes 31, 16 and 8 ms after the
-  fundamental, which takes 126 ms on C
+  takes 246 to 277 ms from −20 to −6 dB on C (Heers). Here the second
+  comes after the fundamental, 8 ms on c1, 17 on c0 and longer on C, where
+  the fundamental takes 108 ms
   ([report](Docs/research/physical-gaps-2026-11-18.md),
-  `Tools/harmonic_onsets.py`).
+  `Tools/harmonic_onsets.py`). A foot that fills 25 times slower does not
+  change it, nor does a jet whose gain at small swings is independent of
+  the wind, as the jet-drive theory has it: the octave is in phase on its
+  own only between 0.3 and 0.4 of the wind, and there its loop gain reaches
+  1.14, where the recorded octave's growth (14 dB in 36 ms on C) asks about
+  2. The jet's response across frequency and speed would have to be derived
+  anew, and every flue family voiced again with it.
 - **The stopped pipes match recorded ones only in part.** The Gedackt's and
   the Quintadena's twelfths stand within 4 and 5 dB of recorded ones, and
   the Quintadena's seventeenth; but the Gedackt's octave is 10 dB weak and
@@ -662,32 +725,58 @@ it still brings on the whole stop list, a chapel organ's too.
 - **The flutes and strings are voiced to estimates.** Neither recorded organ
   has an open flute or a string measured beside these; their harmonics meet
   typical values within 6 and 5 dB.
-- **Real ranks are less even** than these: the notes of a recorded octave
-  differ by 1.4 to 5 dB where these differ by under 1 dB as loaded (part of
-  the recorded spread is the room).
-- **The breath does not lead the tone.** A recorded pipe hisses for some
-  100 ms before its tone begins; these are silent until it does. The cause
-  is found: a pipe's foot fills here in 3 ms at 247 Hz, and with a foot
-  that fills in 10 to 26 ms, as measured ones do (Castellengo, 2004), the
-  model's breath leads its tone by 55 ms and the tone comes that much later.
-  How late a note should speak is a choice for the ear (a listening set,
-  not yet judged). And no
-  short note has been compared with a recording: the one set with known key
-  times holds only notes of 4 s
+- **The breath leads the tone by tens of milliseconds, not a hundred.** A
+  recorded pipe hisses 13 to 23 dB under its steady level some 100 ms
+  before its tone reaches a tenth of its own (Ilmenau). Here the foot fills
+  as Castellengo measured a pallet's "short" attack (2004), and the breath
+  stands 7 to 12 dB under its steady level in the 40 ms before the tone;
+  100 ms ahead only the bass breathes (at 62 and 123 Hz on a Principal 16',
+  measured at Voicing 0.3), not 247 or 494 Hz. Castellengo's "slow"
+  attack would give the recorded lead and make every note speak some 100 ms
+  late; how fast the recorded organ's pallets open is not known, and which
+  attack is an ordinary stroke waits for the ear. A reed's boot takes no
+  account of the pallet's speed. And no short note has been compared with a
+  recording: the one set with known key times holds only notes of 4 s
   ([benchmark](Docs/research/benchmark-ilmenau-2026-11-13.md)).
-- **Nothing is fitted to an organ.** Scales, voicing, winding, the swell
-  box, the church, the divisions' places, the pipes' hearing and the noises
-  are typical values and estimates, stated as such beside the code. Two
+- **No mouth tones.** Below the pressure at which it speaks, a flue's jet
+  flaps across the lip at its mouth's own edge tone, and where that meets
+  one of the pipe's resonances it sounds, kilohertz above the note, before
+  the tone (Castellengo, 1999). Here the jet answers only near the note: its
+  deflection passes a low-pass designed there. A jet driven by the mouth's
+  whole flow, tried on the bench, made the pipe speak twice as fast and
+  made no mouth tone. It needs the same new
+  derivation of the jet's response across frequency and speed as the
+  octave's lead ([report](Docs/research/physical-gaps-2026-11-18.md)).
+- **The swell box does not ring.** A box's air is a resonator that its
+  shutters' opening tunes, and its panels resonate and leak bass of their
+  own (Pykett); here the box is only what it lets through, averaged over
+  several boxes, and how much it absorbs within is an estimate.
+- **Nothing is fitted to an organ.** Scales, voicing, winding, the church,
+  the divisions' places, the pipes' hearing and the noises are typical
+  values and estimates, stated as such beside the code; the swell box
+  follows measurements averaged over several boxes, not one organ's. Two
   organs have been compared (the benchmarks above); the flue pipes' noise
   spectrum was set by them, and the trumpets' flow bounded by them.
 - **The seat moves across the nave only.** Along it, Room mixes the organ
   and the church and the reflections stay those of a seat 18 m away. From a
   side seat the far ear has the organ later and weaker at every frequency
   alike: there is no head's shadow that grows with the pitch.
-- **The jet-drive pipes and the breath's lead wait for the ear.** The
-  pipes' hearing, the divisions' places and the mechanism's noises were
-  judged on 2026-11-14 ([Docs/decisions.md](Docs/decisions.md)); 0.10.0's
-  pipes and the slower feet of 0.5.0's breath-lead set have not been.
+- **The church's first echoes are too sparse.** Two measured churches
+  (Ilmenau, Heers) are as dense as noise 23 to 73 ms after the direct sound,
+  this one only after 112 to 116 ms: each early reflection here is one image
+  source, one click, where a church scatters each off its pews, columns and
+  mouldings ([report](Docs/research/physical-gaps-2026-11-18.md),
+  `NaveResponse`, `Tools/room_measures.py`). Two smaller differences: the
+  air takes the treble at a rate, but Decay Treble takes it as a share of
+  Decay, so a church set shorter keeps a long one's treble until Decay
+  Treble is raised; and Room loads as a seat near the organ, as clear as
+  Ilmenau's 8.8 m seat, where the measured seats 15 to 17 m away hear the
+  organ 11 to 12 dB weaker against the church.
+- **Five listening sets wait for the ear.** The pipes' hearing, the
+  divisions' places and the mechanism's noises were judged on 2026-11-14
+  ([Docs/decisions.md](Docs/decisions.md)); 0.10.0's jet-drive pipes and
+  0.11.0's breath, voicing, tremulant and swell box have not been, and ship
+  as the candidates.
 
 ## Build
 
@@ -701,8 +790,10 @@ ctest --test-dir build-dsp --output-on-failure
 
 `build-dsp/RenderOregana <registration> <phrase.mid> <out.wav> [id=value ...]`
 plays a MIDI file through one registration with any control changed,
-`RenderOregana --levels` reads each registration's level, and
-`build-dsp/ProbePipe` sounds one pipe alone.
+`RenderOregana --levels` reads each registration's level,
+`build-dsp/ProbePipe` sounds one pipe alone, and `build-dsp/NaveResponse`
+renders the church's answer to a click, which `Tools/room_measures.py`
+measures beside a measured room's.
 
 ## Licensing
 

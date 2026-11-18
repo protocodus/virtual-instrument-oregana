@@ -4,6 +4,45 @@ What was put to the ear, what each letter was, which the owner chose and what
 that licensed. A measurement that settles a question is quoted where the
 question is, not here.
 
+## The breath's lead, the voicing, the tremulant and the swell box (2026-11-18, 0.11.0)
+
+Four questions [the gaps report](research/physical-gaps-2026-11-18.md) left
+to the ear, each a set in `oregana/listening-2026-11-18-gaps/` in the
+project's files. Each plays the same MIDI through the same presets, its
+letters matched on whole-file RMS with the louder trimmed down (at most
+−3.17 dB, where a swell box resting part open made B louder).
+
+| Set | A (0.10.0) | Candidates | Chosen |
+| --- | --- | --- | --- |
+| `3-breath-lead`: Principal 8 struck hard, ordinarily and softly, detached, in a run and a chord; a hymn; the Gedackt; the Plenum | a flue's foot fills through its pallet in 1.2 ms, five times faster than the fastest measured | B 8.6 ms and C 20.4 ms, Castellengo's measured impulsive and short attacks (2004) | not yet judged: **C** taken |
+| `4-voicing`: Principal 8 in a scale and a hymn; the Plenum | Voicing loads at 0.3 | B: at 0.6 | not yet judged: **B** taken |
+| `5-tremulant`: Krummhorn, Vox humana, Voix celeste, Full Swell | the tremulant a fixed dip on its division's pressure at exactly the Rate | B: a motor on the trunk that spills wind once a beat, the trunk ringing as the reservoir does | not yet judged: **B** taken |
+| `7-swell-box`: Full Swell's pedal opened and shut; Voix celeste; Church Evensong; Hautbois shut | two bands faded evenly in decibels | B: C. Pykett's measured wooden boxes, louvres opening as the sine of their angle | not yet judged: **B** taken |
+
+Each is taken by the standing rule that the candidate wins unless the owner
+says otherwise; of the breath's two candidates, C is the one recommended to
+the owner. Licensed until then:
+
+- **C, the breath's lead.** The pallet's share of a flue's fill is
+  Castellengo's short attack, so an ordinary stroke breathes before its tone
+  and a hard one is the impulsive attack. The times are measured, on one tin
+  pipe's chest; which of them an ordinary stroke is was left to the ear. C
+  is recommended because its breath is the nearer a recorded organ's: it
+  alone breathes 100 ms before the tone, in the bass. The pallet's share
+  counts only while the pallet opens, which was found after the set's first
+  rendering; B and C were rendered again with it.
+- **B, Voicing 0.6.** Each pipe stands up to 1.8 dB off its rank's level as
+  loaded, where recorded octaves differ by 1.4 to 5 dB, part of it the
+  room's. Chapel Italian (0.4), Chapel Village (0.5) and Chapel Derelict
+  (0.8) keep their own, so the first two now load more even than the
+  default.
+- **B, the spilled-wind tremulant.** Its motor, valve and trunk are voiced
+  to written accounts of such winding, not measured.
+- **B, Pykett's swell box.** Several boxes averaged, not one organ's; the
+  air in the box and its panels do not resonate. Registrations resting the
+  pedal part open are brighter and louder for it, and every preset's Volume
+  trim was read again.
+
 ## Flue pipes driven by their jets' change (2026-11-18, 0.10.0)
 
 The jet-drive source is the standard model of a flue pipe and was adopted on

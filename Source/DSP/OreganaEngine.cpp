@@ -173,12 +173,8 @@ constexpr double kPressureStep = 0.9 * kStepSeconds / 0.05, kWidthStep = kStepSe
 // tracker action; a tight one has a millisecond or two).
 constexpr double kCouplerSeconds = 0.016;
 
-// The swell box: shut, its walls and shutters take 8 dB of the bass and 24 dB
-// of the treble, split at 500 Hz (an estimate of a well-built box, not a
-// measurement); the shutters move with the pedal, in decibels.
-constexpr float kBoxPole = 0.0634f;
-constexpr double kBoxLowDb = -8.0, kBoxHighDb = -24.0;
-constexpr float kGainStep = 0.001f;   // output gains glide in about 20 ms
+// Output gains, and the swell box's shutters (SwellBox.h), glide in about 20 ms.
+constexpr float kGainStep = 0.001f;
 // A rising Volume takes about 0.2 s, as long as the sliders: a quiet
 // registration's higher trim must not lift the loud one's stops while they
 // are still going in.
@@ -420,9 +416,8 @@ void Engine::Reset() {
     for (Tremulant& t : tremulants) t.Reset();
     unrestRandom = 0x2545F491u;
     untilTick = 0;
-    boxLow[0] = boxLow[1] = rawBoxLow[0] = rawBoxLow[1] = 0.0f;
-    boxLowGain = boxLowTarget;
-    boxHighGain = boxHighTarget;
+    box.Reset();
+    boxed[0] = boxed[1] = rawBoxed[0] = rawBoxed[1] = SwellBox::Channel {};
     dry = dryTarget;
     wet = wetTarget;
     apartGain = apartTarget;
@@ -489,8 +484,10 @@ void Engine::Apply(const Controls& before, bool all) {
                     hang[static_cast<std::size_t>(d)][static_cast<std::size_t>(key)] = 0.0f;
     }
 
-    if (changed(kTremulantRate))
-        for (Tremulant& t : tremulants) t.Design(controls[kTremulantRate], kStepSeconds);
+    if (changed(kTremulantRate)) {
+        tremulants[0].Design(kWinding[kPositiv], controls[kTremulantRate], kStepSeconds);
+        tremulants[1].Design(kWinding[kRecit], controls[kTremulantRate], kStepSeconds);
+    }
     if (changed(kDecay) || changed(kDecayBass) || changed(kDecayTreble) || changed(kRoomSize) || changed(kWidth) || changed(kSeat))
         nave.Set(controls[kDecay], controls[kDecayBass], controls[kDecayTreble], controls[kRoomSize], controls[kWidth],
                  controls[kSeat] * Nave::kSeatMost);
@@ -528,8 +525,7 @@ void Engine::SetSwell(double position) {
     // hard as the pedal was moving.
     if (swell != before && (swell == 0.0 || swell == 1.0) && controls[kAction] > 0.0)
         knocks.Strike(kShutters, kKnockLevel * controls[kAction] * Min(1.0, Abs(swell - before) / kShutterThrow), 0.0);
-    boxLowTarget = static_cast<float>(std::pow(10.0, kBoxLowDb * (1.0 - swell) / 20.0));
-    boxHighTarget = static_cast<float>(std::pow(10.0, kBoxHighDb * (1.0 - swell) / 20.0));
+    box.Set(swell);
 }
 
 void Engine::SetCrescendo(double position) {
@@ -614,11 +610,12 @@ void Engine::UpdateKey(int key, bool struck, int own) {
     }
     for (int d = 0; d < kDivisions; ++d)
         for (int near : { key - 2, key, key + 2 })
-            if (near >= 0 && near < kDivisionKeys[d]) UpdateChannel(d, near, near == key && opened[d] ? late[d] : 0);
+            if (near >= 0 && near < kDivisionKeys[d]) UpdateChannel(d, near, near == key && opened[d] ? late[d] : 0, opened[d]);
 }
 
 // The wind one key's channel holds, and which of its pipes take it.
-void Engine::UpdateChannel(int division, int key, int late) {
+// `pallet`: as its pallet, or its neighbour's that it leaks from, opens.
+void Engine::UpdateChannel(int division, int key, int late, bool pallet) {
     const auto d = static_cast<std::size_t>(division), k = static_cast<std::size_t>(key);
     float wind = open[d][k] ? 1.0f : hang[d][k];
     if (!open[d][k] && controls[kRunnings] > 0.0) {
@@ -651,19 +648,20 @@ void Engine::UpdateChannel(int division, int key, int late) {
     robbed[d][k] = 1.0f / (1.0f + kRobbing * load * load);
     for (int rank = firstRank; rank < endRank; ++rank) {
         const int index = kRankFirst[static_cast<std::size_t>(rank)] + key;
-        if (slots[static_cast<std::size_t>(index)].index >= 0) Offer(index, speaks(rank, index) ? wind : 0.0f, late);
+        if (slots[static_cast<std::size_t>(index)].index >= 0) Offer(index, speaks(rank, index) ? wind : 0.0f, late, pallet);
     }
 }
 
 // A pallet gives a pipe its share of the wind, or takes it away: heard when
 // the sound has come from where the pipe stands, `late` samples later for a
-// pallet a coupler pulls.
-void Engine::Offer(int index, float given, int late) {
+// pallet a coupler pulls. `pallet`: the wind comes as the pallet opens, not
+// through one open already (FluePipe::SetTouch).
+void Engine::Offer(int index, float given, int late, bool pallet) {
     Slot& s = slots[static_cast<std::size_t>(index)];
     if (given == s.offered) return;
     s.offered = given;
     if (pending.size() == pending.capacity()) {
-        Take(index, given);
+        Take(index, given, pallet);
         return;
     }
     // Kept in the order the wind arrives, so that pipes begin in that order
@@ -674,19 +672,19 @@ void Engine::Offer(int index, float given, int late) {
     s.lastDue = due;
     auto at = pending.end();
     while (at != pending.begin() && (at - 1)->due > due) --at;
-    pending.insert(at, { index, due, given });
+    pending.insert(at, { index, due, given, pallet });
 }
 
 // The wind reaches the pipe. True if the pipe was silent and now begins: it
 // has then joined the speaking pipes, and its wind is on. A pipe already
 // speaking or ringing takes its new share at the next tick.
-bool Engine::Take(int index, float given) {
+bool Engine::Take(int index, float given, bool pallet) {
     Slot& s = slots[static_cast<std::size_t>(index)];
     const bool starting = s.share == 0.0f && given > 0.0f;
     s.share = given;
     // Made first: a pipe's making sets its speech for an ordinary touch.
     if (starting && !s.active && s.epoch != epoch) Design(index);
-    if (starting && !s.reed) flues[static_cast<std::size_t>(s.index)].SetTouch(touch[s.key]);
+    if (starting && !s.reed) flues[static_cast<std::size_t>(s.index)].SetTouch(touch[s.key], pallet);
     if (s.active || !starting) return false;
     const float wind = given * opening[s.rank] * pressure[s.division] * robbed[s.division][s.key];
     if (s.reed) {
@@ -890,6 +888,8 @@ void Engine::Tick() {
         taken += demand[d];
         full += fullWind[d];
     }
+    // A tremulant's spilled wind is wind the supply gives too.
+    taken += tremulants[0].spilled * fullWind[kPositiv] + tremulants[1].spilled * fullWind[kRecit];
     const double load = taken / full;
     spin += supply == kWindBlower ? kSpinUp * (1.0 - spin) : -kSpinDown * spin;
     if (spin < 1.0e-6) spin = 0.0;
@@ -900,6 +900,7 @@ void Engine::Tick() {
             // The fresh bellows starts where the spent one's droop left the
             // wind, less the dip, and the reservoirs bring it back.
             for (Reservoir& reservoir : reservoirs) reservoir.pressure -= kWedge * (1.0 - kChangeover) + kChangeDip;
+            for (Tremulant& t : tremulants) t.trunk.pressure -= kWedge * (1.0 - kChangeover) + kChangeDip;
             if (controls[kBlower] > 0.0) knocks.Strike(kBellowsTurn, kKnockLevel * controls[kBlower], 0.0);
         }
     } else {
@@ -913,12 +914,19 @@ void Engine::Tick() {
     diag.supply = head;
 
     for (std::size_t d = 0; d < kDivisions; ++d) {
+        // A tremulant's trunk takes the step first, from where the reservoir
+        // stands (Tremulant::Step).
+        Tremulant* const trembling = d == kPositiv ? &tremulants[0] : d == kRecit ? &tremulants[1] : nullptr;
+        if (trembling != nullptr)
+            trembling->Step(controls[d == kPositiv ? kTremulantPos : kTremulantRec] >= 0.5, depth, demand[d] / fullWind[d], reservoirs[d]);
         reservoirs[d].Step(demand[d] / fullWind[d]);
         unrestSlow[d] += kUnrestPole * (NextNoise(unrestRandom) - unrestSlow[d]);
         unrest[d] += kUnrestPole * (unrestSlow[d] - unrest[d]);
         double p = head * (1.0 + live * (reservoirs[d].pressure - 1.0 + kUnrest * unrest[d]));
-        if (d == kPositiv) p *= tremulants[0].Step(controls[kTremulantPos] >= 0.5, depth);
-        if (d == kRecit) p *= tremulants[1].Step(controls[kTremulantRec] >= 0.5, depth);
+        // The tremulant's beat is its trunk's ring, which Wind does not scale,
+        // so that a tremulant beats as it is set at any Wind: Wind sets how far
+        // the reservoir's own sag, dip, bounce and unrest reach the pipes.
+        if (trembling != nullptr) p += head * (trembling->trunk.pressure - reservoirs[d].pressure);
         // The valve's thump, from the middle of its division: as loud as the
         // beat is deep, a full one at 10 %, and heard with the wind's noise,
         // while the organ is played and a little after.
@@ -1017,9 +1025,8 @@ void Engine::Tick() {
     const float noise = static_cast<float>(kBlowerLevel * controls[kBlower]) * presence;
     hum = noise * static_cast<float>(spin);
     hiss = noise * static_cast<float>(Min(head, 1.5));
-    for (float* lows : { boxLow, rawBoxLow })
-        for (int c = 0; c < 2; ++c)
-            if (Abs(lows[c]) < 1.0e-20f) lows[c] = 0.0f;
+    for (SwellBox::Channel* channels : { boxed, rawBoxed })
+        for (int c = 0; c < 2; ++c) SwellBox::Settle(channels[c]);
 
     // Pipes made for an earlier tuning are remade a few at a time while
     // they are silent; one that is asked to speak first is remade then.
@@ -1201,7 +1208,7 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
     std::size_t arrived = 0;
     for (; arrived < pending.size() && pending[arrived].due < now + static_cast<std::uint64_t>(frames); ++arrived) {
         const Pending arriving = pending[arrived];
-        if (!Take(arriving.slot, arriving.share)) continue;
+        if (!Take(arriving.slot, arriving.share, arriving.pallet)) continue;
         const Slot& s = slots[static_cast<std::size_t>(arriving.slot)];
         const int from = static_cast<int>(arriving.due - now);
         if (s.reed) reeds[static_cast<std::size_t>(s.index)].Run(scratch.data(), frames - from);
@@ -1225,8 +1232,7 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
     for (int i = 0; i < frames; ++i) {
         const auto at = static_cast<std::size_t>(i);
         float sound[2];
-        boxLowGain += kGainStep * (boxLowTarget - boxLowGain);
-        boxHighGain += kGainStep * (boxHighTarget - boxHighGain);
+        box.Glide(kGainStep);
         apartGain += (apartTarget > apartGain ? kGainRise : kGainStep) * (apartTarget - apartGain);
         // At 0 dB a level is exactly 1, so the sound is the same sample for sample as without it.
         for (std::size_t d = 0; d < kDivisions; ++d)
@@ -1237,26 +1243,21 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
         for (std::size_t c = 0; c < 2; ++c) {
             float level[kDivisions];
             for (std::size_t d = 0; d < kDivisions; ++d) level[d] = levelGain[d] * bus[d][c][at];
-            const float enclosed = level[kRecit];
-            boxLow[c] += kBoxPole * (enclosed - boxLow[c]);
-            const float boxed = boxLowGain * boxLow[c] + boxHighGain * (enclosed - boxLow[c]);
-            sound[c] = level[kHauptwerk] + level[kPositiv] + level[kPedal]
-                + boxLowGain * boxLow[c] + boxHighGain * (enclosed - boxLow[c]);
+            const float enclosed = box.Process(boxed[c], level[kRecit]);
+            sound[c] = level[kHauptwerk] + level[kPositiv] + level[kPedal] + enclosed;
             apart[kPositiv - 1] += 0.5f * level[kPositiv];
-            apart[kRecit - 1] += 0.5f * boxed;
+            apart[kRecit - 1] += 0.5f * enclosed;
             apart[kPedal - 1] += 0.5f * level[kPedal];
             // Kept running with nobody listening, so that an output taken
             // up while the organ sounds starts on what was just played.
             // The Recit's own output is raw too, so it goes through a box of
             // its own, ahead of the Recit's level.
-            const float bare = bus[kRecit][c][at];
-            rawBoxLow[c] += kBoxPole * (bare - rawBoxLow[c]);
-            const float rawBoxed = boxLowGain * rawBoxLow[c] + boxHighGain * (bare - rawBoxLow[c]);
+            const float bare = box.Process(rawBoxed[c], bus[kRecit][c][at]);
             for (std::size_t d = 0; d < kDivisions; ++d) {
                 auto& line = apartLine[2 * d + c];
-                const float metered = apartGain * (d == kRecit ? boxed : level[d]);
+                const float metered = apartGain * (d == kRecit ? enclosed : level[d]);
                 peaks[d] = Max(peaks[d], metered < 0.0f ? -metered : metered);
-                line[static_cast<std::size_t>(apartAt)] = d == kRecit ? rawBoxed : bus[d][c][at];
+                line[static_cast<std::size_t>(apartAt)] = d == kRecit ? bare : bus[d][c][at];
                 if (divisions != nullptr)
                     divisions[2 * d + c][offset + i] = line[static_cast<std::size_t>((apartAt - late) & (kApartSize - 1))];
             }

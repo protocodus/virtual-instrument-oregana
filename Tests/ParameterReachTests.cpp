@@ -262,6 +262,17 @@ public:
             return Rule(Reach::Held, "", alone({ { kPosGedackt8, drawn }, { kCouplerPosHw, drawn } }),
                         "the tremulant's beat, which in T has run since the start and in the run begins at the change");
         case kTremulantRate: return Rule(Reach::Held, "", {}, "the tremulant's beat, which goes on at the new rate from where the old rate left it");
+        // Its depth is heard where the switch is, over the one flute rank. At
+        // 0 the beat stops and the trunk rings down to its reservoir: a
+        // second after the change the Positiv's wind under a held chord
+        // stands within 6e-5 of T's. On the first registration with the
+        // tremulant, the Krummhorn's, the run kept where the beat had left
+        // each pipe in its cycle, the Krummhorn and the Gedackt on each key
+        // adding in other phases than in T: probe 1 stood 2.04 dB from T
+        // against R's 2.54, a quarter of its 2.10 dB move short by 0.03,
+        // once the pipes' regulation was written again (2026-11-18).
+        case kTremulantDepth:
+            return Rule(Reach::Held, "", alone({ { kPosGedackt8, drawn }, { kCouplerPosHw, drawn }, { kTremulantPos, drawn } }));
         default: return {};
         }
     }

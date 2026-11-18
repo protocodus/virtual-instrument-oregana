@@ -71,6 +71,7 @@
 #include "OreganaControls.h"
 #include "OutputStage.h"
 #include "Stops.h"
+#include "SwellBox.h"
 #include "Wind.h"
 
 #include <array>
@@ -175,9 +176,9 @@ private:
     void Register();
     void SetSlider(int stop, float position);
     void UpdateKey(int key, bool struck = false, int own = -1);
-    void UpdateChannel(int division, int key, int late = 0);
-    void Offer(int slot, float share, int late);
-    bool Take(int slot, float share);
+    void UpdateChannel(int division, int key, int late = 0, bool pallet = false);
+    void Offer(int slot, float share, int late, bool pallet);
+    bool Take(int slot, float share, bool pallet);
     void Design(int slot);
     void Place(Slot& slot);
     void Tick();
@@ -193,7 +194,7 @@ private:
     // its order is the order their sound is added up in, which must not
     // depend on how the host cuts its blocks.
     std::vector<int> active;
-    struct Pending { int slot; std::uint64_t due; float share; };
+    struct Pending { int slot; std::uint64_t due; float share; bool pallet; };
     std::vector<Pending> pending;                // wind on its way to a pipe, soonest first
     std::uint64_t now = 0;                       // samples rendered
     std::uint32_t epoch = 1;
@@ -257,7 +258,9 @@ private:
     std::array<std::array<float, kHearBlock>, kSpares> spareTold {};
     std::array<float, kHearBlock> spareHeard {};
     int untilTick = 0;
-    float boxLow[2] {}, rawBoxLow[2] {}, boxLowGain = 1.0f, boxHighGain = 1.0f, boxLowTarget = 1.0f, boxHighTarget = 1.0f;
+    // The Recit's box, on its way to the church and to its own output.
+    SwellBox box;
+    SwellBox::Channel boxed[2], rawBoxed[2];
     float dry = 0.0f, wet = 0.0f, dryTarget = 0.0f, wetTarget = 0.0f;
     // The divisions' own outputs, raw, with a delay as long as the output
     // stage's; the Volume only scales what the meters read of them.

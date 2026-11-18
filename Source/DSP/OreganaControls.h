@@ -136,7 +136,11 @@ constexpr std::array<ControlInfo, kControlCount> MakeControlInfo() {
         // cents and reeds within 5.
         { "tuning", "Tuning", 0.0, 1.0, 0.25, 0, Curve::kLinear, "" },
         { "temperature", "Temperature", -10.0, 10.0, 0.0, 0, Curve::kLinear, "C" },
-        { "voicing", "Voicing", 0.0, 1.0, 0.3, 0, Curve::kLinear, "" },
+        // Recorded octaves differ note to note by 1.4 to 5 dB, part of it
+        // the room's: 0.6 sets a rank's pipes up to 1.8 dB apart, dry
+        // (over 0.3, put to the ear and taken until the owner judges it,
+        // Docs/decisions.md).
+        { "voicing", "Voicing", 0.0, 1.0, 0.6, 0, Curve::kLinear, "" },
         { "wind", "Wind", 0.0, 1.0, 0.5, 0, Curve::kLinear, "" },
         { "blower", "Wind Noise", 0.0, 1.0, 0.2, 0, Curve::kLinear, "" },
         { "action", "Action", 0.0, 1.0, 0.25, 0, Curve::kLinear, "" },

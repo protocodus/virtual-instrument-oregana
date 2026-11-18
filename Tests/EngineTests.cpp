@@ -277,6 +277,41 @@ void TremulantBeats() {
 }
 
 void SwellBoxCloses() {
+    // The box alone against Pykett's wooden boxes (SwellBox.h): shut, 3 dB
+    // at 160 Hz and some 35 dB at 8 kHz, nothing at 30 Hz; a tenth of the
+    // shutters' travel lets out most of the treble; open, the sound itself.
+    const auto through = [](double pedal, double hz) {
+        SwellBox box;
+        box.Set(pedal);
+        box.Reset();
+        SwellBox::Channel channel;
+        double in = 0.0, out = 0.0;
+        for (int i = 0; i < kRate; ++i) {
+            const float x = static_cast<float>(std::sin(2.0 * kPi * hz * i / kRate));
+            const float y = box.Process(channel, x);
+            if (i >= kRate / 2) {
+                in += static_cast<double>(x) * x;
+                out += static_cast<double>(y) * y;
+            }
+        }
+        return 10.0 * std::log10(out / in);
+    };
+    Expect(Abs(through(0.0, 160.0) + 3.0) < 0.1, "SwellBoxCloses", "shut, the box takes 3 dB at 160 Hz, dB", through(0.0, 160.0));
+    Expect(Abs(through(0.0, 8000.0) + 35.0) < 1.0, "SwellBoxCloses", "and some 35 dB at 8 kHz, dB", through(0.0, 8000.0));
+    Expect(through(0.0, 30.0) > -0.1, "SwellBoxCloses", "and hardly anything at 30 Hz, dB", through(0.0, 30.0));
+    Expect(through(0.1, 8000.0) > -8.0, "SwellBoxCloses", "a tenth open lets most of the treble out, dB", through(0.1, 8000.0));
+    Expect(through(0.2, 8000.0) - through(0.1, 8000.0) < through(0.1, 8000.0) - through(0.0, 8000.0),
+           "SwellBoxCloses", "and the next tenth less, dB", through(0.2, 8000.0) - through(0.1, 8000.0));
+    SwellBox opened;
+    opened.Reset();
+    SwellBox::Channel channel;
+    bool same = true;
+    for (int i = 0; i < 4800; ++i) {
+        const float x = static_cast<float>(std::sin(0.05 * i) + 0.3 * std::sin(1.3 * i));
+        same = same && opened.Process(channel, x) == x;
+    }
+    Expect(same, "SwellBoxCloses", "open, the box gives back the sound sample for sample", 0.0);
+
     double levels[2];
     int at = 0;
     for (double swell : { 1.0, 0.0 }) {

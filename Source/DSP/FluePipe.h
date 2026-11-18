@@ -172,8 +172,10 @@ struct FluePipe {
     int upperLength = 0;
     float upFromBelow = 0.0f, upFromAbove = 0.0f, downFromBelow = 1.0f, downFromAbove = 0.0f;
     float upperLowpass = 1.0f, upperGain = 0.0f, upperAllpass = 0.0f;
-    // The foot and the radiation.
-    float attack = 1.0f, release = 1.0f, radiation = 0.0f;
+    // The foot and the radiation. The foot fills at `attack` while its
+    // pallet opens and at `refill`, through its toe alone, once it has caught
+    // up with its channel; it empties at `release`.
+    float attack = 1.0f, refill = 1.0f, release = 1.0f, radiation = 0.0f;
     float gainLeft = 0.0f, gainRight = 0.0f;
     double air = 0.0;   // the wind it takes at nominal pressure, against an 8' C principal
     // What a neighbour a metre away hears of this pipe, against its own wave,
@@ -205,6 +207,7 @@ struct FluePipe {
     float jetShare = 0.0f;   // the jet's share at the lip (JetShape), the sample before
     float jetRate = 0.0f;    // its rate of change as the compact source passes it
     float foot = 0.0f, wind = 0.0f;       // foot pressure and what the pallet offers it, against nominal
+    float rising = 1.0f;                  // how fast the foot fills now: `attack` or `refill`
     float jetTransit = 1.0f, jetStep = 0.0f;
     std::uint32_t random = 1u;
     float filledFrom = 0.0f;   // the foot's pressure when its wind last began to rise
@@ -212,6 +215,10 @@ struct FluePipe {
     int quiet = 0;
 
     static constexpr int kTick = 32;   // samples between Tick() calls
+    // A foot within 2 % of its channel's pressure, about what its own wind
+    // wavers by, has caught up with it: the pallet stands open, and the foot
+    // follows the channel through its toe.
+    static constexpr float kCaughtUp = 0.02f;
     static constexpr float kPipeSilent = 1.0e-5f;
     // The most the air's bend stretches or shortens a pipe: 10 C either way,
     // 29.5 cents.
@@ -393,9 +400,24 @@ struct FluePipe {
         }
 
         // The foot fills through the pallet and the toe, the faster the
-        // smaller the pipe, and empties through the flue.
-        attackSeconds = v.speech * (0.0012 + 0.35 / hz);
-        SetTouch(1.0);
+        // smaller the pipe, and empties through the flue. The pallet's
+        // share is Castellengo's "short" attack (ISMA 2004): on a chest
+        // whose pallet opened at chosen rates, a 475 Hz pipe's foot crossed
+        // the pressure the pipe speaks at, 125 of 360 Pa, 9 ms after the
+        // pallet began to open (4 ms "impulsive", 40 ms "slow") and was
+        // full in 45 ms, and a one-pole crosses it at 0.43 of its time. So
+        // a pipe breathes before its tone, as recorded ones do, and a hard
+        // stroke, which halves it, is the impulsive attack. Which measured
+        // attack is an ordinary stroke is the ear's (Docs/decisions.md).
+        // Once caught up (kCaughtUp), and from the start when a stop's
+        // slider brings the pipe on under a pallet already open, the foot
+        // follows its channel through the toe alone: the pallet's time is
+        // its opening's. Kept for every rise of the wind, it slowed a held
+        // pipe's answer to its wind's bounce and bunched the crescendo
+        // roller's stops into a step.
+        attackSeconds = v.speech * (0.0204 + 0.35 / hz);
+        refill = static_cast<float>(1.0 - std::exp(-1.0 / (v.speech * 0.35 / hz * kPipeRate)));
+        SetTouch(1.0, true);
         release = static_cast<float>(1.0 - std::exp(-1.0 / ((0.004 + 0.5 / hz) * kPipeRate)));
         // Wind through the flue: its area goes with the diameter squared.
         air = 4.0 * radius * radius / (0.1555 * 0.1555);
@@ -411,9 +433,12 @@ struct FluePipe {
         MakeWarm(w);
     }
 
-    // How fast the key opens the pallet: 1 is an ordinary stroke.
-    void SetTouch(double slowness) {
+    // How fast the key opens the pallet: 1 is an ordinary stroke. Not
+    // `opening`: the pipe's pallet was open already (a stop drawn under a
+    // held key), and its foot fills through the toe alone.
+    void SetTouch(double slowness, bool opening) {
         attack = static_cast<float>(1.0 - std::exp(-1.0 / (attackSeconds * slowness * kPipeRate)));
+        rising = opening ? attack : refill;
     }
 
     void Clear() {
@@ -526,10 +551,12 @@ struct FluePipe {
         float filled = filledFrom, pushing = puffNow;
         const float keep = 1.0f - release;
         std::uint32_t seed = random;
-        const float target = wind, rise = attack, fall = release;
+        const float target = wind, toe = refill, fall = release;
+        float rise = rising;
         const float jetSize = static_cast<float>(jetLength);
         for (int i = 0; i < frames; ++i) {
             const float gap = target - pressure;
+            rise = gap > target * kCaughtUp ? rise : toe;
             pressure += gap * (gap > 0.0f ? rise : fall);
             if (!(gap > 0.0f)) filled = pressure;
 
@@ -638,6 +665,7 @@ struct FluePipe {
         radiationIn = radIn;
         radiationOut = radOut;
         foot = pressure;
+        rising = rise;
         filledFrom = filled;
         puffNow = pushing;
         jetTransit = Clamp(transit, 0.0f, jetLongest);
@@ -671,7 +699,8 @@ struct FluePipe {
         const Float4 upFromBelowC = OREGANA_LANES(upFromBelow), upFromAboveC = OREGANA_LANES(upFromAbove);
         const Float4 downFromBelowC = OREGANA_LANES(downFromBelow), downFromAboveC = OREGANA_LANES(downFromAbove);
         const Float4 upperLowpassC = OREGANA_LANES(upperLowpass), upperGainC = OREGANA_LANES(upperGain), upperAllpassC = OREGANA_LANES(upperAllpass);
-        const Float4 target = OREGANA_LANES(wind), rise = OREGANA_LANES(attack), fall = OREGANA_LANES(release);
+        const Float4 target = OREGANA_LANES(wind), toe = OREGANA_LANES(refill), fall = OREGANA_LANES(release);
+        Float4 rise = OREGANA_LANES(rising);
         const Float4 tellingC = OREGANA_LANES(telling);
         Float4 upperLp = OREGANA_LANES(upperOut), upperApIn = OREGANA_LANES(upperAllpassIn), upperApOut = OREGANA_LANES(upperAllpassOut);
         Float4 lipIn = OREGANA_LANES(mouthIn), lipOut = OREGANA_LANES(mouthOut);
@@ -716,6 +745,7 @@ struct FluePipe {
         UInt4 seed = { pipe[0]->random, pipe[1]->random, pipe[2]->random, pipe[3]->random };
         for (int i = 0; i < frames; ++i) {
             const Float4 gap = target - pressure;
+            rise = Choose(gap > target * Four(kCaughtUp), rise, toe);
             const Int4 filling = gap > zero;
             pressure += gap * Choose(filling, rise, fall);
             filled = Choose(filling, filled, pressure);
@@ -836,6 +866,7 @@ struct FluePipe {
             p.radiationIn = radIn[l];
             p.radiationOut = radOut[l];
             p.foot = pressure[l];
+            p.rising = rise[l];
             p.filledFrom = filled[l];
             p.puffNow = pushing[l];
             p.jetTransit = Clamp(transit[l], 0.0f, p.jetLongest);
