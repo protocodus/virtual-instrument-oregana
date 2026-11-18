@@ -287,24 +287,52 @@ struct ReedFamily {
 };
 
 inline const FlueFamily& Flue(Family family) {
+    // The jet drives the pipe by its flow's rate of change (FluePipe.h), and
+    // under that source a recorded voicing is a gentle one: the jet swings 1
+    // to 3 of its half-widths about a lip it stands well off, and the offset
+    // sets the even harmonics. Each family was voiced on ProbePipe against
+    // the recorded organs (Docs/research/physical-gaps-2026-11-18.md),
+    // harmonics two to five over five octaves. A principal's second stands
+    // within 3 dB of Bureå's and Ilmenau's, its third within 4 and its
+    // fourth within 9, the second over the third as recorded (0.9.0's stood
+    // under it). The Gedackt's twelfth comes within 4 dB, its octave 10 dB
+    // weak and its fifteenth 5 to 12 dB strong. The Quintadena's twelfth and
+    // seventeenth come within 5 dB, its octave 13 to 16 dB weak and its
+    // seventh up to 24 dB strong in the bass. The Rohrflöte's seventeenth is
+    // as recorded at c0 only, 20 dB strong an octave below and 9 to 21 dB
+    // weak above, with its chimney lengthened and widened from 0.9.0's 0.4
+    // and 0.3 of the pipe to raise it. No flute or string of those organs
+    // was measured: theirs are estimates, met within 6 and 5 dB.
+    //
+    // The lip's shedding sets how fast a pipe speaks and how far its pitch
+    // follows the wind: at 4 a principal's 8' C takes 120 ms from -20 to -6
+    // dB and moves 1.1 cents for 1 % of wind; at 1 it took 600 ms and moved
+    // half as far. Recorded flues move 5 to 7 cents for each decibel of
+    // level, these 5 to 10, stop by stop (in the median 0.82 cents and 0.10
+    // dB for 1 % of wind). A principal's treble sheds 2.5: at 1, its top fell
+    // silent at 0.6 of the wind. The turbulence leaves the breath between
+    // the harmonics 2 dB over 0.9.0's, which stood 2 to 6 dB under the
+    // recorded organs' (benchmark-ilmenau-2026-11-13.md).
     static const FlueFamily principal { false, 0.0, 0.0, 0.0,
-        { 0.0, 35.0, 6.0, 1.3, 0.05, 0.6, 1.2, 1.0, 1.0 }, { 0.0, 30.0, 4.0, 1.0, 0.06, 0.5, 0.8, 1.0, 1.0 } };
+        { 0.0, 35.0, 2.3, 1.2, 0.0078, 0.6, 4.0, 1.0, 1.0 }, { 0.0, 30.0, 0.9, 0.3, 0.0092, 0.5, 2.5, 1.0, 1.0 } };
     static const FlueFamily flute { false, 0.0, 0.0, 0.0,
-        { 6.0, 25.0, 2.2, 0.35, 0.09, 0.4, 0.6, 1.0, 1.0 }, { 5.0, 25.0, 1.9, 0.3, 0.09, 0.4, 0.4, 1.0, 1.0 } };
+        { 6.0, 25.0, 1.5, 0.5, 0.034, 0.4, 1.1, 1.0, 1.0 }, { 5.0, 25.0, 1.25, 0.2, 0.03, 0.4, 1.25, 1.0, 1.0 } };
     static const FlueFamily taper { false, 0.0, 0.0, 0.0,
-        { 2.0, 30.0, 3.0, 0.6, 0.07, 0.5, 0.8, 2.0, 1.0 }, { 2.0, 28.0, 2.5, 0.5, 0.07, 0.5, 0.6, 2.0, 1.0 } };
+        { 2.0, 30.0, 1.1, 0.6, 0.018, 0.5, 2.0, 2.0, 1.0 }, { 2.0, 28.0, 1.1, 0.6, 0.018, 0.5, 2.0, 2.0, 1.0 } };
+    // A stopped pipe's even harmonics fall between its resonances: the
+    // recorded ones stay 30 to 60 dB down.
     static const FlueFamily stopped { true, 0.0, 0.0, 0.0,
-        { 4.0, 30.0, 2.6, 0.45, 0.10, 0.9, 0.6, 1.0, 1.0 }, { 3.0, 28.0, 2.2, 0.35, 0.10, 0.8, 0.5, 1.0, 1.0 } };
-    static const FlueFamily chimney { true, 0.3, 0.4, 0.0,
-        { 4.0, 30.0, 3.0, 0.45, 0.09, 0.8, 0.6, 1.0, 1.0 }, { 3.0, 28.0, 2.4, 0.4, 0.09, 0.7, 0.5, 1.0, 1.0 } };
+        { 4.0, 30.0, 1.9, 0.5, 0.028, 0.9, 1.9, 1.0, 1.0 }, { 3.0, 28.0, 1.5, 0.4, 0.028, 0.8, 1.9, 1.0, 1.0 } };
+    static const FlueFamily chimney { true, 0.4, 0.5, 0.0,
+        { 4.0, 30.0, 1.6, 0.3, 0.025, 0.8, 2.0, 1.0, 1.0 }, { 3.0, 28.0, 1.4, 0.2, 0.025, 0.7, 1.5, 1.0, 1.0 } };
     static const FlueFamily quintadena { true, 0.0, 0.0, 0.0,
-        { -6.0, 40.0, 6.0, 0.3, 0.06, 1.2, 1.0, 1.0, 1.0 }, { -5.0, 35.0, 4.5, 0.3, 0.06, 1.0, 0.8, 1.0, 1.0 } };
+        { -6.0, 40.0, 2.75, 0.9, 0.010, 1.2, 2.0, 1.0, 1.0 }, { -5.0, 35.0, 2.4, 1.0, 0.010, 1.0, 2.0, 1.0, 1.0 } };
     static const FlueFamily string { false, 0.0, 0.0, 0.0,
-        { -9.0, 45.0, 8.0, 1.6, 0.05, 0.4, 1.5, 1.0, 1.6 }, { -8.0, 40.0, 5.0, 1.2, 0.05, 0.4, 1.0, 1.0, 1.4 } };
+        { -9.0, 45.0, 1.6, 0.6, 0.0071, 0.4, 2.5, 1.0, 1.6 }, { -8.0, 40.0, 1.6, 1.05, 0.0108, 0.4, 3.6, 1.0, 1.4 } };
     // Blown harder than a flute of ordinary length, which would jump to its
     // octave: this one is there already.
     static const FlueFamily harmonic { false, 0.0, 0.0, 0.3,
-        { 4.0, 30.0, 4.0, 0.7, 0.07, 0.5, 0.8, 1.0, 1.0 }, { 4.0, 28.0, 3.5, 0.6, 0.07, 0.5, 0.6, 1.0, 1.0 } };
+        { 4.0, 30.0, 1.4, 0.6, 0.011, 0.5, 2.5, 1.0, 1.0 }, { 4.0, 28.0, 1.4, 0.6, 0.017, 0.5, 2.5, 1.0, 1.0 } };
     switch (family) {
         case Family::Harmonic: return harmonic;
         case Family::Flute: return flute;

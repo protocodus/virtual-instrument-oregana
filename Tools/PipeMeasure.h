@@ -45,21 +45,47 @@ inline double Hz(const std::vector<float>& x, std::size_t from, std::size_t end,
 // octave and a half either side of `guess`: where a pipe has jumped to
 // another note, the phase measurement above would follow a harmonic.
 inline double CoarseHz(const std::vector<float>& x, std::size_t from, std::size_t end, double guess, double rate) {
-    const auto shortest = static_cast<std::size_t>(rate / (guess * 2.8)), longest = static_cast<std::size_t>(rate / guess * 2.8);
-    if (from + 3 * longest > end) return guess;
+    if (from + 3 * static_cast<std::size_t>(rate / guess * 2.8) > end) return guess;
     // A treble pipe's period is a few samples and seldom a whole number of
     // them, and a reed's match peaks sharply: whole lags alone favour
     // whichever multiple of the period lands nearest a sample. Smoothed to
     // little more than the fundamental, each peak is broad enough to read
     // off the parabola through it.
-    std::vector<double> y(end - from);
+    std::vector<double> smoothed(end - from);
     const double smooth = 1.0 - std::exp(-kTwoPi * Min(1.5 * guess, 0.4 * rate) / rate);
     double one = 0.0, two = 0.0;
-    for (std::size_t i = 0; i < y.size(); ++i) {
+    for (std::size_t i = 0; i < smoothed.size(); ++i) {
         one += smooth * (static_cast<double>(x[from + i]) - one);
         two += smooth * (one - two);
-        y[i] = two;
+        smoothed[i] = two;
     }
+    // Under 32 samples a period even a smoothed peak is too narrow for the
+    // parabola: at 7.4 kHz, 6.5 samples a period, it read a pipe's own
+    // period 2 % worse than twice it, and the pipe an octave low. Such a
+    // sound is first interpolated to 32 samples a period or more (a
+    // Hann-windowed sinc, eight samples either side).
+    const int up = Max(1, static_cast<int>(std::ceil(32.0 * guess / rate)));
+    std::vector<double> y;
+    if (up == 1) {
+        y.swap(smoothed);
+    } else {
+        constexpr int kSide = 8;
+        y.resize((smoothed.size() - 2 * kSide) * static_cast<std::size_t>(up));
+        for (std::size_t k = 0; k < y.size(); ++k) {
+            const std::size_t base = k / static_cast<std::size_t>(up);
+            const double part = static_cast<double>(k % static_cast<std::size_t>(up)) / up;
+            double sum = 0.0;
+            for (int j = 1 - kSide; j <= kSide; ++j) {
+                const double t = part - j;
+                const double sinc = t == 0.0 ? 1.0 : std::sin(kPi * t) / (kPi * t);
+                sum += smoothed[base + static_cast<std::size_t>(kSide + j)] * sinc * (0.5 + 0.5 * std::cos(kPi * t / kSide));
+            }
+            y[k] = sum;
+        }
+        rate *= up;
+    }
+    const auto shortest = static_cast<std::size_t>(rate / (guess * 2.8)), longest = static_cast<std::size_t>(rate / guess * 2.8);
+    if (3 * longest > y.size()) return guess;
     const std::size_t span = y.size() - longest - 1;
     double energy = 0.0;
     for (std::size_t i = 0; i < span; ++i) energy += y[i] * y[i];

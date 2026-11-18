@@ -92,21 +92,23 @@ constexpr double kUnrest = 0.16, kUnrestPole = 0.0042;
 // pipe's own harmonics follow each other, 0.83). So it is the pipe's jet and
 // not the division's wind (Verge et al., "Jet formation and jet velocity
 // fluctuations in a flue organ pipe", JASA 95, 1119, 1994, on the jet's
-// velocity). Cents and dB stand as 7 to 1, as they do for a change of the
-// foot's pressure here (0.55 cents and 0.08 dB for 1 %), so it is taken as
-// that: each pipe's wind through noise under kWaverHz, kWaverDepth RMS with
-// the Wind as modelled. Set by that recording and the measurement in
-// Tools/benchmark_steadiness.py, which reads 0.7 cents and 0.09 dB here. The
-// reeds waver by another cause (kReedEddy).
+// velocity). Cents and dB stand as 5 to 7 to 1, as they do for a change of
+// the foot's pressure here (0.82 cents and 0.10 dB for 1 %, the flue stops'
+// median), so it is taken as that: each pipe's wind through noise under
+// kWaverHz, kWaverDepth RMS with the Wind as modelled. Set by that
+// recording's pitch and the measurement in Tools/benchmark_steadiness.py,
+// which reads 0.8 cents and 0.10 dB here (Principal 16' and Rohrfloete 8'
+// on eight keys from C to f1). Under 0.9.0's voicing, which moved 0.55 cents
+// for 1 %, it was 0.015. The reeds waver by another cause (kReedEddy).
 [[maybe_unused]] constexpr double kWaverHz = 8.0;   // only in kWaverPole's literal below
-constexpr double kWaverDepth = 0.015;
+constexpr double kWaverDepth = 0.0125;
 // Written out, because a global the compiler must work out when the module
 // loads is one the Rack's SDK refuses (Oregana.NoLoadTimeGlobals):
 // 1 - exp(-2 pi kWaverHz kStepSeconds), and kWaverDepth / (0.57735 *
 // sqrt(pole / (2 - pole))): noise even in -1 .. 1 (0.577 RMS) through that
 // pole leaves sqrt(pole / (2 - pole)) of it.
 constexpr float kWaverPole = 0.0329550691f;
-constexpr float kWaverGain = 0.200723454f;
+constexpr float kWaverGain = 0.167269543f;
 static_assert(kWaverGain * kWaverGain * 0.57735 * 0.57735 * kWaverPole / (2.0 - kWaverPole) > 0.999 * kWaverDepth * kWaverDepth
                   && kWaverGain * kWaverGain * 0.57735 * 0.57735 * kWaverPole / (2.0 - kWaverPole) < 1.001 * kWaverDepth * kWaverDepth,
               "kWaverGain is kWaverDepth through kWaverPole");

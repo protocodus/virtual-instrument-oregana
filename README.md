@@ -32,14 +32,14 @@ chord of Bach's Toccata in D minor, BWV 565, on the Tutti.
 
 | # | Preset | Demo | Length | Peak |
 | --- | --- | --- | --- | --- |
-| 1 | Principal 8 | [01-principal-8.wav](Docs/audio/01-principal-8.wav) | 12.0 s | -14.4 dBFS |
-| 2 | Gedackt 8 | [02-gedackt-8.wav](Docs/audio/02-gedackt-8.wav) | 12.0 s | -17.1 dBFS |
-| 5 | Voix celeste | [05-voix-celeste.wav](Docs/audio/05-voix-celeste.wav) | 12.0 s | -14.9 dBFS |
-| 7 | Cornet | [07-cornet.wav](Docs/audio/07-cornet.wav) | 12.0 s | -15.6 dBFS |
-| 9 | Krummhorn | [09-krummhorn.wav](Docs/audio/09-krummhorn.wav) | 12.0 s | -17.2 dBFS |
-| 12 | Trompete | [12-trompete.wav](Docs/audio/12-trompete.wav) | 12.0 s | -13.6 dBFS |
-| 14 | Plenum | [14-plenum.wav](Docs/audio/14-plenum.wav) | 12.0 s | -12.8 dBFS |
-| 17 | Tutti | [17-tutti.wav](Docs/audio/17-tutti.wav) | 12.0 s | -9.3 dBFS |
+| 1 | Principal 8 | [01-principal-8.wav](Docs/audio/01-principal-8.wav) | 12.0 s | -14.9 dBFS |
+| 2 | Gedackt 8 | [02-gedackt-8.wav](Docs/audio/02-gedackt-8.wav) | 12.0 s | -17.5 dBFS |
+| 5 | Voix celeste | [05-voix-celeste.wav](Docs/audio/05-voix-celeste.wav) | 12.0 s | -14.7 dBFS |
+| 7 | Cornet | [07-cornet.wav](Docs/audio/07-cornet.wav) | 12.0 s | -16.4 dBFS |
+| 9 | Krummhorn | [09-krummhorn.wav](Docs/audio/09-krummhorn.wav) | 12.0 s | -16.9 dBFS |
+| 12 | Trompete | [12-trompete.wav](Docs/audio/12-trompete.wav) | 12.0 s | -13.1 dBFS |
+| 14 | Plenum | [14-plenum.wav](Docs/audio/14-plenum.wav) | 12.0 s | -13.2 dBFS |
+| 17 | Tutti | [17-tutti.wav](Docs/audio/17-tutti.wav) | 12.0 s | -9.8 dBFS |
 
 <!-- audio-demos-end -->
 
@@ -54,6 +54,42 @@ of them, and one phrase with the imperfection controls at none, as loaded
 and plenty.
 
 ## Version history
+
+### 0.10.0 — 2026-11-18 — flue pipes driven by their jets' change, voiced against recorded organs
+
+From the ranked gaps of [the 2026-11-18 report](Docs/research/physical-gaps-2026-11-18.md).
+
+- **A flue pipe is driven by the rate at which its jet's flow changes**, not
+  by the flow itself (the jet-drive source of Verge, Fabre and Auvray): the
+  jet's flow pushes the air in the mouth. It gives a principal the strong
+  octave every recorded one has. The Octave 8's second harmonic now stands 3
+  to 13 dB over its third from C to c3, where it stood 1 to 8 dB under it;
+  three recorded organs have it 4 to 18 dB over.
+- **Every flue family was voiced again** on the voicer's bench, harmonics two
+  to five over five octaves against Bureå's and Ilmenau's pipes: a
+  principal's second within 3 dB of theirs, its third within 4 and its fourth
+  within 9, the twelfth of the Gedackt and the Quintadena within 4 and 5 dB.
+  The Rohrflöte's chimney is longer and wider, to lift its seventeenth. The
+  flutes and strings, which neither organ's recordings have, are voiced to
+  estimates.
+- **The lip sheds more**, which sets how fast a pipe speaks and how far it
+  follows the wind: the Octave 8's C takes 126 ms from −20 to −6 dB, and
+  the flue stops move 0.82 cents and 0.10 dB for 1 % of wind in the median,
+  as recorded flues do (5 to 7 cents for each decibel).
+- **The pitch wheel warms everything in a flue alike**: its loop, its jet's
+  transit, its mouth's correction and the corners of its losses. The pipes
+  now follow the bend within 0.7 cents; bending the delays alone had left a
+  65 Hz principal 3.3 cents short of a 29.5-cent bend. At rest every pipe is
+  exactly as it was made.
+- **Each flue's own wind wavers by 1.25 %, not 1.5 %**: the new pipes follow
+  their wind further, and their held notes wander 0.8 cents, as the recorded
+  organ's do (`Tools/benchmark_steadiness.py`).
+- The breath between the harmonics is 2 dB louder, nearer the recorded
+  organs'.
+- Every pipe was regulated again, and sixteen presets' Volume trims moved by
+  1 dB (`RenderOregana --levels`).
+- A listening set puts 0.9.0 against this ([Docs/decisions.md](Docs/decisions.md));
+  until the owner judges it, the candidate is taken as chosen.
 
 ### 0.9.0 — 2026-11-14 — raw division outputs, a mixer for each division, every preset at 440 Hz
 
@@ -354,8 +390,12 @@ a pipe of twice the length with a hole at its middle, blown to its octave.
 The jet is deflected by the wave returning to the mouth, carries that
 deflection across the cut-up in its transit time, which follows the wind, and
 blows into or out of the pipe at the lip by a saturating law (Fletcher and
-Rossing, *The Physics of Musical Instruments*, section 16.3). Nothing else
-makes the tone: the pipe speaks when the wind lets the loop's gain pass one,
+Rossing, *The Physics of Musical Instruments*, section 16.3). Its flow pushes
+the air in the mouth, so what drives the pipe is the rate at which that flow
+changes, the jet-drive source (Verge et al., 1997; Fabre, Hirschberg and
+Wijnands, 2000; Auvray, Fabre and Lagrée, 2012): it weights each harmonic of
+the flow by its number, and a jet standing off the lip gives the strong
+octave a recorded principal has. Nothing else makes the tone: the pipe speaks when the wind lets the loop's gain pass one,
 settles where the jet saturates and the lip sheds vortices, goes flat as the
 wind sags, and rings down on its own resonances when the pallet closes. The
 jet's turbulence is the wind noise, strongest about the first harmonics and
@@ -389,7 +429,7 @@ and it bounces back at 3.8 to 6.5 Hz, the Pedal's large reservoir slowest. Every
 pipe's pitch and level follow, because the pipes are driven by that pressure
 and nothing else. The pipes of one key share a pallet, so a key with every
 stop drawn gives each pipe a little less. The pressure of a division has a
-slow unrest of 0.3 %, and each flue's own wind wavers by 1.5 % under 8 Hz,
+slow unrest of 0.3 %, and each flue's own wind wavers by 1.25 % under 8 Hz,
 its own and no other pipe's: that figure is set by a recorded organ's held
 notes (`Tools/benchmark_steadiness.py`). The eddies in a reed's gap push its
 tongue by a quarter of the boot's push, which walks its pitch as a recorded
@@ -498,9 +538,11 @@ at rest only what is drawn and all the way up the full organ, as far over as
 the further of it and the Crescendo control. The swell pedal is expression,
 on top of the Swell control. The pitch wheel (MIDI pitch bend, `SetBend`) is the air's warmth:
 each flue's loop is read between its samples, a cubic through the four
-nearest, and made up to 1.7 % longer or shorter a sample at a time, its jet's
-transit with it. Fourteen of the 4,177 flues, all above 3.9 kHz, have loops
-too short for that and do not bend. At 48 kHz the engine's
+nearest, and made up to 1.7 % longer or shorter a sample at a time. Warmer
+air stretches every time in a pipe alike, so its jet's transit, its mouth's
+correction and the corners of its losses move with the loop, and the pipe
+follows the bend within 0.7 cents. Fourteen of the 4,177 flues, all above
+3.9 kHz, have loops too short for that and do not bend. At 48 kHz the engine's
 samples go out untouched; at any other rate from 44.1 to 192 kHz they pass a
 64-tap windowed sinc, flat to 18 kHz at 44.1 kHz and to 20 kHz above 48 kHz
 with its images 80 dB down, by design and not yet measured.
@@ -544,9 +586,11 @@ it still brings on the whole stop list, a chapel organ's too.
   tests, which the Rack Extension in the Rack repository plays; the README's
   screenshot and downloads wait for a plug-in and its main build.
 - **CPU is above the portfolio's 10 % target for large registrations.** One
-  256-frame block takes at most 3 % of a core on a single stop, 8 % on the
-  Plenum demo (198 pipes) and 20 % on the Tutti demo (468 pipes); sixteen
-  keys of full organ take 36 %. Development container, GCC 13, Release, one
+  256-frame block takes at most 3 % of a core on a single stop, 13 % on the
+  Plenum demo (198 pipes) and 29 % on the Tutti demo (468 pipes); sixteen
+  keys of full organ take 50 to 68 %. Run in turn with it on the same
+  machine, 0.9.0 took 11 to 13, 26 and 48 to 54 %: the jet-drive pipes cost
+  full organ about a tenth more. Development container, GCC 13, Release, one
   thread. The plan is in
   [Docs/plans/cpu-optimisation-2026-11-12.md](Docs/plans/cpu-optimisation-2026-11-12.md).
 - **The engine is 48 kHz only.** At another rate `OreganaInstrument.h`
@@ -601,16 +645,23 @@ it still brings on the whole stop list, a chapel organ's too.
   two thirds or half of its length takes 8 to 14 dB off the fundamental on
   the bench; whether that organ's Basun is so built is not known, and a
   full-length Posaune is the German kind, so it was not changed.
-- **The stopped pipes are too perfect.** A recorded Quintadena has its even
-  harmonics 35 dB under the fundamental and these have them 70 dB under,
-  with the fifth and seventh about 20 dB too strong in the bass; a recorded
-  Rohrflöte has 15 to 25 dB more fifth harmonic in the middle of the compass.
-- **A principal's second harmonic is about 10 dB too weak** against the same
-  organ's Principal 8'. The jet swings symmetrically about a small offset;
-  a larger offset stops the pipe speaking before it gives the harmonic.
-  By Fletcher and Douglas (1980) such a jet's second harmonic can reach
-  about 10 dB under its first and no more, which is where this one is;
-  their own pipe radiated 3 dB more than that.
+- **The octave does not speak first.** In a recorded principal the second
+  harmonic reaches −6 dB of its steady level 199 to 225 ms before the
+  fundamental on C, 81 to 86 ms on c0 and 38 ms on c1, and the fundamental
+  takes 246 to 277 ms from −20 to −6 dB on C (Heers). Here the second comes 31, 16 and 8 ms after the
+  fundamental, which takes 126 ms on C
+  ([report](Docs/research/physical-gaps-2026-11-18.md),
+  `Tools/harmonic_onsets.py`).
+- **The stopped pipes match recorded ones only in part.** The Gedackt's and
+  the Quintadena's twelfths stand within 4 and 5 dB of recorded ones, and
+  the Quintadena's seventeenth; but the Gedackt's octave is 10 dB weak and
+  its fifteenth 5 to 12 dB strong, the Quintadena's octave 13 to 16 dB weak
+  and its seventh up to 24 dB strong in the bass, and the Rohrflöte's
+  seventeenth is as recorded only on c0: 20 dB strong an octave below and 9
+  to 21 dB weak above.
+- **The flutes and strings are voiced to estimates.** Neither recorded organ
+  has an open flute or a string measured beside these; their harmonics meet
+  typical values within 6 and 5 dB.
 - **Real ranks are less even** than these: the notes of a recorded octave
   differ by 1.4 to 5 dB where these differ by under 1 dB as loaded (part of
   the recorded spread is the room).
@@ -633,9 +684,10 @@ it still brings on the whole stop list, a chapel organ's too.
   and the church and the reflections stay those of a seat 18 m away. From a
   side seat the far ear has the organ later and weaker at every frequency
   alike: there is no head's shadow that grows with the pitch.
-- **The new sound has not been listened to.** The pipes' hearing, the
-  divisions' places, the mechanism's noises and the pipes' breath were added with A against B
-  listening sets that no one has yet judged.
+- **The jet-drive pipes and the breath's lead wait for the ear.** The
+  pipes' hearing, the divisions' places and the mechanism's noises were
+  judged on 2026-11-14 ([Docs/decisions.md](Docs/decisions.md)); 0.10.0's
+  pipes and the slower feet of 0.5.0's breath-lead set have not been.
 
 ## Build
 

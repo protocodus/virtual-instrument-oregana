@@ -1501,7 +1501,15 @@ void ThrownControlsDoNotClick() {
     // another at once. Held notes take that without a click: no 2 ms of the
     // output's second difference stands more than four times over the
     // 2 ms a little before and after it. (Wind Pressure and Width did,
-    // five and ten times over, until 0.5.0 made them glide.)
+    // five and ten times over, until 0.5.0 made them glide.) Nor over the
+    // 2 ms a period of the lowest pipe before and after it: a pipe's own
+    // edge comes again a period later, a click does not. The Pedal soloed,
+    // or at its loudest, leaves its 16' reed on C (32.7 Hz) standing over
+    // the Subbass, and the reed closes once in 30.6 ms: soloed, 3.3 times
+    // over the 4 to 6 ms around it in 0.9.0, and 4.4 times since the
+    // stopped flues speak by the jet-drive, with no throw anywhere near.
+    // Every other control's sharpest edge stands under 2.5 either way.
+    constexpr std::size_t kPeriod = 15;   // the windows in that period, 15.3
     const Thrown thrown;
     int clicks = 0;
     double worst = 0.0;
@@ -1517,8 +1525,9 @@ void ThrownControlsDoNotClick() {
                                      Abs(static_cast<double>(take.right[n]) - 2.0 * take.right[n - 1] + take.right[n - 2])));
             peaks.push_back(peak);
         }
-        for (std::size_t w = 3; w + 3 < peaks.size(); ++w) {
-            const double around = Max(Max(Max(peaks[w - 3], peaks[w - 2]), Max(peaks[w + 2], peaks[w + 3])), 1.0e-7);
+        for (std::size_t w = kPeriod + 1; w + kPeriod + 1 < peaks.size(); ++w) {
+            const double again = Max(Max(peaks[w - kPeriod - 1], peaks[w - kPeriod]), Max(peaks[w + kPeriod], peaks[w + kPeriod + 1]));
+            const double around = Max(Max(Max(Max(peaks[w - 3], peaks[w - 2]), Max(peaks[w + 2], peaks[w + 3])), again), 1.0e-7);
             if (peaks[w] > 2.0e-4 && peaks[w] / around > worst) {
                 worst = peaks[w] / around;
                 if (worst > 4.0) which = kControlInfo[static_cast<std::size_t>(i)].id;

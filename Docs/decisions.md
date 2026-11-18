@@ -4,6 +4,26 @@ What was put to the ear, what each letter was, which the owner chose and what
 that licensed. A measurement that settles a question is quoted where the
 question is, not here.
 
+## Flue pipes driven by their jets' change (2026-11-18, 0.10.0)
+
+The jet-drive source is the standard model of a flue pipe and was adopted on
+its physics and on three recorded organs' harmonics
+([the report](research/physical-gaps-2026-11-18.md)); the ear judges whether
+the organ is the better for it. The set
+(`oregana/listening-2026-11-18-gaps/1-flue-pipes/` in the project's files)
+plays four README demo phrases, each through its preset as loaded: Principal
+8, Gedackt 8, Voix celeste and Plenum. Matched on whole-file RMS, the louder
+letter trimmed down (at most −0.43 dB).
+
+| Set | A (0.9.0) | B (0.10.0) | Chosen |
+| --- | --- | --- | --- |
+| `1-principal`, `2-gedackt`, `3-strings`, `4-plenum` | the jet drives the pipe by its flow | by its flow's rate of change, every flue family voiced again, the lip shedding more | not yet judged: **B** taken, by the standing rule that the candidate wins unless the owner says otherwise |
+
+Licensed, until the owner says otherwise: the jet-drive source and the
+voicing 0.10.0 ships. The voicing is set by measurement where the recorded
+organs have the stop (principals, Gedackt, Quintadena, Rohrflöte) and is an
+estimate where they have not (flutes, strings).
+
 ## Similar stops set apart (2026-11-14, 0.8.0)
 
 Three pairs of stops sounded too much alike to tell apart in a registration.
