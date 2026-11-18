@@ -192,8 +192,9 @@ after the change:
 | 84-96 | Oregana | -4 | -8 | -14 | -15 | -14 | -16 | -26 |
 
 The flow is an estimate chosen on the model's own grounds and checked against
-one recorded stop, not fitted to it; whether it is the better trumpet is for
-the ear (listening set 4, 2026-11-13, not yet judged). The tables above this
+one recorded stop, not fitted to it; whether it is the better trumpet was for
+the ear (listening set 4, 2026-11-13, judged 2026-11-14: half way between
+this flow and 0.4.0's, which 0.8.0 ships; Docs/decisions.md). The tables above this
 section are from before the change.
 
 ## More stops
