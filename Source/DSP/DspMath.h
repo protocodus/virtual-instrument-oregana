@@ -66,7 +66,19 @@ inline Float4 Choose(Int4 held, Float4 a, Float4 b) { return (Float4)((held & (I
 inline Float4 Where(Int4 held, Float4 a) { return (Float4)(held & (Int4)a); }
 inline Float4 Unless(Int4 held, Float4 a) { return (Float4)(~held & (Int4)a); }
 inline Float4 Abs(Float4 x) { return (Float4)((Int4)x & Int4 { 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff }); }
-inline Float4 Sqrt(Float4 x) { return Float4 { Sqrt(x[0]), Sqrt(x[1]), Sqrt(x[2]), Sqrt(x[3]) }; }
+inline Float4 Sqrt(Float4 x) {
+#if defined(OREGANA_ELEMENTWISE_SQRT)
+    return __builtin_elementwise_sqrt(x);
+#else
+    return Float4 { Sqrt(x[0]), Sqrt(x[1]), Sqrt(x[2]), Sqrt(x[3]) };
+#endif
+}
+inline Float4 Load4(const float* p) {
+    Float4 v;
+    __builtin_memcpy(&v, p, sizeof v);
+    return v;
+}
+inline void Store4(float* p, Float4 v) { __builtin_memcpy(p, &v, sizeof v); }
 #endif
 
 // White noise in -1..1 from a 32-bit linear congruential generator (Numerical

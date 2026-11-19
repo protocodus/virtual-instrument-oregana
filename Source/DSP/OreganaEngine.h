@@ -111,7 +111,7 @@ public:
 
     void Midi(const std::uint8_t* bytes, int size);
     void KeyDown(int division, int note, int velocity);   // MIDI note numbers: 60 is c1
-    void KeyUp(int division, int note);
+    void KeyUp(int division, int note, int velocity = 64);   // how fast the key is let go: 64 an ordinary lift
     void AllKeysUp();
     void AllSoundOff();                   // and every hanging pallet freed
     void SetSwell(double position);       // as the Swell control and CC11 do
@@ -157,6 +157,7 @@ private:
         float gain = 0.0f;            // its regulated level
         float air = 0.0f;             // the wind it takes
         float waver = 0.0f;           // a flue's own unrest (OreganaEngine.cpp, kWaverDepth)
+        float lift = 0.0f;            // how slowly its pallet shuts from the next tick on (SetRelease), or 0: as it is
         std::uint32_t waverRandom = 1u;
         // A flue pipe among its neighbours (OreganaEngine.cpp, kHearMetres).
         std::uint8_t row = 0;         // its rank's row on the chest, from the division's first
@@ -178,7 +179,7 @@ private:
     void UpdateKey(int key, bool struck = false, int own = -1);
     void UpdateChannel(int division, int key, int late = 0, bool pallet = false);
     void Offer(int slot, float share, int late, bool pallet);
-    bool Take(int slot, float share, bool pallet);
+    bool Take(int slot, float share, bool pallet, float touch);
     void Design(int slot);
     void Place(Slot& slot);
     void Tick();
@@ -194,7 +195,7 @@ private:
     // its order is the order their sound is added up in, which must not
     // depend on how the host cuts its blocks.
     std::vector<int> active;
-    struct Pending { int slot; std::uint64_t due; float share; bool pallet; };
+    struct Pending { int slot; std::uint64_t due; float share; bool pallet; float touch; };
     std::vector<Pending> pending;                // wind on its way to a pipe, soonest first
     std::uint64_t now = 0;                       // samples rendered
     std::uint32_t epoch = 1;

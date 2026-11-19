@@ -177,6 +177,7 @@ struct FluePipe {
     // up with its channel; it empties at `release`.
     float attack = 1.0f, refill = 1.0f, release = 1.0f, radiation = 0.0f;
     float gainLeft = 0.0f, gainRight = 0.0f;
+    double releaseSeconds = 0.0;
     double air = 0.0;   // the wind it takes at nominal pressure, against an 8' C principal
     // What a neighbour a metre away hears of this pipe, against its own wave,
     // for each unit of its radiation filter's output (Run, `told`).
@@ -417,8 +418,9 @@ struct FluePipe {
         // roller's stops into a step.
         attackSeconds = v.speech * (0.0204 + 0.35 / hz);
         refill = static_cast<float>(1.0 - std::exp(-1.0 / (v.speech * 0.35 / hz * kPipeRate)));
+        releaseSeconds = 0.004 + 0.5 / hz;
         SetTouch(1.0, true);
-        release = static_cast<float>(1.0 - std::exp(-1.0 / ((0.004 + 0.5 / hz) * kPipeRate)));
+        SetRelease(1.0);
         // Wind through the flue: its area goes with the diameter squared.
         air = 4.0 * radius * radius / (0.1555 * 0.1555);
         // The mouth is a small source: a flow Q changing at dQ/dt makes a
@@ -440,6 +442,9 @@ struct FluePipe {
         attack = static_cast<float>(1.0 - std::exp(-1.0 / (attackSeconds * slowness * kPipeRate)));
         rising = opening ? attack : refill;
     }
+    // How fast the key lets the pallet shut, as SetTouch: the foot empties
+    // that much slower or faster (an estimate, the opening's law mirrored).
+    void SetRelease(double slowness) { release = static_cast<float>(1.0 - std::exp(-1.0 / (releaseSeconds * slowness * kPipeRate))); }
 
     void Clear() {
         for (int i = 0; i < loopRoom; ++i) loop[i] = 0.0f;
@@ -589,9 +594,12 @@ struct FluePipe {
             jetBuffer[jetWrite] = moved;
             float read = static_cast<float>(jetWrite) - transit;
             if (read < 0.0f) read += jetSize;
-            // A read just under 0 rounds up to the buffer's length as a float.
-            int older = static_cast<int>(read);
-            if (older >= jetLength) older = 0;
+            // A read just under 0 rounds up to the buffer's length as a float:
+            // the buffer's start. (Left at the length, with only its sample
+            // wrapped, it read that many samples' slope beyond the start: a
+            // click as loud as the pipe, once in hours of a wavering wind.)
+            if (read >= jetSize) read = 0.0f;
+            const int older = static_cast<int>(read);
             const int newer = older + 1 == jetLength ? 0 : older + 1;
             const float between = read - static_cast<float>(older);
             const float deflection = jetBuffer[older] + between * (jetBuffer[newer] - jetBuffer[older]);
@@ -788,9 +796,10 @@ struct FluePipe {
             for (int l = 0; l < 4; ++l) jetBuffer[l][jetWrite[l]] = moved[l];
             Float4 read = ToFloat(jetWrite) - transit;
             read += Where(read < zero, jetSize);
-            // A read just under 0 rounds up to the buffer's length as a float.
-            Int4 older = Truncated(read);
-            older &= ~(older >= jetCount);
+            // A read just under 0 rounds up to the buffer's length as a float:
+            // the buffer's start (Run).
+            read = Unless(read >= jetSize, read);
+            const Int4 older = Truncated(read);
             Int4 newer = older + 1;
             newer &= ~(newer == jetCount);
             const Float4 between = read - ToFloat(older);

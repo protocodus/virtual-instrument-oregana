@@ -184,6 +184,19 @@ void LevelsAreRegulated() {
         levels[at++] = Db(touch.Play(2.0).Rms(1.0, 2.0));
     }
     Expect(Abs(levels[0] - levels[1]) < 0.2, "LevelsAreRegulated", "a soft and a hard stroke sound alike once speaking, dB apart", levels[0] - levels[1]);
+
+    // Nor is the lift's: a key let go slowly shuts its pallet slowly, and
+    // the pipe is heard that much longer.
+    at = 0;
+    for (int velocity : { 127, 1 }) {
+        Bench lift;
+        lift.Draw({ kHwOctave8 });
+        lift.organ->KeyDown(kHauptwerk, 60, 80);
+        lift.Play(1.0);
+        lift.organ->KeyUp(kHauptwerk, 60, velocity);
+        levels[at++] = Db(lift.Play(0.04).Rms(0.01, 0.04));
+    }
+    Expect(levels[1] - levels[0] > 0.7, "LevelsAreRegulated", "a slow lift leaves more of the pipe 10 to 40 ms on than a quick one, dB", levels[1] - levels[0]);
 }
 
 void StopsCouplersAndCrescendo() {

@@ -36,10 +36,10 @@ chord of Bach's Toccata in D minor, BWV 565, on the Tutti.
 | 2 | Gedackt 8 | [02-gedackt-8.wav](Docs/audio/02-gedackt-8.wav) | 12.0 s | -17.6 dBFS |
 | 5 | Voix celeste | [05-voix-celeste.wav](Docs/audio/05-voix-celeste.wav) | 12.0 s | -13.6 dBFS |
 | 7 | Cornet | [07-cornet.wav](Docs/audio/07-cornet.wav) | 12.0 s | -16.2 dBFS |
-| 9 | Krummhorn | [09-krummhorn.wav](Docs/audio/09-krummhorn.wav) | 12.0 s | -17.0 dBFS |
-| 12 | Trompete | [12-trompete.wav](Docs/audio/12-trompete.wav) | 12.0 s | -12.2 dBFS |
-| 14 | Plenum | [14-plenum.wav](Docs/audio/14-plenum.wav) | 12.0 s | -11.6 dBFS |
-| 17 | Tutti | [17-tutti.wav](Docs/audio/17-tutti.wav) | 12.0 s | -9.1 dBFS |
+| 9 | Krummhorn | [09-krummhorn.wav](Docs/audio/09-krummhorn.wav) | 12.0 s | -17.8 dBFS |
+| 12 | Trompete | [12-trompete.wav](Docs/audio/12-trompete.wav) | 12.0 s | -12.4 dBFS |
+| 14 | Plenum | [14-plenum.wav](Docs/audio/14-plenum.wav) | 12.0 s | -12.5 dBFS |
+| 17 | Tutti | [17-tutti.wav](Docs/audio/17-tutti.wav) | 12.0 s | -8.8 dBFS |
 
 <!-- audio-demos-end -->
 
@@ -54,6 +54,49 @@ of them, and one phrase with the imperfection controls at none, as loaded
 and plenty.
 
 ## Version history
+
+### 0.12.0 — 2026-11-19 — reeds led by their tongues, the key's lift, a click removed
+
+From a review of the branch `feat/0.10.0-physical-acoustics-velocity-wind`,
+each idea measured against the recorded organs before it was taken
+([Docs/decisions.md](Docs/decisions.md), 2026-11-19).
+
+- **Every reed is led by its tongue.** The tongue swings just above the note
+  and the wind's push on it is modest, the resonator is cut two halftones
+  short and the tuning wire moves the tongue alone, and the tongue rolls
+  onto a curved shallot face. A reed's pitch now falls a little with its
+  wind, as a real one's does: for 1 % the Trompete 0.6 to 0.9 cents, the Vox
+  humana 1.2 and the Hautbois 1.5, the Dulcian next to nothing (the trumpets
+  moved 0.2 the other way, the Vox humana 2.3). So the wind's own unrest
+  walks a reed, and the push of the gap's eddies is gone.
+- **The reeds speak later, and nearer the recorded ones.** The Trompete 8'
+  reaches half its level 149 ms after its wind on C, 66 on c1 and 34 on c3
+  (it took 71, 20 and 7; a recorded Trumpet 8' takes 90 to 195 ms by its
+  octave), the Posaune 16' 199 ms on C. A reed's boot fills through the
+  same pallet as a flue's foot, so velocity reaches the reeds too.
+- **The trumpets are brighter and the Krummhorn has its octave.** The
+  Trompete's harmonics two to eight stand at −2 −4 +3 −1 −6 −8 −4 dB on C
+  (−2 −5 −8 −11 −12 −10 −13 before; recorded +4 +1 +2 0 +1 +4 +3). The
+  Krummhorn's octave is level with its first harmonic, where the cylinder
+  held it 27 dB down and a recorded one has it 2 dB under to 10 over. This
+  is brighter than the half-way flow chosen by ear in 0.8.0: the flow is
+  the same, the tongue is not.
+- **Note-off velocity is the key's lift.** A key let go slowly shuts its
+  pallet slowly: the foot empties in up to half as long again, or half the
+  time for a quick lift. A keyboard that sends none plays as before.
+- **A click is gone.** A flue's jet was read one buffer's length off its
+  place when its transit met the buffer's start to within a few millionths
+  of a sample: one sample as loud as the pipe, once in a while under a
+  wavering wind. 0.11.0's Cornet demo has one at 4.84 s.
+- **A key's touch goes with its wind.** The same key struck or let go on
+  another division before the wind arrived changed the first one's speech.
+- The church and the mechanism cost a little less (the Tutti demo 0.080x
+  of real time where it took 0.085x), their sound sample for sample the same.
+- The Principal 8', Gedackt 8' and Voix celeste demos are the same files as
+  0.11.0's; every registration with a reed sounds different. Trompete,
+  Church French, England Trumpet Voluntary and England Psalm changed their
+  Volume by 1 dB, and Church Reeds, Church Winter and Germany Organo pleno
+  carry 1 dB.
 
 ### 0.11.0 — 2026-11-18 — pipes that breathe before they speak, a tremulant that spills wind, a measured swell box
 
@@ -449,12 +492,17 @@ strings and harmonic flutes differ only in the dimensions and voicing a pipe
 maker would choose (`Stops.h`).
 
 **Reed pipes** (`ReedPipe.h`). The tongue is a sprung mass that the boot's
-pressure pushes shut against the shallot, where it lands on a much stiffer
-spring; its curve closes the opening gradually. Wind flows through the
-opening by Bernoulli's law into the resonator, a travelling-wave loop closed
-at the shallot, a cone or a cylinder; flow, tongue and resonator are solved
-together every sample. The tongue sets the pitch and the tuner's correction is
-its stiffness, as a tuning wire's is. Trumpets, the French Trompette, Basson
+pressure pushes shut against the shallot, whose curved face it rolls onto:
+the face takes it up by a spring that grows from nothing, and the tongue's
+curve closes the opening gradually. Wind flows through the opening by
+Bernoulli's law into the resonator, a travelling-wave loop closed at the
+shallot, a cone or a cylinder; flow, tongue and resonator are solved
+together every sample. The tongue leads: it swings just above the note, the
+resonator is cut short of it, and the tuner's correction is the tongue's
+stiffness alone, as a tuning wire's is. The pitch falls up to 1.5 cents for
+each 1 % the wind falls. How far the face reaches, how stiff the rolled
+tongue is and how hard the wind closes it are estimates, the last set so
+that the reeds speak in the time recorded ones take. Trumpets, the French Trompette, Basson
 and Hautbois, the Posaunes, Krummhorn, Dulcian and Vox humana are different
 tongues and resonators.
 
@@ -475,9 +523,8 @@ and nothing else. The pipes of one key share a pallet, so a key with every
 stop drawn gives each pipe a little less. The pressure of a division has a
 slow unrest of 0.3 %, and each flue's own wind wavers by 1.25 % under 8 Hz,
 its own and no other pipe's: that figure is set by a recorded organ's held
-notes (`Tools/benchmark_steadiness.py`). The eddies in a reed's gap push its
-tongue by a quarter of the boot's push, which walks its pitch as a recorded
-trumpet's walks. The Positiv and the Recit have a
+notes (`Tools/benchmark_steadiness.py`). A reed follows its division's wind, which
+walks its pitch as a recorded trumpet's walks. The Positiv and the Recit have a
 tremulant each: a motor on the division's trunk, driven by its wind, whose
 pallet lets a pulse of wind escape once a beat (`Tremulant` in `Wind.h`).
 What reaches the pipes is the winding's answer to those pulses, so a beat
@@ -613,7 +660,7 @@ and each pipe keeps its own share of it whatever is played:
 | Tuning | every pipe off its pitch, flues by up to 10 cents and reeds by up to 20 | a quarter: a season after the tuner's visit |
 | Temperature | flue pipes follow the air, 2.95 cents a degree, and reeds do not, so the reeds go out against the flues | 0: the 20 C the organ was tuned at |
 | Voicing | every pipe off its rank's level (up to 3 dB), speech, chiff and wind noise | 0.6 |
-| Wind | how far the reservoirs' sag, dip and bounce reach the pipes, with a slow unrest of the pressure, and how far each flue's own wind wavers and each reed's tongue is pushed about | 0.5: as modelled |
+| Wind | how far the reservoirs' sag, dip and bounce reach the pipes, with a slow unrest of the pressure, and how far each flue's own wind wavers | 0.5: as modelled |
 | Wind Noise | the blower's hum (lower while it starts or runs down), the chests' hiss and the bellows' thud | 0.2 |
 | Action | how worn the action is: the knocks of keys, coupled pallets, pedals, stop knobs, the swell's shutters and the tremulant's valve, a slider's rub, and the couplers' lost motion | 0.25 |
 | Dead Pipes | pipes that do not speak, up to one in sixteen | none |
@@ -669,34 +716,39 @@ it still brings on the whole stop list, a chapel organ's too.
   work by design: a speaking pipe, or one still ringing when its key is
   struck again, keeps what it was made with, and takes a change the next
   time it speaks.
-- **The Vox humana follows the wind more than the other reeds**: 2.3 cents
-  for each 1 % of pressure, so it wavers under a heavy registration.
-- **Only the trumpet's unrest is checked.** A reed's pitch walks by a push
-  set on one recorded Trumpet 8'. The same push walks the Krummhorn 1.5 to
-  4.8 cents and the Vox humana 1.0 to 1.9, because their resonators hold
-  their tongues less; no recording has checked those, and a reed's level
-  wanders 0.03 dB where the recorded one's wanders 0.1 to 0.2.
+- **The reeds' unrest is not set against a recording.** Since 0.12.0 a reed
+  walks with its division's wind alone: by the suite's measure the Trompete
+  8' on c1 moves 0.24 cents between half seconds, where 0.11.0's eddies
+  moved it 0.15 and were set a little under a recorded Trumpet 8'.
+  `Tools/benchmark_steadiness.py` has not been run on 0.12.0's reeds.
 - **A reed's resonator does not follow the temperature.** In a real reed the
   warming resonator pulls the pitch up a little; here a reed does not move
   with Temperature at all. Letting the resonator's air warm was tried
-  (2026-11-13) and taken out: the model's trumpets then moved 27 of the
-  flues' 29.5 cents for 10 degrees, because here the resonator and not the
-  tongue sets a reed's pitch, which is the reverse of a real reed.
-- **The trumpets are duller in the bass than a recorded one, by choice.**
-  Against a recorded Trumpet 8' the eighth harmonic of the two lowest
-  octaves was 8 dB weaker at 0.5.0's flow (up to 27 dB before it)
-  ([benchmark](Docs/research/benchmark-burea-2026-11-13.md)); the owner chose
-  half that flow by ear in 0.8.0, which takes the bench's eighth harmonic
-  9 dB lower again. That organ is one organ, not a verdict. The shallot
-  has no resonance of its own here, and the Dulcian, Vox humana and Hautbois
-  have been compared with no recording.
-- **The Krummhorn has only its odd harmonics.** A recorded one has every
-  harmonic strong; here the even ones are 25 dB down, because the resonator
-  and not the tongue leads the pipe. A voicing led by the tongue matched the
-  recording and went 3 to 5 cents flat or sharp for each 1 % of wind, so it
-  was not kept. One published Krummhorn spectrum has its even harmonics
-  suppressed as here (Pykett), so the recorded stop is one kind of
-  Krummhorn and not every one.
+  (2026-11-13) and taken out, because the resonator then set a reed's
+  pitch. Since 0.12.0 the tongue does, and the warming has not been tried
+  again.
+- **The trumpets' brightness is 0.12.0's, not yet the ear's.** The owner
+  chose the flow under the tongue by ear in 0.8.0, half way between a dull
+  and a bright trumpet. 0.12.0 keeps that flow, and its tongues make the
+  trumpets brighter than either: nearer a recorded Trumpet 8'
+  ([benchmark](Docs/research/benchmark-burea-2026-11-13.md)) in the bass,
+  where the fourth harmonic now stands 3 dB over the first and the eighth 4
+  under (recorded +2 and +3). That organ is one organ, not a verdict. The
+  shallot has no resonance of its own here, and the Dulcian, Vox humana and
+  Hautbois have been compared with no recording.
+- **The Krummhorn is dull above its fourth harmonic.** Its octave is as
+  recorded since 0.12.0; its fifth to eighth harmonics stand 13 to 33 dB
+  under the first, where a recorded one's stand 4 to 11 dB over it in the
+  bass octave. A shorter resonator and more wind under the tongue
+  brighten it and hand the pitch to the resonator.
+- **The reeds' estimates.** How far the shallot's face reaches (0.22 of the
+  tongue's rest opening), the rolled tongue's stiffness and the wind's push
+  on each family's tongue are estimates no source gives.
+- **Stopped pipes are weak in their octave above c1.** A recorded Gedackt
+  has its second harmonic 59 dB down on C and 30 at c3, a Quintadena 33 to
+  36; here they stand 44 to 52. Letting the jet's own flow radiate at the
+  mouth brings them to the recorded ones' with a share of about a quarter,
+  a number only the recordings give, so it was not taken (2026-11-19).
 - **The Posaune 16' has too much fundamental**: 10 to 20 dB against its
   harmonics in the bass octave, by a recorded Basun 16'. A resonator cut to
   two thirds or half of its length takes 8 to 14 dB off the fundamental on
@@ -773,11 +825,11 @@ it still brings on the whole stop list, a chapel organ's too.
   Treble is raised; and Room loads as a seat near the organ, as clear as
   Ilmenau's 8.8 m seat, where the measured seats 15 to 17 m away hear the
   organ 11 to 12 dB weaker against the church.
-- **Five listening sets wait for the ear.** The pipes' hearing, the
+- **Six listening sets wait for the ear.** The pipes' hearing, the
   divisions' places and the mechanism's noises were judged on 2026-11-14
   ([Docs/decisions.md](Docs/decisions.md)); 0.10.0's jet-drive pipes and
-  0.11.0's breath, voicing, tremulant and swell box have not been, and ship
-  as the candidates.
+  0.11.0's breath, voicing, tremulant and swell box have not been, nor
+  0.12.0's reeds, and ship as the candidates.
 
 ## Build
 

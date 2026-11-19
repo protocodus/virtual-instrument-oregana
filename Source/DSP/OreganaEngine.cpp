@@ -99,7 +99,7 @@ constexpr double kUnrest = 0.16, kUnrestPole = 0.0042;
 // recording's pitch and the measurement in Tools/benchmark_steadiness.py,
 // which reads 0.8 cents and 0.10 dB here (Principal 16' and Rohrfloete 8'
 // on eight keys from C to f1). Under 0.9.0's voicing, which moved 0.55 cents
-// for 1 %, it was 0.015. The reeds waver by another cause (kReedEddy).
+// for 1 %, it was 0.015. The reeds follow their division's wind (below).
 [[maybe_unused]] constexpr double kWaverHz = 8.0;   // only in kWaverPole's literal below
 constexpr double kWaverDepth = 0.0125;
 // Written out, because a global the compiler must work out when the module
@@ -112,19 +112,13 @@ constexpr float kWaverGain = 0.167269543f;
 static_assert(kWaverGain * kWaverGain * 0.57735 * 0.57735 * kWaverPole / (2.0 - kWaverPole) > 0.999 * kWaverDepth * kWaverDepth
                   && kWaverGain * kWaverGain * 0.57735 * 0.57735 * kWaverPole / (2.0 - kWaverPole) < 1.001 * kWaverDepth * kWaverDepth,
               "kWaverGain is kWaverDepth through kWaverPole");
-// A reed's own unrest. A recorded Trumpet 8' wanders as its organ's flues do:
-// 0.8 to 0.9 cents and 0.1 to 0.2 dB RMS in its two lower octaves, most of it
-// between 2 and 12 Hz (Docs/research/known-gaps-2026-11-13.md). The cause
-// taken is Respira's (its ReedModel.h and kTurbulence): the jet through the
-// gap is turbulent, and its eddies push the tongue as they change its flow,
-// so the tongue's phase walks. The same noise that moves the flow moves the
-// boot's push on the tongue by kReedEddy of itself with the Wind as
-// modelled: even in -1 .. 1, so 14 % RMS, where a jet's turbulence is some
-// 10 to 20 % of its speed. Set by that recording, a little under it: the
-// Trompete 8' reads 0.4 to 0.8 cents. A tongue its resonator holds less walks
-// further on the same push: the Vox humana 1.0 to 1.9 and the Krummhorn 1.5 to 4.8,
-// which no recording has checked.
-constexpr double kReedEddy = 0.25;
+// A reed has no unrest of its own here. A recorded Trumpet 8' wanders as its
+// organ's flues do: 0.8 to 0.9 cents and 0.1 to 0.2 dB RMS in its two lower
+// octaves, most of it between 2 and 12 Hz
+// (Docs/research/known-gaps-2026-11-13.md). Led by its tongue a reed's pitch
+// follows its wind, up to 1.5 cents for 1 %, so the division's wind walks it
+// as far by itself (Oregana.Engine, ReedsWaver). To 0.11.0 the reeds barely
+// followed the wind, and the gap's eddies were made to push the tongue.
 // A channel's pipes share one pallet: with every stop drawn each gets 3 %
 // less pressure than a stop alone, falling with the square of the wind taken.
 constexpr float kRobbing = 0.03f;
@@ -388,7 +382,6 @@ void Engine::Reset() {
         if (s.reed) {
             reeds[static_cast<std::size_t>(s.index)].Clear();
             reeds[static_cast<std::size_t>(s.index)].random = seed;
-            reeds[static_cast<std::size_t>(s.index)].eddy = 0.0f;
         } else {
             flues[static_cast<std::size_t>(s.index)].Clear();
             flues[static_cast<std::size_t>(s.index)].random = seed;
@@ -593,10 +586,11 @@ void Engine::UpdateKey(int key, bool struck, int own) {
                           coupled[2] && pulled[kPositiv] ? late[kPositiv] + lost(2) : never, coupled[5] && pedal ? lost(5) : never });
     }
 
-    bool opened[kDivisions] = {};
+    bool moved[kDivisions] = {};
     for (int d = 0; d < kDivisions; ++d) {
         if (key >= kDivisionKeys[d] || pulled[d] == open[static_cast<std::size_t>(d)][k]) continue;
-        open[static_cast<std::size_t>(d)][k] = opened[d] = pulled[d];
+        open[static_cast<std::size_t>(d)][k] = pulled[d];
+        moved[d] = true;
         // A pallet that hangs is pulled free by its key, and hangs again
         // when the key lets it go.
         const int place = KeyPlace(d, key);
@@ -610,11 +604,11 @@ void Engine::UpdateKey(int key, bool struck, int own) {
     }
     for (int d = 0; d < kDivisions; ++d)
         for (int near : { key - 2, key, key + 2 })
-            if (near >= 0 && near < kDivisionKeys[d]) UpdateChannel(d, near, near == key && opened[d] ? late[d] : 0, opened[d]);
+            if (near >= 0 && near < kDivisionKeys[d]) UpdateChannel(d, near, near == key && moved[d] ? late[d] : 0, moved[d]);
 }
 
 // The wind one key's channel holds, and which of its pipes take it.
-// `pallet`: as its pallet, or its neighbour's that it leaks from, opens.
+// `pallet`: as its pallet, or its neighbour's that it leaks from, moves.
 void Engine::UpdateChannel(int division, int key, int late, bool pallet) {
     const auto d = static_cast<std::size_t>(division), k = static_cast<std::size_t>(key);
     float wind = open[d][k] ? 1.0f : hang[d][k];
@@ -654,14 +648,17 @@ void Engine::UpdateChannel(int division, int key, int late, bool pallet) {
 
 // A pallet gives a pipe its share of the wind, or takes it away: heard when
 // the sound has come from where the pipe stands, `late` samples later for a
-// pallet a coupler pulls. `pallet`: the wind comes as the pallet opens, not
-// through one open already (FluePipe::SetTouch).
+// pallet a coupler pulls. `pallet`: the wind comes or goes as the pallet
+// moves, not through one open already (FluePipe::SetTouch, SetRelease).
 void Engine::Offer(int index, float given, int late, bool pallet) {
     Slot& s = slots[static_cast<std::size_t>(index)];
     if (given == s.offered) return;
     s.offered = given;
+    // The key's touch goes with its wind: the same key struck on another
+    // division before the wind arrives does not change it.
+    const float moved = touch[static_cast<std::size_t>(s.key)];
     if (pending.size() == pending.capacity()) {
-        Take(index, given, pallet);
+        Take(index, given, pallet, moved);
         return;
     }
     // Kept in the order the wind arrives, so that pipes begin in that order
@@ -672,19 +669,27 @@ void Engine::Offer(int index, float given, int late, bool pallet) {
     s.lastDue = due;
     auto at = pending.end();
     while (at != pending.begin() && (at - 1)->due > due) --at;
-    pending.insert(at, { index, due, given, pallet });
+    pending.insert(at, { index, due, given, pallet, moved });
 }
 
 // The wind reaches the pipe. True if the pipe was silent and now begins: it
 // has then joined the speaking pipes, and its wind is on. A pipe already
 // speaking or ringing takes its new share at the next tick.
-bool Engine::Take(int index, float given, bool pallet) {
+bool Engine::Take(int index, float given, bool pallet, float moved) {
     Slot& s = slots[static_cast<std::size_t>(index)];
     const bool starting = s.share == 0.0f && given > 0.0f;
     s.share = given;
     // Made first: a pipe's making sets its speech for an ordinary touch.
     if (starting && !s.active && s.epoch != epoch) Design(index);
-    if (starting && !s.reed) flues[static_cast<std::size_t>(s.index)].SetTouch(touch[s.key], pallet);
+    if (starting) {
+        if (s.reed) reeds[static_cast<std::size_t>(s.index)].SetTouch(moved, pallet);
+        else flues[static_cast<std::size_t>(s.index)].SetTouch(moved, pallet);
+        s.lift = 1.0f;
+    } else if (given == 0.0f && pallet) {
+        // Taken at the tick, with the wind: a foot's emptying changed
+        // between ticks would depend on how the host cuts its blocks.
+        s.lift = moved;
+    }
     if (s.active || !starting) return false;
     const float wind = given * opening[s.rank] * pressure[s.division] * robbed[s.division][s.key];
     if (s.reed) {
@@ -784,7 +789,8 @@ void Engine::Midi(const std::uint8_t* bytes, int size) {
     if (status == 0x90 && value > 0) {
         KeyDown(division, data, value);
     } else if (status == 0x80 || status == 0x90) {
-        KeyUp(division, data);
+        // Most keyboards send no release velocity: 0, or a note-on at 0.
+        KeyUp(division, data, status == 0x80 && value > 0 ? value : 64);
     } else if (status == 0xE0) {
         SetBend((((bytes[2] & 0x7F) << 7 | data) - 8192) / 8192.0);
     } else if (status == 0xB0) {
@@ -811,12 +817,15 @@ void Engine::KeyDown(int division, int note, int velocity) {
     UpdateKey(key, true, division);
 }
 
-void Engine::KeyUp(int division, int note) {
+void Engine::KeyUp(int division, int note, int velocity) {
     const int key = note - kFirstNote;
     if (division < 0 || division >= kDivisions || key < 0 || key >= kDivisionKeys[division]) return;
     const auto d = static_cast<std::size_t>(division), k = static_cast<std::size_t>(key);
     if (!played[d][k]) return;
     played[d][k] = false;
+    // The pallet shuts as the key is let go, by the stroke's law (KeyDown),
+    // about 64: what a keyboard without release velocity sends is 1 exactly.
+    touch[k] = static_cast<float>(1.0 + (64 - Clamp(velocity, 1, 127)) / 127.0);
     if (controls[kAction] > 0.0)
         knocks.Strike(division == kPedal ? kPedalUp : kKeyUp, kKnockLevel * controls[kAction], controls[kWidth] * Stand(division, key));
     UpdateKey(key, false, division);
@@ -879,7 +888,6 @@ void Engine::Tick() {
 
     const double live = 2.0 * controls[kWind], depth = 0.01 * controls[kTremulantDepth];
     const float waverDepth = kWaverGain * static_cast<float>(live);
-    const float reedEddy = static_cast<float>(kReedEddy * live);
 
     // The supply (kSpinUp and below): what it holds for every division.
     const int supply = static_cast<int>(controls[kWindSupply]);
@@ -950,14 +958,15 @@ void Engine::Tick() {
             s.resting = false;
             if (s.reed) {
                 ReedPipe& pipe = reeds[static_cast<std::size_t>(s.index)];
+                if (s.lift > 0.0f) pipe.SetRelease(s.lift);
                 pipe.wind = wind;
-                pipe.eddy = reedEddy;
                 pipe.Tick();
                 demand[s.division] += pipe.air * Sqrt(static_cast<double>(pipe.foot));
                 silent = pipe.Silent();
                 if (silent && s.share > 0.0f) pipe.Clear();
             } else {
                 FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
+                if (s.lift > 0.0f) pipe.SetRelease(s.lift);
                 s.waver += kWaverPole * (NextNoise(s.waverRandom) - s.waver);
                 pipe.wind = wind * (1.0f + waverDepth * s.waver);
                 pipe.Tick(stretch);
@@ -966,6 +975,7 @@ void Engine::Tick() {
                 if (silent && s.share > 0.0f) pipe.Clear();
             }
         }
+        s.lift = 0.0f;
         // A silent pipe whose key is still held (the wind has gone) waits
         // for it, cleared; any other has rung out.
         s.resting = silent && s.share > 0.0f;
@@ -1208,7 +1218,7 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
     std::size_t arrived = 0;
     for (; arrived < pending.size() && pending[arrived].due < now + static_cast<std::uint64_t>(frames); ++arrived) {
         const Pending arriving = pending[arrived];
-        if (!Take(arriving.slot, arriving.share, arriving.pallet)) continue;
+        if (!Take(arriving.slot, arriving.share, arriving.pallet, arriving.touch)) continue;
         const Slot& s = slots[static_cast<std::size_t>(arriving.slot)];
         const int from = static_cast<int>(arriving.due - now);
         if (s.reed) reeds[static_cast<std::size_t>(s.index)].Run(scratch.data(), frames - from);

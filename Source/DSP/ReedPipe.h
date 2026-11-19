@@ -12,7 +12,13 @@
 // pressure, so the flow, the tongue and the resonator are solved together
 // each sample. The tongue, not the resonator, sets the pitch, as in a real
 // reed pipe, and the tuner's correction (PipeRegulation.h) is its stiffness,
-// the tuning wire.
+// the tuning wire: the resonator stays as the builder cut it for the note.
+//
+// The shallot's face is curved, and the tongue rolls down onto it: from
+// kRoll of its rest opening above the face to as far below, the face takes
+// it up by a spring that grows from nothing, so the landing has no instant
+// and the pitch does not lock to whole samples. kRoll and the rolled
+// tongue's stiffness are estimates.
 //
 // The resonator is a travelling-wave loop closed at the shallot and open at
 // its far end (one-pole radiation loss, as FluePipe.h). A cylinder resonates
@@ -50,9 +56,12 @@ struct ReedPipe {
     int loopLength = 1;
     float allpass = 0.0f, lowpass = 1.0f, loopGain = 0.0f;
     float mass = 0.0f, impedance = 1.0f;   // the cone's parallel mass (T / 2M) and the shallot's impedance with it
-    float stiffness = 0.0f, damping = 0.0f, closing = 0.0f, landing = 0.0f, landingLoss = 0.0f;
+    float stiffness = 0.0f, damping = 0.0f, freeNum = 1.0f, freeDen = 1.0f, closing = 0.0f, landing = 0.0f, landingLoss = 0.0f;
     float flow = 0.0f, curve = 0.1f, noise = 0.0f, drain = 0.0f;
-    float attack = 1.0f, release = 1.0f;
+    // The boot fills at `attack` through an opening pallet and at `refill`
+    // under one open already (SetTouch); `rising` is the one in use.
+    float attack = 1.0f, refill = 1.0f, rising = 1.0f, release = 1.0f, bootDrop = 0.2f;
+    double attackSeconds = 0.0, releaseSeconds = 0.0;
     float gainLeft = 0.0f, gainRight = 0.0f;
     double air = 0.0;
 
@@ -62,27 +71,22 @@ struct ReedPipe {
     float tongue = 1.0f, speed = 0.0f;       // opening against rest, and its change per sample
     float massFlow = 0.0f, shallot = 0.0f;   // flow into the cone's mass, and the shallot's pressure
     float foot = 0.0f, wind = 0.0f;
-    // The gap's eddies push the tongue as they change its flow: their share
-    // of the boot's push on it (the boot's alone: a share of the drop across
-    // the gap made the tongue's own feedback random, and at 0.6 and at 1.2
-    // of it the Krummhorn ran away with every control at its most), which
-    // the organ sets (kReedEddy in
-    // OreganaEngine.cpp). On the bench it is 0 and the tongue is steady.
-    float eddy = 0.0f;
     float radiates = 1.0f;
     std::uint32_t random = 1u;
     int quiet = 0;
 
-    // `tuning` is the tuner's correction, the tongue's and the resonator's
-    // frequencies together against the note: the pipe built that much smaller.
+    static constexpr float kRoll = 0.22f, kInvFourRoll = 1.0f / (4.0f * kRoll);
+
+    // `tuning` is the tuner's correction: the tongue's frequency against the
+    // note, the tuning wire. The resonator is cut for the note alone.
     // Buffer needed: loopLength floats.
     void Design(const ReedVoicing& v, double hz, double tuning) {
-        const double w = kTwoPi * hz * tuning * v.length / kPipeRate;
+        const double wNote = kTwoPi * hz / kPipeRate, w = wNote * v.length;
         const double radius = 0.5 * PipeDiameter(v.scale, hz);
         const double corner = Min(kSoundSpeed / (kTwoPi * radius), 0.45 * kPipeRate);
         const double lp = 1.0 - std::exp(-kTwoPi * corner / kPipeRate);
         double lpGain, lpLag;
-        detail::OnePole(lp, w, lpGain, lpLag);
+        detail::OnePole(lp, wNote, lpGain, lpLag);
         // There and back takes half a period of a cylinder's first resonance.
         // A cone's lies at tan(kL) = -k x0 for a tip x0 beyond the shallot,
         // near a whole period.
@@ -96,40 +100,59 @@ struct ReedPipe {
             mass = 0.0f;
         }
         impedance = 1.0f / (1.0f + mass);
-        const double rest = pass - lpLag / w;
+        const double rest = pass - lpLag / wNote;
         loopLength = Max(1, static_cast<int>(std::lround(rest - 1.1)));
-        allpass = static_cast<float>(detail::AllpassFor(rest - loopLength, w));
+        allpass = static_cast<float>(detail::AllpassFor(rest - loopLength, wNote));
         lowpass = static_cast<float>(lp);
         const double perPeriod = 1.0 - kPi / v.q;
         const double walls = Min((v.cone ? perPeriod : std::sqrt(perPeriod)) / lpGain, 0.9999);
         loopGain = static_cast<float>(-walls);
         // What the open end radiates of the wave inside, at the note: all
         // that its low-pass does not turn back (Run, `out`).
-        double noteGain, noteLag;
-        detail::OnePole(lp, kTwoPi * hz / kPipeRate, noteGain, noteLag);
-        radiates = static_cast<float>(std::sqrt(1.0 + noteGain * noteGain - 2.0 * noteGain * std::cos(noteLag)));
+        radiates = static_cast<float>(std::sqrt(1.0 + lpGain * lpGain - 2.0 * lpGain * std::cos(lpLag)));
 
+        // The spring and its loss as the step takes them (velocity, then
+        // place, the loss centred on the step): the tongue alone swings at
+        // exactly wt however high it is, so the tuner has only the wind's
+        // and the resonator's pull to correct.
         const double wt = kTwoPi * hz * tuning * v.tongue / kPipeRate;
-        stiffness = static_cast<float>(wt * wt);
-        damping = static_cast<float>(wt / v.tongueQ);
+        const double half = std::sin(0.5 * wt);
+        stiffness = static_cast<float>(4.0 * half * half);
+        damping = static_cast<float>(2.0 * half / v.tongueQ);
+        freeNum = 1.0f - 0.5f * damping;
+        freeDen = 1.0f + 0.5f * damping;
         closing = static_cast<float>(v.closing);
-        // The shallot's face is some thirty times stiffer than the tongue,
-        // as far as the step allows: a face stiffer than 0.3 per step squared
-        // (a tongue above 760 Hz) is over within three samples, and the
-        // period then locks to whole samples.
-        const double hard = Min(30.0 * wt * wt, 0.3);
+        // Rolled onto the face the tongue is shorter and swings some 2.5
+        // times as fast, as far as the step allows (an estimate), and the
+        // face takes up a landing critically.
+        const double rolled = std::sin(0.5 * Min(2.5 * wt, 1.4));
+        const double hard = Max(0.0, 4.0 * rolled * rolled - 4.0 * half * half);
         landing = static_cast<float>(hard);
-        landingLoss = static_cast<float>(1.2 * hard / wt);
+        landingLoss = static_cast<float>(hard / (2.0 * half));
         flow = static_cast<float>(v.flow);
         curve = static_cast<float>(v.curve);
         noise = static_cast<float>(v.noise);
-        attack = static_cast<float>(1.0 - std::exp(-1.0 / (v.speech * (0.0015 + 0.3 / hz) * kPipeRate)));
-        drain = static_cast<float>(v.boot) * attack;
-        release = static_cast<float>(1.0 - std::exp(-1.0 / ((0.004 + 0.5 / hz) * kPipeRate)));
+        // The boot fills through the same pallet as a flue's foot
+        // (FluePipe::Design, Castellengo's share) and its own toe hole.
+        // Unlike a foot it never catches its channel up, the tongue drawing
+        // it down, so it keeps the rate it began with.
+        attackSeconds = v.speech * (0.0204 + 0.3 / hz);
+        refill = static_cast<float>(1.0 - std::exp(-1.0 / (v.speech * (0.0015 + 0.3 / hz) * kPipeRate)));
+        bootDrop = static_cast<float>(v.boot);
+        releaseSeconds = 0.004 + 0.5 / hz;
+        SetTouch(1.0, true);
+        SetRelease(1.0);
         air = 2.0 * radius * radius / (0.1555 * 0.1555);
     }
 
-    void SetTouch(double) {}
+    // As a flue's (FluePipe::SetTouch). The drain goes with the filling, so
+    // that the open tongue pulls the boot down as far at any touch.
+    void SetTouch(double slowness, bool opening) {
+        attack = static_cast<float>(1.0 - std::exp(-1.0 / (attackSeconds * slowness * kPipeRate)));
+        rising = opening ? attack : refill;
+        drain = bootDrop * rising;
+    }
+    void SetRelease(double slowness) { release = static_cast<float>(1.0 - std::exp(-1.0 / (releaseSeconds * slowness * kPipeRate))); }
 
     void Clear() {
         for (int i = 0; i < loopLength; ++i) loop[i] = 0.0f;
@@ -174,7 +197,7 @@ struct ReedPipe {
         float apIn = allpassIn, apOut = allpassOut, lpOut = lowpassOut;
         float y = tongue, v = speed, inMass = massFlow, p = shallot, pressure = foot;
         std::uint32_t seed = random;
-        const float target = wind, rise = attack, fall = release;
+        const float target = wind, rise = rising, fall = release;
         for (int i = 0; i < frames; ++i) {
             const float x = loopBuffer[at];
             const float ap = allpass * (x - apOut) + apIn;
@@ -205,14 +228,15 @@ struct ReedPipe {
             loopBuffer[at] = p - returning;
             if (++at == loopLength) at = 0;
 
-            float pull = stiffness * (1.0f - y) - damping * v - stiffness * closing * (pressure - p + eddy * white * pressure);
-            // The face pushes back by how far the tongue has sunk into it,
-            // harder while it sinks and less as it leaves, and takes up most
-            // of a landing (Hunt and Crossley, 1975): a loss that grows from
-            // nothing at the touch. One that set in at once stepped the pitch
-            // by up to 7 cents at c4 as the tuning moved; this holds 0.3.
-            if (y < 0.0f) pull -= y * Max(0.0f, landing - landingLoss * v);
-            v += pull;
+            const float pull = stiffness * (1.0f - y) - stiffness * closing * (pressure - p);
+            const float free = (v * freeNum + pull) / freeDen;
+            // The face's spring and loss grow with how far the tongue has
+            // rolled onto it (Hunt and Crossley, 1975), and it only pushes.
+            const float above = kRoll - y;
+            const float sunk = y >= kRoll ? 0.0f : y <= -kRoll ? -y : above * above * kInvFourRoll;
+            const float loss = 0.5f * (damping + sunk * landingLoss);
+            const float faced = (v * (1.0f - loss) + pull + sunk * landing) / (1.0f + loss);
+            v = faced > free ? faced : free;
             y += v;
 
             // What the open end does not reflect, it radiates.
@@ -236,15 +260,15 @@ struct ReedPipe {
 #define OREGANA_LANES(field) Float4 { pipe[0]->field, pipe[1]->field, pipe[2]->field, pipe[3]->field }
         const Float4 allpassC = OREGANA_LANES(allpass), lowpassC = OREGANA_LANES(lowpass), loopGainC = OREGANA_LANES(loopGain);
         const Float4 massC = OREGANA_LANES(mass), impedanceC = OREGANA_LANES(impedance), stiffnessC = OREGANA_LANES(stiffness);
-        const Float4 dampingC = OREGANA_LANES(damping), closingC = OREGANA_LANES(closing), landingC = OREGANA_LANES(landing);
+        const Float4 dampingC = OREGANA_LANES(damping), freeNumC = OREGANA_LANES(freeNum), freeDenC = OREGANA_LANES(freeDen), closingC = OREGANA_LANES(closing), landingC = OREGANA_LANES(landing);
         const Float4 landingLossC = OREGANA_LANES(landingLoss), flowC = OREGANA_LANES(flow), curveC = OREGANA_LANES(curve);
-        const Float4 noiseC = OREGANA_LANES(noise), drainC = OREGANA_LANES(drain), eddyC = OREGANA_LANES(eddy);
-        const Float4 target = OREGANA_LANES(wind), rise = OREGANA_LANES(attack), fall = OREGANA_LANES(release);
+        const Float4 noiseC = OREGANA_LANES(noise), drainC = OREGANA_LANES(drain);
+        const Float4 target = OREGANA_LANES(wind), rise = OREGANA_LANES(rising), fall = OREGANA_LANES(release);
         Float4 apIn = OREGANA_LANES(allpassIn), apOut = OREGANA_LANES(allpassOut), lpOut = OREGANA_LANES(lowpassOut);
         Float4 y = OREGANA_LANES(tongue), v = OREGANA_LANES(speed), inMass = OREGANA_LANES(massFlow), p = OREGANA_LANES(shallot);
         Float4 pressure = OREGANA_LANES(foot);
 #undef OREGANA_LANES
-        const Float4 zero = Four(0.0f);
+        const Float4 zero = Four(0.0f), roll = Four(kRoll);
         float* loopBuffer[4];
         int at[4], loopSize[4];
         UInt4 seed = { pipe[0]->random, pipe[1]->random, pipe[2]->random, pipe[3]->random };
@@ -281,10 +305,13 @@ struct ReedPipe {
                 if (++at[l] == loopSize[l]) at[l] = 0;
             }
 
-            Float4 pull = stiffnessC * (1.0f - y) - dampingC * v - stiffnessC * closingC * (pressure - p + eddyC * white * pressure);
-            const Float4 face = landingC - landingLossC * v;
-            pull = Choose(y < zero, pull - y * Unless(zero > face, face), pull);
-            v += pull;
+            const Float4 pull = stiffnessC * (1.0f - y) - stiffnessC * closingC * (pressure - p);
+            const Float4 free = (v * freeNumC + pull) / freeDenC;
+            const Float4 above = roll - y;
+            const Float4 sunk = Choose(y >= roll, zero, Choose(y <= -roll, -y, above * above * kInvFourRoll));
+            const Float4 loss = 0.5f * (dampingC + sunk * landingLossC);
+            const Float4 face = (v * (1.0f - loss) + pull + sunk * landingC) / (1.0f + loss);
+            v = Choose(face > free, face, free);
             y += v;
 
             const Float4 radiated = ap - lpOut;

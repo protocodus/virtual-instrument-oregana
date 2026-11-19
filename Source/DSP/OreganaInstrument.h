@@ -54,6 +54,7 @@ public:
         engine.Reset();
         for (auto& source : held) source.fill(0);
         for (auto& division : sent) division.fill(false);
+        lift.fill(64);
         for (auto& channel : history) channel.fill(0.0f);
         phase = 0;
     }
@@ -72,15 +73,19 @@ public:
     void KeyDown(int note, int velocity, int source = 0) {
         if (note < 0 || note > 127 || source < 0 || source >= kSources) return;
         held[static_cast<std::size_t>(source)][static_cast<std::size_t>(note)] = static_cast<std::uint8_t>(Clamp(velocity, 1, 127));
+        lift[static_cast<std::size_t>(note)] = 64;   // until it is let go: a key the controls move off its manual lifts ordinarily
         Sync();
     }
-    void KeyUp(int note, int source = 0) {
+    // `velocity`: how fast the key is let go (Engine::KeyUp).
+    void KeyUp(int note, int source = 0, int velocity = 64) {
         if (note < 0 || note > 127 || source < 0 || source >= kSources) return;
         held[static_cast<std::size_t>(source)][static_cast<std::size_t>(note)] = 0;
+        lift[static_cast<std::size_t>(note)] = static_cast<std::uint8_t>(Clamp(velocity, 1, 127));
         Sync();
     }
     void AllKeysUp() {
         for (auto& source : held) source.fill(0);
+        lift.fill(64);
         Sync();
     }
     void AllSoundOff() {
@@ -180,7 +185,7 @@ private:
                 if (want == is) continue;
                 is = want;
                 if (want) engine.KeyDown(d, note, down);
-                else engine.KeyUp(d, note);
+                else engine.KeyUp(d, note, lift[static_cast<std::size_t>(note)]);
             }
         }
     }
@@ -219,6 +224,7 @@ private:
     Engine engine;
     std::array<std::array<std::uint8_t, 128>, kSources> held {};    // each source's keys: the velocity it holds one with, or 0
     std::array<std::array<bool, 128>, kDivisions> sent {};
+    std::array<std::uint8_t, 128> lift {};   // the velocity each key was last let go with
     std::uint32_t rate = kEngineRate;
     bool direct = true;
     std::uint64_t phase = 0;                                        // the output's place between two engine samples, in 1 / rate

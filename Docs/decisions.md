@@ -4,6 +4,36 @@ What was put to the ear, what each letter was, which the owner chose and what
 that licensed. A measurement that settles a question is quoted where the
 question is, not here.
 
+## The reeds led by their tongues (2026-11-19, 0.12.0)
+
+Whether the tongue-led reeds are an improvement, a set in
+`oregana/listening-2026-11-19-reeds/` in the project's files. Each plays the
+same MIDI through the same preset, its letters matched on whole-file RMS with
+the louder trimmed down.
+
+| Set | A (0.11.0) | B (0.12.0) | Trim | Chosen |
+| --- | --- | --- | --- | --- |
+| `1-trompete`: the Trompete's demo | the resonator leads the reed, which speaks in 7 to 71 ms | the tongue leads, rolls onto its shallot and speaks in 34 to 149 ms | B −0.89 dB | not yet judged: **B** taken |
+| `2-krummhorn`: the Krummhorn's demo | as above, its second harmonic 27 dB under the first | as above, the second harmonic level with the first | A −0.13 dB | not yet judged: **B** taken |
+| `3-tutti`: the Tutti's demo | every reed as in 0.11.0 | every reed as in 0.12.0 | A −0.19 dB | not yet judged: **B** taken |
+
+B is taken by the standing rule that the candidate wins unless the owner says
+otherwise. Licensed until the owner judges it:
+
+- **B, the reeds of 0.12.0.** The measurements chose the mechanism, not the
+  ear: a recorded trumpet speaks in 90 to 195 ms and flattens as its wind
+  rises, as B does and A does not. What is left to the ear is the voicing
+  that came with it. The trumpets are brighter than the ones the owner chose
+  by ear for 0.8.0 (the harmonics 2 to 8 of C stand 4 to 9 dB nearer the
+  recorded ones), and the closings, tongue pitches and resonator lengths in
+  `Stops.h` are voiced, not measured.
+
+Not put to the ear, because a measurement or the limit settled them: the
+branch's kick at a reed's onset (two constants no source gives), its second
+harmonic for the flues (measured further from the recordings) and a stopped
+pipe's sound straight from its mouth (it needs a coefficient fitted to the
+recordings, and the bass Gedackt moves away from them).
+
 ## The breath's lead, the voicing, the tremulant and the swell box (2026-11-18, 0.11.0)
 
 Four questions [the gaps report](research/physical-gaps-2026-11-18.md) left
