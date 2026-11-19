@@ -13,12 +13,12 @@ the louder trimmed down.
 
 | Set | A (0.11.0) | B (0.12.0) | Trim | Chosen |
 | --- | --- | --- | --- | --- |
-| `1-trompete`: the Trompete's demo | the resonator leads the reed, which speaks in 7 to 71 ms | the tongue leads, rolls onto its shallot and speaks in 34 to 149 ms | B −0.89 dB | not yet judged: **B** taken |
-| `2-krummhorn`: the Krummhorn's demo | as above, its second harmonic 27 dB under the first | as above, the second harmonic level with the first | A −0.13 dB | not yet judged: **B** taken |
-| `3-tutti`: the Tutti's demo | every reed as in 0.11.0 | every reed as in 0.12.0 | A −0.19 dB | not yet judged: **B** taken |
+| `1-trompete`: the Trompete's demo | the resonator leads the reed, which speaks in 7 to 71 ms | the tongue leads, rolls onto its shallot and speaks in 34 to 149 ms | B −0.89 dB | **B**, the owner's choice (2026-11-19) |
+| `2-krummhorn`: the Krummhorn's demo | as above, its second harmonic 27 dB under the first | as above, the second harmonic level with the first | A −0.13 dB | **B**, the owner's choice (2026-11-19) |
+| `3-tutti`: the Tutti's demo | every reed as in 0.11.0 | every reed as in 0.12.0 | A −0.19 dB | **B**, the owner's choice (2026-11-19) |
 
-B is taken by the standing rule that the candidate wins unless the owner says
-otherwise. Licensed until the owner judges it:
+The owner said to go with the candidate (2026-11-19), for all three sets.
+Licensed by that choice:
 
 - **B, the reeds of 0.12.0.** The measurements chose the mechanism, not the
   ear: a recorded trumpet speaks in 90 to 195 ms and flattens as its wind
