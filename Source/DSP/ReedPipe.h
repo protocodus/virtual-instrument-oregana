@@ -61,6 +61,7 @@ struct ReedPipe {
     // The boot fills at `attack` through an opening pallet and at `refill`
     // under one open already (SetTouch); `rising` is the one in use.
     float attack = 1.0f, refill = 1.0f, rising = 1.0f, release = 1.0f, bootDrop = 0.2f;
+    int opening = 0;   // samples until an opening pallet stands open and the boot fills at `refill`
     double attackSeconds = 0.0, releaseSeconds = 0.0;
     float gainLeft = 0.0f, gainRight = 0.0f;
     double air = 0.0;
@@ -135,7 +136,11 @@ struct ReedPipe {
         // The boot fills through the same pallet as a flue's foot
         // (FluePipe::Design, Castellengo's share) and its own toe hole.
         // Unlike a foot it never catches its channel up, the tongue drawing
-        // it down, so it keeps the rate it began with.
+        // it down, so it fills at `attack` for the pallet's own opening,
+        // three of its time constants, and at `refill` once it stands open.
+        // The rate filters what the tongue draws from the boot each cycle,
+        // so a pipe kept at `attack` sounded apart from one whose stop opened
+        // under a held key: 2 cents at a trumpet's flow of 2.1.
         attackSeconds = v.speech * (0.0204 + 0.3 / hz);
         refill = static_cast<float>(1.0 - std::exp(-1.0 / (v.speech * (0.0015 + 0.3 / hz) * kPipeRate)));
         bootDrop = static_cast<float>(v.boot);
@@ -147,10 +152,11 @@ struct ReedPipe {
 
     // As a flue's (FluePipe::SetTouch). The drain goes with the filling, so
     // that the open tongue pulls the boot down as far at any touch.
-    void SetTouch(double slowness, bool opening) {
+    void SetTouch(double slowness, bool pallet) {
         attack = static_cast<float>(1.0 - std::exp(-1.0 / (attackSeconds * slowness * kPipeRate)));
-        rising = opening ? attack : refill;
+        rising = pallet ? attack : refill;
         drain = bootDrop * rising;
+        opening = pallet ? static_cast<int>(3.0 * attackSeconds * slowness * kPipeRate) : 0;
     }
     void SetRelease(double slowness) { release = static_cast<float>(1.0 - std::exp(-1.0 / (releaseSeconds * slowness * kPipeRate))); }
 
@@ -167,6 +173,10 @@ struct ReedPipe {
     void Tick() {
         // As a flue's (FluePipe::Tick).
         if (wind == 0.0f && foot < 1.0e-25f) foot = 0.0f;
+        if (opening > 0 && (opening -= FluePipe::kTick) <= 0) {
+            rising = refill;
+            drain = bootDrop * refill;
+        }
         // A reed is judged by what it radiates. A bass resonator turns
         // nearly all of its wave back, so the wave inside outlasts the sound
         // by seconds: a 16' trumpet was kept 7.6 s, its sound 116 dB down.

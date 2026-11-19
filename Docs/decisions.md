@@ -4,6 +4,36 @@ What was put to the ear, what each letter was, which the owner chose and what
 that licensed. A measurement that settles a question is quoted where the
 question is, not here.
 
+## Reed brightness (2026-11-19, 0.12.1)
+
+In the promo's full choruses 0.12.0's reeds stood 1.5 to 4 dB brighter above
+2 kHz than 0.11.0's, with the flues unchanged, and the owner heard the tutti
+as harsh. Whether to voice the cone reeds gentler, a set in
+`oregana/listening-2026-11-19-reed-brightness/` in the project's files: the
+promo's France Grand choeur finale and Spain Batalla, the same MIDI and
+changes through each letter, matched on whole-file RMS with the louder
+trimmed down (at most 0.42 dB), each letter's pipe regulation regenerated.
+
+| Letter | Every cone reed's flow (`Stops.h`) | Chosen |
+| --- | --- | --- |
+| A (0.12.0) | as voiced: the trumpet's 8' C 3.5 | |
+| B | 0.8 of it: 2.8 | |
+| C | 0.6 of it: 2.1, near 0.4.0's 2, the bottom of the comment's range | **C**, the owner's choice (2026-11-19) |
+
+Licensed by that choice: the flows of the Trumpet, Posaune, Trompette and
+Hautbois families at 0.6 of 0.12.0's. Against 0.11.0, 0.12.1 stands
+within 0.5 dB at 2 to 4 kHz and 1 to 2 dB brighter above 4 kHz; the bass of
+the chorus stays about 2 dB under 0.11.0's, which came with the tongue-led
+reeds, not with the flow. A trial that curved the tongues 3 and 8 times as
+much moved those bands by under 0.5 dB and was not put to the ear.
+
+C put a fault in 0.12.0's reeds beyond `Oregana.Engine`'s 1.5 cents: a reed
+whose stop opened under a held key sounded 2 cents flat of one whose key
+went down after, because its boot filled at the opening pallet's rate for as
+long as it spoke. The owner chose to fix the boot with C (2026-11-19): it
+fills at the open pallet's rate once the pallet stands open, and both now
+sound within 0.05 cents of the tuner's.
+
 ## The reeds led by their tongues (2026-11-19, 0.12.0)
 
 Whether the tongue-led reeds are an improvement, a set in

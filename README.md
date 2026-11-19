@@ -36,10 +36,10 @@ chord of Bach's Toccata in D minor, BWV 565, on the Tutti.
 | 2 | Gedackt 8 | [02-gedackt-8.wav](Docs/audio/02-gedackt-8.wav) | 12.0 s | -17.6 dBFS |
 | 5 | Voix celeste | [05-voix-celeste.wav](Docs/audio/05-voix-celeste.wav) | 12.0 s | -13.6 dBFS |
 | 7 | Cornet | [07-cornet.wav](Docs/audio/07-cornet.wav) | 12.0 s | -16.2 dBFS |
-| 9 | Krummhorn | [09-krummhorn.wav](Docs/audio/09-krummhorn.wav) | 12.0 s | -17.8 dBFS |
-| 12 | Trompete | [12-trompete.wav](Docs/audio/12-trompete.wav) | 12.0 s | -12.4 dBFS |
-| 14 | Plenum | [14-plenum.wav](Docs/audio/14-plenum.wav) | 12.0 s | -12.5 dBFS |
-| 17 | Tutti | [17-tutti.wav](Docs/audio/17-tutti.wav) | 12.0 s | -8.8 dBFS |
+| 9 | Krummhorn | [09-krummhorn.wav](Docs/audio/09-krummhorn.wav) | 12.0 s | -17.9 dBFS |
+| 12 | Trompete | [12-trompete.wav](Docs/audio/12-trompete.wav) | 12.0 s | -12.0 dBFS |
+| 14 | Plenum | [14-plenum.wav](Docs/audio/14-plenum.wav) | 12.0 s | -12.6 dBFS |
+| 17 | Tutti | [17-tutti.wav](Docs/audio/17-tutti.wav) | 12.0 s | -9.1 dBFS |
 
 <!-- audio-demos-end -->
 
@@ -54,6 +54,23 @@ of them, and one phrase with the imperfection controls at none, as loaded
 and plenty.
 
 ## Version history
+
+### 0.12.1 — 2026-11-19 — gentler reeds, and in tune however their wind arrives
+
+- **The cone reeds are voiced gentler.** Every Trumpet, Trompette, Posaune,
+  Basson, Clairon and Hautbois takes 0.6 of 0.12.0's flow (the trumpet's 8'
+  C 2.1, near 0.4.0's 2), chosen by ear: led by their tongues they had stood
+  1.5 to 4 dB brighter above 2 kHz than 0.11.0 in a full chorus, and now
+  stand level with it at 2 to 4 kHz and 1 to 2 dB brighter above 4 kHz
+  ([Docs/decisions.md](Docs/decisions.md), 2026-11-19, reed brightness).
+- **A reed's pitch no longer depends on how its wind arrived.** Its boot
+  kept filling at its opening pallet's rate for as long as it spoke, which
+  filtered what the tongue drew from it, so a reed whose stop was drawn under
+  a held key sounded apart from one whose key went down after: 0.2 cents in
+  0.12.0, 2 cents at the new flow. The boot now fills at the open pallet's
+  rate once the pallet stands open, three of its time constants after it
+  began to open. Every reed is retuned; the Trompete, Church Reeds, England
+  Psalm and Germany Organo pleno take a Volume trim 1 dB lower.
 
 ### 0.12.0 — 2026-11-19 — reeds led by their tongues, the key's lift, a click removed
 
