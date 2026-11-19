@@ -66,7 +66,49 @@ inline Float4 Choose(Int4 held, Float4 a, Float4 b) { return (Float4)((held & (I
 inline Float4 Where(Int4 held, Float4 a) { return (Float4)(held & (Int4)a); }
 inline Float4 Unless(Int4 held, Float4 a) { return (Float4)(~held & (Int4)a); }
 inline Float4 Abs(Float4 x) { return (Float4)((Int4)x & Int4 { 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff }); }
-inline Float4 Sqrt(Float4 x) { return Float4 { Sqrt(x[0]), Sqrt(x[1]), Sqrt(x[2]), Sqrt(x[3]) }; }
+inline Float4 Sqrt(Float4 x) {
+#if defined(OREGANA_ELEMENTWISE_SQRT)
+    return __builtin_elementwise_sqrt(x);
+#else
+    return Float4 { Sqrt(x[0]), Sqrt(x[1]), Sqrt(x[2]), Sqrt(x[3]) };
+#endif
+}
+// Unaligned 16-byte storage for cached SIMD constant packs inside heap objects.
+struct PackedFloat4 {
+    float lane[4];
+};
+inline Float4 Load4(const float* p) {
+    Float4 v;
+    __builtin_memcpy(&v, p, sizeof v);
+    return v;
+}
+inline Float4 Load4(const PackedFloat4& p) { return Load4(p.lane); }
+inline void Store4(float* p, Float4 v) { __builtin_memcpy(p, &v, sizeof v); }
+inline void Store4(PackedFloat4& p, Float4 v) { Store4(p.lane, v); }
+inline bool AnyLane(Int4 mask) {
+    std::uint64_t bits[2];
+    __builtin_memcpy(bits, &mask, sizeof bits);
+    return (bits[0] | bits[1]) != 0;
+}
+inline void Transpose4x4(Float4& a, Float4& b, Float4& c, Float4& d) {
+#if defined(__has_builtin) && __has_builtin(__builtin_shufflevector)
+    const Float4 t0 = __builtin_shufflevector(a, b, 0, 4, 1, 5);
+    const Float4 t1 = __builtin_shufflevector(a, b, 2, 6, 3, 7);
+    const Float4 t2 = __builtin_shufflevector(c, d, 0, 4, 1, 5);
+    const Float4 t3 = __builtin_shufflevector(c, d, 2, 6, 3, 7);
+    a = __builtin_shufflevector(t0, t2, 0, 1, 4, 5);
+    b = __builtin_shufflevector(t0, t2, 2, 3, 6, 7);
+    c = __builtin_shufflevector(t1, t3, 0, 1, 4, 5);
+    d = __builtin_shufflevector(t1, t3, 2, 3, 6, 7);
+#else
+    const Float4 r0 { a[0], b[0], c[0], d[0] }, r1 { a[1], b[1], c[1], d[1] };
+    const Float4 r2 { a[2], b[2], c[2], d[2] }, r3 { a[3], b[3], c[3], d[3] };
+    a = r0;
+    b = r1;
+    c = r2;
+    d = r3;
+#endif
+}
 #endif
 
 // White noise in -1..1 from a 32-bit linear congruential generator (Numerical

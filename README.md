@@ -32,14 +32,14 @@ chord of Bach's Toccata in D minor, BWV 565, on the Tutti.
 
 | # | Preset | Demo | Length | Peak |
 | --- | --- | --- | --- | --- |
-| 1 | Principal 8 | [01-principal-8.wav](Docs/audio/01-principal-8.wav) | 12.0 s | -14.4 dBFS |
-| 2 | Gedackt 8 | [02-gedackt-8.wav](Docs/audio/02-gedackt-8.wav) | 12.0 s | -17.1 dBFS |
-| 5 | Voix celeste | [05-voix-celeste.wav](Docs/audio/05-voix-celeste.wav) | 12.0 s | -14.9 dBFS |
-| 7 | Cornet | [07-cornet.wav](Docs/audio/07-cornet.wav) | 12.0 s | -15.6 dBFS |
-| 9 | Krummhorn | [09-krummhorn.wav](Docs/audio/09-krummhorn.wav) | 12.0 s | -17.2 dBFS |
-| 12 | Trompete | [12-trompete.wav](Docs/audio/12-trompete.wav) | 12.0 s | -13.6 dBFS |
-| 14 | Plenum | [14-plenum.wav](Docs/audio/14-plenum.wav) | 12.0 s | -12.8 dBFS |
-| 17 | Tutti | [17-tutti.wav](Docs/audio/17-tutti.wav) | 12.0 s | -9.3 dBFS |
+| 1 | Principal 8 | [01-principal-8.wav](Docs/audio/01-principal-8.wav) | 12.0 s | -13.0 dBFS |
+| 2 | Gedackt 8 | [02-gedackt-8.wav](Docs/audio/02-gedackt-8.wav) | 12.0 s | -16.7 dBFS |
+| 5 | Voix celeste | [05-voix-celeste.wav](Docs/audio/05-voix-celeste.wav) | 12.0 s | -15.3 dBFS |
+| 7 | Cornet | [07-cornet.wav](Docs/audio/07-cornet.wav) | 12.0 s | -15.5 dBFS |
+| 9 | Krummhorn | [09-krummhorn.wav](Docs/audio/09-krummhorn.wav) | 12.0 s | -16.6 dBFS |
+| 12 | Trompete | [12-trompete.wav](Docs/audio/12-trompete.wav) | 12.0 s | -13.5 dBFS |
+| 14 | Plenum | [14-plenum.wav](Docs/audio/14-plenum.wav) | 12.0 s | -12.9 dBFS |
+| 17 | Tutti | [17-tutti.wav](Docs/audio/17-tutti.wav) | 12.0 s | -8.2 dBFS |
 
 <!-- audio-demos-end -->
 
@@ -54,6 +54,17 @@ of them, and one phrase with the imperfection controls at none, as loaded
 and plenty.
 
 ## Version history
+
+### 0.10.0 — 2026-11-19 — physical flue and reed acoustics, tracker velocity, attack hierarchy & unified Wind Noise
+
+- **Open flue H2 & acoustic streaming (`FluePipe.h`, `Stops.h`)** — Added `FlueVoicing::stream` so open flues start with a smaller rest lip offset and deflect dynamically under acoustic streaming in steady speech, lifting `Octave 8'` `H2` from `-11 dB` to `-6 dB` (`H2 > H3` through `48–83`, `-7 dB` in `84–96`). Bounded the mouth end-correction allpass Helmholtz angle to suppress high-frequency 2nd-resonance detuning while preserving stopped-pipe dispersion (`AirBendsTheFlues` worst `-0.730` cents).
+- **Stopped & chimney radiation (`FluePipe.h`, `Stops.h`)** — Added stopped-pipe direct mouth volume flow (`Gedackt 8'` `H2` `-51..-66 dB` -> `-35..-37 dB`, `Quintadena 8'` `H2` `-73..-75 dB` -> `-34 dB`), re-voiced `Quintadena` (`H5` `-8..-14` -> `-17..-24 dB`, `H7` `-20..-27` -> `-43..-47 dB`), and added chimney open-end lag and radiation on `Rohrflöte 8'` (`H5` in `48–83` lifted by `+12` to `+17 dB`, to `-29..-33 dB`).
+- **Two-stage tracker velocity, dp/dt chiff & Note-Off feathering (`FluePipe.h`, `ReedPipe.h`, `OreganaEngine.h/.cpp`, `OreganaInstrument.h`)** — Split pallet opening and pipe foot/boot filling with a nonlinear MIDI velocity curve centered at `80`, scaled flue starting `puff` by key speed, added a velocity-responsive initial Bernoulli suction pluck on reed tongues (`ReedPipe::Run`/`RunFourPacked`), isolated key touch/release velocities per division and carried them through `Pending`, and wired Note-Off velocity into `SetRelease`.
+- **Register attack timing hierarchy (`FluePipe.h`, `Stops.h`)** — Scaled foot admittance by narrow Töpfer pipe scaling, increased stopped/chimney shedding, and shifted string rest offset while keeping steady `offset + stream`, yielding authentic register speech order at `c1` (`Trompete 8'` < `Gedackt 8'` < `Rohrflöte 8'` < `Octave 8'` < `Viola da Gamba 8'` < `Gambe 8'`) and `16' C1` (`Posaune 16'` < `Subbass 16'` < `Principal 16'`).
+- **Tongue-led brass reeds (`ReedPipe.h`, `Stops.h`)** — Separated sounding-note (`wNote`) and builder-cut resonator (`wRes`) wave angles, replaced the hard floor bounce with $C^1$ curved-shallot rolling contact, frequency-warped Verlet damping (`4 * sin^2(wt/2)`), and tongue-led stiffness scaling so `tuning` moves only the tongue. `Trompete 8'` now flattens on falling wind (`-0.87` vs inverted `+0.22` cents per `-1%` wind), `Vox humana 8'` wind pull drops from `-2.31` to `-1.12` cents per `-1%` wind, and `Krummhorn 8'` radiates strong even harmonics (`H2` `-0.5..-2.1 dB`, `H4` `-12.5..-17.9 dB`).
+- **Reed tracker touch & wind unrest (`ReedPipe.h`, `OreganaEngine.cpp`)** — Wired MIDI velocity (`SetTouch`, scaling `drain = bootDrop * attack` so steady pressure stays invariant across velocities) and slow `< 8 Hz` boot pressure unrest (`s.waver` * `kReedWaver = 1.15f`) to all reeds, eliminating unfiltered 48 kHz white-noise tongue rasp (`ReedsWaver` `0.73` cents RMS).
+- **Unified `Wind Noise` (`blower`) & 70% real-instrument windage (`FluePipe.h`, `ReedPipe.h`, `Mechanics.h`, `OreganaEngine.h/.cpp`)** — Gated all wind and pipe-breath sources through the `Wind Noise` control (`blower`): at `0.0`, blower hum, chest hiss, valve thuds, and flue/reed mouth turbulence are completely silent (`0.0`); at default `0.2`, breath and windage scale to `70%` (`-3.1 dB`) of real values (`PipeBreathScale = 0.70`, `kBlowerLevel = 0.154`, `kHiss = 0.0084`, `kWindThudScale = 0.70`) with flow-coupled chest hiss, 25 ms click-free smoothing (`SetBreath`), and a `3.2 kHz` direct-path case/distance shelf tied to `Room`.
+- **Regulation, demos & tests (`PipeRegulation.h`, `OreganaPresets.h`, `Docs/audio/`, `EngineTests.cpp`, `InstrumentTests.cpp`)** — Re-regulated all 69 ranks / 5,130 pipes (`0` faults), updated preset `kVolume` trims against `RenderOregana --levels`, re-rendered the README audio demos, and added unit assertions for velocity-shaped attack/release, register speech hierarchy, and zero-noise `Wind Noise = 0` behavior.
 
 ### 0.9.0 — 2026-11-14 — raw division outputs, a mixer for each division, every preset at 440 Hz
 
@@ -353,9 +364,11 @@ carries a narrow tube joined at a scattering junction, and a harmonic flute is
 a pipe of twice the length with a hole at its middle, blown to its octave.
 The jet is deflected by the wave returning to the mouth, carries that
 deflection across the cut-up in its transit time, which follows the wind, and
-blows into or out of the pipe at the lip by a saturating law (Fletcher and
-Rossing, *The Physics of Musical Instruments*, section 16.3). Nothing else
-makes the tone: the pipe speaks when the wind lets the loop's gain pass one,
+blows into or out of the pipe at the lip by a saturating law around a rest
+offset plus dynamic acoustic-streaming deflection (Fletcher and Rossing, *The
+Physics of Musical Instruments*, section 16.3). Stopped pipes add direct mouth
+volume flow and chimney pipes radiate through their open chimney end. Nothing
+else makes the tone: the pipe speaks when the wind lets the loop's gain pass one,
 settles where the jet saturates and the lip sheds vortices, goes flat as the
 wind sags, and rings down on its own resonances when the pallet closes. The
 jet's turbulence is the wind noise, strongest about the first harmonics and
@@ -365,21 +378,20 @@ strings and harmonic flutes differ only in the dimensions and voicing a pipe
 maker would choose (`Stops.h`).
 
 **Reed pipes** (`ReedPipe.h`). The tongue is a sprung mass that the boot's
-pressure pushes shut against the shallot, where it lands on a much stiffer
-spring; its curve closes the opening gradually. Wind flows through the
-opening by Bernoulli's law into the resonator, a travelling-wave loop closed
-at the shallot, a cone or a cylinder; flow, tongue and resonator are solved
-together every sample. The tongue sets the pitch and the tuner's correction is
-its stiffness, as a tuning wire's is. Trumpets, the French Trompette, Basson
-and Hautbois, the Posaunes, Krummhorn, Dulcian and Vox humana are different
-tongues and resonators.
+pressure pushes shut against the shallot with gradual $C^1$ rolling contact onto
+a stiffer landing spring; its curve closes the opening smoothly. Wind flows
+through the opening by Bernoulli's law into the resonator, a travelling-wave
+loop closed at the shallot, a cone or a cylinder; flow, tongue and resonator are
+solved together every sample. The Euler-Bernoulli brass cantilever sets the
+pitch and the tuner's correction is its stiffness, as a tuning wire's is.
+Trumpets, the French Trompette, Basson and Hautbois, the Posaunes, Krummhorn,
+Dulcian and Vox humana are different tongues and resonators.
 
 **Regulation** (`PipeRegulation.h`). As a voicer does, a generator sounds
 every pipe on steady wind, measures its pitch and level and writes the tuning
-and regulation each one needs. The pipes the engine suite samples are then
-in tune within half a cent at any a1 from 415 to 466 Hz (the Vox humana
-within 1.3), and each rank is even along its compass. The table is generated
-and checked by a test.
+and regulation each one needs. Across all 69 ranks (5,130 pipes), the sampled
+pipes stay within about one cent at any a1 from 415 to 466 Hz, and each rank is
+even along its compass. The table is generated and checked by a test.
 
 **Wind** (`Wind.h`). Each division has its own reservoir, a weighted plate
 over a chest: the pipes take wind by the square root of the pressure, the
@@ -389,11 +401,11 @@ and it bounces back at 3.8 to 6.5 Hz, the Pedal's large reservoir slowest. Every
 pipe's pitch and level follow, because the pipes are driven by that pressure
 and nothing else. The pipes of one key share a pallet, so a key with every
 stop drawn gives each pipe a little less. The pressure of a division has a
-slow unrest of 0.3 %, and each flue's own wind wavers by 1.5 % under 8 Hz,
+slow unrest of 0.3 %, and each pipe's own wind wavers by 1.5 % under 8 Hz,
 its own and no other pipe's: that figure is set by a recorded organ's held
-notes (`Tools/benchmark_steadiness.py`). The eddies in a reed's gap push its
-tongue by a quarter of the boot's push, which walks its pitch as a recorded
-trumpet's walks. The Positiv and the Recit have a
+notes (`Tools/benchmark_steadiness.py`). In a reed's gap, jet turbulence
+(`kReedEddy = 0.12`) pushes its tongue alongside the pipe's wind unrest, which
+walks a trumpet's pitch and level as a recorded one's walk. The Positiv and the Recit have a
 tremulant each. These constants are voiced to written accounts of such
 winding, not measured on an organ.
 
@@ -543,11 +555,15 @@ it still brings on the whole stop list, a chapel organ's too.
 - **No plug-in and no release here.** This is the engine, its tools and
   tests, which the Rack Extension in the Rack repository plays; the README's
   screenshot and downloads wait for a plug-in and its main build.
-- **CPU is above the portfolio's 10 % target for large registrations.** One
-  256-frame block takes at most 3 % of a core on a single stop, 8 % on the
-  Plenum demo (198 pipes) and 20 % on the Tutti demo (468 pipes); sixteen
-  keys of full organ take 36 %. Development container, GCC 13, Release, one
-  thread. The plan is in
+- **CPU is above the portfolio's 10 % target for Tutti registrations.** One
+  256-frame block took at most 3 % of a core on a single stop, 8 % on the
+  Plenum demo (198 pipes) and 20 % on the Tutti demo (468 pipes; 36 % on sixteen
+  keys) in the 0.5.0 development container (GCC 13, Release, one thread). After
+  Pass 4 bit-exact optimizations in `0.10.0`, on the Apple M1 Max development
+  machine (Clang 21, Release, one thread, 256 frames) single stops run at
+  `0.0095–0.0147x` realtime (`1.3–2.0 %` worst block), Plenum at `0.0313x`
+  (`6.9 %`, stress `9.95 %`), and Tutti at `0.0574x` (`15.5 %`, stress
+  `27.7 %`). The plan and history are in
   [Docs/plans/cpu-optimisation-2026-11-12.md](Docs/plans/cpu-optimisation-2026-11-12.md).
 - **The engine is 48 kHz only.** At another rate `OreganaInstrument.h`
   resamples it, which costs 32 engine samples of latency more.
@@ -568,32 +584,29 @@ it still brings on the whole stop list, a chapel organ's too.
   work by design: a speaking pipe, or one still ringing when its key is
   struck again, keeps what it was made with, and takes a change the next
   time it speaks.
-- **The Vox humana follows the wind more than the other reeds**: 2.3 cents
-  for each 1 % of pressure, so it wavers under a heavy registration.
-- **Only the trumpet's unrest is checked.** A reed's pitch walks by a push
-  set on one recorded Trumpet 8'. The same push walks the Krummhorn 1.5 to
-  4.8 cents and the Vox humana 1.0 to 1.9, because their resonators hold
-  their tongues less; no recording has checked those, and a reed's level
-  wanders 0.03 dB where the recorded one's wanders 0.1 to 0.2.
+- **Only the trumpet's unrest is checked.** A reed's pitch and level walk by
+  per-pipe wind unrest (`s.waver`) plus jet eddy turbulence (`kReedEddy = 0.12`):
+  on `Trompete 8'` that yields `0.84–1.18` cents and `0.10–0.13` dB RMS level
+  wander (matching the recorded `0.1–0.2` dB range). The same model walks the
+  `Krummhorn 8'` `1.37–2.30` cents and the `Vox humana 8'` `1.00–1.33` cents,
+  which no recording has checked against; `Vox humana 8'` wind sensitivity is
+  now `-1.12` cents per `-1%` wind (in line with `Trompete 8'` at `-0.87` and
+  `Krummhorn 8'` at `-1.30`).
 - **A reed's resonator does not follow the temperature.** In a real reed the
-  warming resonator pulls the pitch up a little; here a reed does not move
-  with Temperature at all. Letting the resonator's air warm was tried
-  (2026-11-13) and taken out: the model's trumpets then moved 27 of the
-  flues' 29.5 cents for 10 degrees, because here the resonator and not the
-  tongue sets a reed's pitch, which is the reverse of a real reed.
-- **The trumpets are duller in the bass than a recorded one, by choice.**
-  Against a recorded Trumpet 8' the eighth harmonic of the two lowest
-  octaves was 8 dB weaker at 0.5.0's flow (up to 27 dB before it)
-  ([benchmark](Docs/research/benchmark-burea-2026-11-13.md)); the owner chose
-  half that flow by ear in 0.8.0, which takes the bench's eighth harmonic
-  9 dB lower again. That organ is one organ, not a verdict. The shallot
+  warming resonator pulls the pitch up a little; here a reed still does not move
+  with Temperature. With tongue-led voicing (`0.10.0`), the tongue dominates
+  tuning while wind sensitivity is negative (`-0.87` to `-1.30` cents per `-1%`
+  wind), though resonator thermal drift has not yet been re-introduced.
+- **Trumpet bass voicing and unbenchmarked reeds.** Against the recorded Trumpet
+  8', the bass `36–47` `H8` sits at `-7 dB` (`-6 dB` at `65.4 Hz`) in `0.10.0`
+  with the 0.8.0 owner `flow` ratios preserved; whether a given room calls for
+  brighter or darker trumpet bass remains a matter of voicing taste. The shallot
   has no resonance of its own here, and the Dulcian, Vox humana and Hautbois
   have been compared with no recording.
-- **The Krummhorn has only its odd harmonics.** A recorded one has every
-  harmonic strong; here the even ones are 25 dB down, because the resonator
-  and not the tongue leads the pipe. A voicing led by the tongue matched the
-  recording and went 3 to 5 cents flat or sharp for each 1 % of wind, so it
-  was not kept. One published Krummhorn spectrum has its even harmonics
+- **Krummhorn 8' wind sensitivity vs even harmonics.** Tongue-led voicing in
+  `0.10.0` restores the `Krummhorn 8'` even harmonics (`H2` `-0.5..-2.1 dB`,
+  `H4` `-12.5..-17.9 dB`) at a wind sensitivity of `-1.30` cents per `-1%` wind
+  (instead of the earlier resonator-locked `-0.27` cents). One published Krummhorn spectrum has its even harmonics
   suppressed as here (Pykett), so the recorded stop is one kind of
   Krummhorn and not every one.
 - **The Posaune 16' has too much fundamental**: 10 to 20 dB against its
@@ -601,24 +614,23 @@ it still brings on the whole stop list, a chapel organ's too.
   two thirds or half of its length takes 8 to 14 dB off the fundamental on
   the bench; whether that organ's Basun is so built is not known, and a
   full-length Posaune is the German kind, so it was not changed.
-- **The stopped pipes are too perfect.** A recorded Quintadena has its even
-  harmonics 35 dB under the fundamental and these have them 70 dB under,
-  with the fifth and seventh about 20 dB too strong in the bass; a recorded
-  Rohrflöte has 15 to 25 dB more fifth harmonic in the middle of the compass.
-- **A principal's second harmonic is about 10 dB too weak** against the same
-  organ's Principal 8'. The jet swings symmetrically about a small offset;
-  a larger offset stops the pipe speaking before it gives the harmonic.
-  By Fletcher and Douglas (1980) such a jet's second harmonic can reach
-  about 10 dB under its first and no more, which is where this one is;
-  their own pipe radiated 3 dB more than that.
+- **Stopped and chimney harmonic balance.** Direct mouth flow and chimney
+  radiation in `0.10.0` resolve the missing even harmonics (`Gedackt 8'` `H2`
+  `-35..-37 dB`, `Quintadena 8'` `H2` `-34 dB` with re-voiced `H5`/`H7` at
+  `-17..-24`/`-43..-47 dB`) and lift `Rohrflöte 8'` middle-compass `H5` to
+  `-29..-33 dB` (`+12` to `+17 dB`, still somewhat softer than the loudest
+  recorded Bureå octave).
+- **Principal H2 calibration.** Acoustic-streaming jet deflection (`FlueVoicing::stream`)
+  lifts `Octave 8'` `H2` to `-6 dB` (`-7 dB` in `84–96`), bringing `H2 > H3`
+  into the range of Fletcher and Douglas (1980).
 - **Real ranks are less even** than these: the notes of a recorded octave
   differ by 1.4 to 5 dB where these differ by under 1 dB as loaded (part of
   the recorded spread is the room).
-- **The breath does not lead the tone.** A recorded pipe hisses for some
-  100 ms before its tone begins; these are silent until it does. The cause
-  is found: a pipe's foot fills here in 3 ms at 247 Hz, and with a foot
-  that fills in 10 to 26 ms, as measured ones do (Castellengo, 2004), the
-  model's breath leads its tone by 55 ms and the tone comes that much later.
+- **Pre-speech breath duration across pitch.** Scaling manual foot filling
+  (`speech * Min(0.030, 0.0012 + 1.6 / hz)`) in `0.10.0` produces pre-speech
+  breath before tone onset (`Principal 8'` `123.5 Hz` `-20 dB` at `-50 ms`,
+  `-11 dB` at `-20 ms`, `73 ms` speech `-20..-1 dB`), though still shorter than
+  recorded pipes whose foot hisses up to ~100 ms ahead of steady tone.
   How late a note should speak is a choice for the ear (a listening set,
   not yet judged). And no
   short note has been compared with a recording: the one set with known key

@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
     const double hz = std::atof(argv[2]);
     FlueVoicing flue;
     ReedVoicing tongue;
-    double tuning = 1.0, seconds = 0.0, wind = 1.0, off = 0.0;
+    double tuning = 1.0, seconds = 0.0, wind = 1.0, off = 0.0, touch = 1.0;
     std::string wav;
     for (int i = 3; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -36,6 +36,7 @@ int main(int argc, char** argv) {
         if (arg == "--seconds" && i + 1 < argc) { seconds = std::atof(argv[++i]); continue; }
         if (arg == "--wind" && i + 1 < argc) { wind = std::atof(argv[++i]); continue; }
         if (arg == "--off" && i + 1 < argc) { off = std::atof(argv[++i]); continue; }
+        if (arg == "--touch" && i + 1 < argc) { touch = std::atof(argv[++i]); continue; }
         const auto equals = arg.find('=');
         const std::string key = arg.substr(0, equals);
         const double value = equals == std::string::npos ? 1.0 : std::atof(arg.c_str() + equals + 1);
@@ -46,6 +47,7 @@ int main(int argc, char** argv) {
         else if (key == "jetTransit") flue.jetTransit = value;
         else if (key == "drive") flue.drive = value;
         else if (key == "offset") flue.offset = value;
+        else if (key == "stream") flue.stream = value;
         else if (key == "noise") flue.noise = tongue.noise = value;
         else if (key == "chiff") flue.chiff = value;
         else if (key == "shedding") flue.shedding = value;
@@ -74,6 +76,7 @@ int main(int argc, char** argv) {
     ReedPipe r;
     if (reed) {
         r.Design(tongue, hz, tuning);
+        r.SetTouch(touch);
         loop.assign(static_cast<std::size_t>(r.loopLength), 0.0f);
         r.loop = loop.data();
         r.Clear();
@@ -83,8 +86,9 @@ int main(int argc, char** argv) {
                     r.allpass, r.lowpass, r.loopGain, r.mass);
     } else {
         f.Design(flue, hz, tuning);
+        f.SetTouch(touch);
         loop.assign(static_cast<std::size_t>(f.loopRoom), 0.0f);
-        jet.assign(static_cast<std::size_t>(f.jetLength), 0.0f);
+        jet.assign(static_cast<std::size_t>(f.jetLength + 1), 0.0f);
         upper.assign(static_cast<std::size_t>(f.upperRoom), 0.0f);
         f.loop = loop.data();
         f.jet = jet.data();

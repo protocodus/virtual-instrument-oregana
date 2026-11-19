@@ -209,6 +209,21 @@ void TwoSourcesHoldOneKey() {
     rig.Play(0.5);
     const double let = rig.Play(0.2);
     Expect(let < kSilent, "TwoSourcesHoldOneKey", "and once both have let go", let);
+
+    // Note-Off release velocity forwards through Instrument::Sync to the engine.
+    double tail[2] = {};
+    int atTail = 0;
+    for (const int offVel : { 8, 127 }) {
+        Rig rel;
+        rel.Set(kHwOctave8, 1.0);
+        rel.organ->KeyDown(60, 80, 0);
+        rel.Play(0.5);
+        rel.organ->KeyUp(60, offVel, 0);
+        rel.Play(0.01);
+        tail[atTail++] = rel.Play(0.035);
+    }
+    Expect(Db(tail[0] / Max(tail[1], 1.0e-12)) > 1.5, "TwoSourcesHoldOneKey",
+           "gentle Note-Off velocity retains more release tail than fast release, dB", Db(tail[0] / Max(tail[1], 1.0e-12)));
 }
 
 void WheelAndExpression() {

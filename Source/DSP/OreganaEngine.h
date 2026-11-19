@@ -50,7 +50,8 @@
 //   Wind         how far the reservoirs' sag, dip and bounce reach the pipes,
 //                with a slow unrest of the pressure itself, and how far
 //                each flue's own jet wavers and each reed's tongue walks
-//   Wind Noise   the blower's hum, the chests' hiss and the bellows' thud
+//   Wind Noise   all wind noise — pipe breath, the blower's hum, the chests'
+//                windage hiss and the bellows' thud (0 = none; 0.2 default = 70% of real values)
 //   Action       the keys' and stop knobs' knocks (Mechanics.h), and the
 //                couplers' lost motion: none at 0, up to 36 ms at 1
 //   Dead Pipes   pipes that do not speak at all
@@ -111,6 +112,7 @@ public:
     void Midi(const std::uint8_t* bytes, int size);
     void KeyDown(int division, int note, int velocity);   // MIDI note numbers: 60 is c1
     void KeyUp(int division, int note);
+    void KeyUp(int division, int note, int velocity);
     void AllKeysUp();
     void AllSoundOff();                   // and every hanging pallet freed
     void SetSwell(double position);       // as the Swell control and CC11 do
@@ -148,14 +150,16 @@ private:
         std::uint8_t rank = 0, key = 0, division = 0;
         bool reed = false, active = false;
         bool resting = false;         // its key is held and there is no wind for it: silent and cleared until some comes
+        bool winded = false;          // last seen on wind and eligible to hear neighbours
         std::uint32_t epoch = 0;      // the tuning it was last made for
         std::uint16_t delay = 0;      // samples from its pallet's opening to its being heard (Engine::Engine)
         std::uint64_t lastDue = 0;    // when the wind last sent to it arrives
         float offered = 0.0f;         // the share of its division's wind its pallet now gives
         float share = 0.0f;           // and the share that has reached it
+        float nextTouch = 0.0f, nextRelease = 0.0f;
         float gain = 0.0f;            // its regulated level
         float air = 0.0f;             // the wind it takes
-        float waver = 0.0f;           // a flue's own unrest (OreganaEngine.cpp, kWaverDepth)
+        float waver = 0.0f;           // a pipe's own unrest (OreganaEngine.cpp, kWaverDepth)
         std::uint32_t waverRandom = 1u;
         // A flue pipe among its neighbours (OreganaEngine.cpp, kHearMetres).
         std::uint8_t row = 0;         // its rank's row on the chest, from the division's first
@@ -176,8 +180,8 @@ private:
     void SetSlider(int stop, float position);
     void UpdateKey(int key, bool struck = false, int own = -1);
     void UpdateChannel(int division, int key, int late = 0);
-    void Offer(int slot, float share, int late);
-    bool Take(int slot, float share);
+    void Offer(int slot, float share, int late, float slowness = 1.0f);
+    bool Take(int slot, float share, float slowness = 1.0f);
     void Design(int slot);
     void Place(Slot& slot);
     void Tick();
@@ -193,7 +197,7 @@ private:
     // its order is the order their sound is added up in, which must not
     // depend on how the host cuts its blocks.
     std::vector<int> active;
-    struct Pending { int slot; std::uint64_t due; float share; };
+    struct Pending { int slot; std::uint64_t due; float share; float slowness; };
     std::vector<Pending> pending;                // wind on its way to a pipe, soonest first
     std::uint64_t now = 0;                       // samples rendered
     std::uint32_t epoch = 1;
@@ -203,7 +207,7 @@ private:
     std::array<std::array<bool, kManualKeys>, kDivisions> played {}, open {};
     std::array<std::array<float, kManualKeys>, kDivisions> hang {}, share {}, robbed {}, fullAir {};
     std::array<std::array<float, kManualKeys>, kDivisions> placeLeft {}, placeRight {};
-    std::array<float, kManualKeys> touch {};
+    std::array<std::array<float, kManualKeys>, kDivisions> touch {}, releaseTouch {};
     // Each stop's slider, 0 shut .. 1 open, where its knob and the roller
     // want it and how far it travels a tick; and what that leaves its ranks.
     std::array<float, kStopCount> slider {}, sliderTarget {}, sliderStep {};
@@ -246,6 +250,11 @@ private:
     std::vector<float> toldRing, hearScratch;
     std::vector<ReedPipe*> reedList;
     std::vector<float*> reedSound;
+#if defined(OREGANA_FOUR)
+    std::array<std::vector<FluePipe::FluePack>, 4> fluePacks;
+    std::vector<ReedPipe::ReedPack> reedPacks;
+#endif
+    bool hearingDirty = true, groupsDirty = true;
     // Silent pipes that make up a four when two or three of a kind are left
     // over (flues without and with a pipe beyond a junction, and reeds):
     // they take no wind, and their sound goes nowhere.
@@ -264,11 +273,13 @@ private:
     static constexpr int kApartSize = 2048;
     float apartGain = 0.0f, apartTarget = 0.0f;
     // The divisions' levels (kLevelHauptwerk ..), gliding as the Volume does.
-    std::array<float, kDivisions> levelGain {}, levelTarget {};
+    std::array<float, kDivisions> levelSlewed {}, levelGain {}, levelTarget {};
     std::array<float, kDivisions> peaks {};
     std::array<std::array<float, kApartSize>, kDivisionOutputs> apartLine {};
     int apartAt = 0;
     float presence = 0.0f, hum = 0.0f, hiss = 0.0f, rub = 0.0f;
+    float breathGain = 0.70f, breathTarget = 0.70f;
+    float directLow[2] {}, directAir = 0.0f, directAirTarget = 0.0f;
     Knocks knocks;
     WindNoise windNoise;
     Nave nave;

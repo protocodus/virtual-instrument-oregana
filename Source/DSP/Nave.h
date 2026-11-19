@@ -214,9 +214,9 @@ public:
         }
         const bool fading = fade < 1.0f;
 
-        std::array<float, kLines> out;
 #if defined(OREGANA_FOUR)
         // Four lines to an instruction, each lane a line's own arithmetic.
+        Float4 out[kLines / 4];
         for (std::size_t i = 0; i < kLines; i += 4) {
             const Float4 drifted = Lanes(offset, i) + Lanes(offsetStep, i);
             Keep(offset, i, drifted);
@@ -231,9 +231,10 @@ public:
             Keep(airIn, i, heard);
             Keep(airOut, i, air);
             Keep(shelfOut, i, shelved);
-            Keep(out, i, shelved);
+            out[i >> 2] = shelved;
         }
 #else
+        std::array<float, kLines> out;
         for (std::size_t i = 0; i < kLines; ++i) {
             offset[i] += offsetStep[i];
             float heard = Line(i, shapes[1].length[i]);
@@ -279,6 +280,37 @@ public:
 
         // The left ear reads the even lines and the right ear the odd ones.
         float even = 0.0f, odd = 0.0f;
+#if defined(OREGANA_FOUR)
+        for (std::size_t g = 0; g < kLines / 4; ++g) {
+            even += out[g][0];
+            even += out[g][2];
+            odd += out[g][1];
+            odd += out[g][3];
+        }
+        Mix(out);
+        bool quiet = left == 0.0f && right == 0.0f;
+        const auto writeAt = static_cast<std::size_t>(write & (kLineSize - 1));
+        Int4 sounding = { 0, 0, 0, 0 };
+        for (std::size_t i = 0; i < kLines; i += 4) {
+            // A line that takes the sound turned over: its sign bit flipped.
+            const UInt4 turned = UInt4 { (kInputSigns >> i) & 1u, (kInputSigns >> (i + 1)) & 1u, (kInputSigns >> (i + 2)) & 1u,
+                                         (kInputSigns >> (i + 3)) & 1u } << 31;
+            const Float4 mixed = kMixGain * out[i >> 2] + (Float4)((UInt4)Four(spread) ^ turned);
+            const Float4 in = Unless(Abs(mixed) < Four(1.1754944e-38f), mixed);
+            lineBuffer[i][writeAt] = in[0];
+            lineBuffer[i + 1][writeAt] = in[1];
+            lineBuffer[i + 2][writeAt] = in[2];
+            lineBuffer[i + 3][writeAt] = in[3];
+            if (writeAt == 0) {
+                lineBuffer[i][kLineSize] = in[0];
+                lineBuffer[i + 1][kLineSize] = in[1];
+                lineBuffer[i + 2][kLineSize] = in[2];
+                lineBuffer[i + 3][kLineSize] = in[3];
+            }
+            sounding |= in != Four(0.0f);
+        }
+        quiet = quiet && (sounding[0] | sounding[1] | sounding[2] | sounding[3]) == 0;
+#else
         for (std::size_t i = 0; i < kLines; i += 2) {
             even += out[i];
             odd += out[i + 1];
@@ -286,25 +318,10 @@ public:
         Mix(out);
         bool quiet = left == 0.0f && right == 0.0f;
         const auto writeAt = static_cast<std::size_t>(write & (kLineSize - 1));
-#if defined(OREGANA_FOUR)
-        Int4 sounding = { 0, 0, 0, 0 };
-        for (std::size_t i = 0; i < kLines; i += 4) {
-            // A line that takes the sound turned over: its sign bit flipped.
-            const UInt4 turned = UInt4 { (kInputSigns >> i) & 1u, (kInputSigns >> (i + 1)) & 1u, (kInputSigns >> (i + 2)) & 1u,
-                                         (kInputSigns >> (i + 3)) & 1u } << 31;
-            const Float4 mixed = kMixGain * Lanes(out, i) + (Float4)((UInt4)Four(spread) ^ turned);
-            const Float4 in = Unless(Abs(mixed) < Four(1.1754944e-38f), mixed);
-            lineBuffer[i][writeAt] = in[0];
-            lineBuffer[i + 1][writeAt] = in[1];
-            lineBuffer[i + 2][writeAt] = in[2];
-            lineBuffer[i + 3][writeAt] = in[3];
-            sounding |= in != Four(0.0f);
-        }
-        quiet = quiet && (sounding[0] | sounding[1] | sounding[2] | sounding[3]) == 0;
-#else
         for (std::size_t i = 0; i < kLines; ++i) {
             const float in = Settled(kMixGain * out[i] + (((kInputSigns >> i) & 1u) ? -spread : spread));
             lineBuffer[i][writeAt] = in;
+            if (writeAt == 0) lineBuffer[i][kLineSize] = in;
             quiet = quiet && in == 0.0f;
         }
 #endif
@@ -460,7 +477,7 @@ private:
         for (std::size_t lane = 0; lane < 4; ++lane) {
             const float* const buffer = lineBuffer[i + lane].data();
             stored[lane] = buffer[from[lane]];
-            stored[lane + 4] = buffer[(from[lane] + 1) & (kLineSize - 1)];
+            stored[lane + 4] = buffer[from[lane] + 1];
         }
         Float4 older, newer;
         __builtin_memcpy(&older, stored, sizeof older);
@@ -475,13 +492,43 @@ private:
         const int at = static_cast<int>(read);
         const float between = read - static_cast<float>(at);
         const auto& buffer = lineBuffer[i];
-        const float older = buffer[static_cast<std::size_t>(at & (kLineSize - 1))];
-        const float newer = buffer[static_cast<std::size_t>((at + 1) & (kLineSize - 1))];
+        const auto first = static_cast<std::size_t>(at & (kLineSize - 1));
+        const float older = buffer[first];
+        const float newer = buffer[first + 1];
         return older + between * (newer - older);
     }
 
     // The next kAhead samples of a shape's reflections, each ear's.
     void Reflect(const Shape& shape, std::array<std::array<float, kAhead>, 2>& ears) const {
+#if defined(OREGANA_FOUR)
+        Float4 l0 = Four(0.0f), l1 = Four(0.0f), l2 = Four(0.0f), l3 = Four(0.0f);
+        Float4 r0 = Four(0.0f), r1 = Four(0.0f), r2 = Four(0.0f), r3 = Four(0.0f);
+        for (std::size_t source = 0; source < kSources; ++source) {
+            if (earlyQuiet[source] >= kEarlySize) continue;
+            const float* const buffer = earlyBuffer[source].data();
+            for (int i = 0; i < shape.count; ++i) {
+                const Reflection& r = shape.reflections[source][static_cast<std::size_t>(i)];
+                const float* const fl = buffer + ((write - r.left) & (kEarlySize - 1));
+                const float* const fr = buffer + ((write - r.right) & (kEarlySize - 1));
+                l0 += r.leftGain * Load4(fl);
+                l1 += r.leftGain * Load4(fl + 4);
+                l2 += r.leftGain * Load4(fl + 8);
+                l3 += r.leftGain * Load4(fl + 12);
+                r0 += r.rightGain * Load4(fr);
+                r1 += r.rightGain * Load4(fr + 4);
+                r2 += r.rightGain * Load4(fr + 8);
+                r3 += r.rightGain * Load4(fr + 12);
+            }
+        }
+        Store4(ears[0].data(), l0);
+        Store4(ears[0].data() + 4, l1);
+        Store4(ears[0].data() + 8, l2);
+        Store4(ears[0].data() + 12, l3);
+        Store4(ears[1].data(), r0);
+        Store4(ears[1].data() + 4, r1);
+        Store4(ears[1].data() + 8, r2);
+        Store4(ears[1].data() + 12, r3);
+#else
         ears[0].fill(0.0f);
         ears[1].fill(0.0f);
         for (std::size_t source = 0; source < kSources; ++source) {
@@ -493,30 +540,16 @@ private:
                 Add(ears[1].data(), r.rightGain, buffer + ((write - r.right) & (kEarlySize - 1)));
             }
         }
-    }
-
-    static void Add(float* sum, float gain, const float* from) {
-#if defined(OREGANA_FOUR)
-        for (int i = 0; i < kAhead; i += 4) {
-            Float4 to, add;
-            __builtin_memcpy(&to, sum + i, sizeof to);
-            __builtin_memcpy(&add, from + i, sizeof add);
-            to += gain * add;
-            __builtin_memcpy(sum + i, &to, sizeof to);
-        }
-#else
-        for (int i = 0; i < kAhead; ++i) sum[i] += gain * from[i];
 #endif
     }
 
-    // The fast Walsh-Hadamard transform, unscaled.
-    static void Mix(std::array<float, kLines>& v) {
 #if defined(OREGANA_FOUR)
+    // The fast Walsh-Hadamard transform, unscaled (in-place on 8 Float4 lanes).
+    static void Mix(Float4 (&fours)[kLines / 4]) {
         // The first two stages within each four, then fours against fours:
         // every sum and difference the stages below make, in their order.
-        Float4 fours[kLines / 4];
         for (std::size_t n = 0; n < kLines / 4; ++n) {
-            const float* const p = v.data() + 4 * n;
+            const Float4 p = fours[n];
             const float sum0 = p[0] + p[1], difference0 = p[0] - p[1], sum1 = p[2] + p[3], difference1 = p[2] - p[3];
             fours[n] = Float4 { sum0 + sum1, difference0 + difference1, sum0 - sum1, difference0 - difference1 };
         }
@@ -527,8 +560,14 @@ private:
                     fours[n] = a + b;
                     fours[n + span] = a - b;
                 }
-        __builtin_memcpy(v.data(), fours, sizeof fours);
+    }
 #else
+    static void Add(float* sum, float gain, const float* from) {
+        for (int i = 0; i < kAhead; ++i) sum[i] += gain * from[i];
+    }
+
+    // The fast Walsh-Hadamard transform, unscaled.
+    static void Mix(std::array<float, kLines>& v) {
         for (std::size_t span = 1; span < kLines; span *= 2)
             for (std::size_t first = 0; first < kLines; first += 2 * span)
                 for (std::size_t i = first; i < first + span; ++i) {
@@ -536,8 +575,8 @@ private:
                     v[i] = a + b;
                     v[i + span] = a - b;
                 }
-#endif
     }
+#endif
 
     // The drifts' phasors turn by one step, kept at length 1 by a first-order
     // correction, and each line's offset ramps to its new place over the
@@ -554,7 +593,7 @@ private:
         }
     }
 
-    std::array<std::array<float, kLineSize>, kLines> lineBuffer {};
+    std::array<std::array<float, kLineSize + 1>, kLines> lineBuffer {};
     std::array<std::array<float, kLines>, kLossTerms> loss {}, wanted {};
     std::array<float, kLines> airIn {}, airOut {}, shelfOut {}, offset {}, offsetStep {};
     std::array<double, kLines> driftCos {}, driftSin {}, turnCos {}, turnSin {};

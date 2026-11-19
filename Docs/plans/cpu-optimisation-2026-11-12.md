@@ -114,3 +114,39 @@ Replacing a settled pipe by a stored period of its own sound, or sharing one
 pipe between the ranks of a mixture, would cut the cost several times over,
 and neither is the instrument any more: a pipe that no longer takes wind
 cannot sag, flutter under the tremulant, or speak again differently.
+
+## Pass 4 — 2026-11-18 (`0.10.0`, 100% bit-exact)
+
+Every transformation below leaves all 8 factory demo WAVs SHA-256 identical
+to pre-optimization `0.10.0`:
+
+- **Vector `Sqrt(Float4)` & unaligned `PackedFloat4` / `Transpose4x4` (`DspMath.h`)**:
+  Direct `__builtin_elementwise_sqrt` on `Float4`, 4-byte-aligned `PackedFloat4`
+  parameter packs, `AnyLane`, and 4x4 register transpose helpers.
+- **Pre-packed & contiguous pipe kernels (`ReedPipe.h`, `FluePipe.h`, `OreganaEngine.cpp`)**:
+  Contiguous dynamic state blocks loaded/stored via `Load4` + `Transpose4x4`,
+  cached `FluePack` / `ReedPack` rebuilt only when `groupsDirty` changes,
+  unilateral curved-shallot branch/division skip via `AnyLane(y < kRoll)`,
+  pointer-stepped delay loops (`!Bends`), `if constexpr (Upper/Hears/Bends)`,
+  and mirrored `jet[jetLength]` wrap sample (with `+1` buffer sizing across callers).
+- **Dirty-flagged coupling & vectorized buses (`OreganaEngine.cpp`)**:
+  Neighbor-hearing search runs only when a flue starts, exits, or crosses zero
+  wind (`hearingDirty`); zeroing and `rowBus` add/zero vectorized in `Float4`.
+- **Church FDN, knock voices & resampler (`Nave.h`, `Mechanics.h`, `OreganaInstrument.h`)**:
+  Mirrored `kLineSize` delay buffers, 8-register `Float4` early-reflection
+  accumulation (`Reflect`), in-place `Float4` Walsh-Hadamard `Mix`, active-voice
+  short-circuit in `Knocks::Process`, and `Float4` polyphase sinc taps in `Instrument::Render`.
+
+Development-machine timings (Apple M1 Max, Clang 21.0.0 Release, one thread,
+48 kHz, 256-frame blocks, median across 3 sweeps of `--cpu`):
+
+| Demo | Before RT (`0.10.0`) | After RT (`0.10.0`) | Gain | Worst block (`After`) |
+| --- | --- | --- | --- | --- |
+| Principal 8 | 0.0143x | 0.0103x | 27.9 % | 1.3 % (stress 1.5 %) |
+| Gedackt 8 | 0.0133x | 0.0095x | 28.3 % | 1.3 % (stress 1.5 %) |
+| Voix celeste | 0.0146x | 0.0106x | 27.4 % | 1.4 % (stress 1.9 %) |
+| Cornet | 0.0167x | 0.0124x | 25.3 % | 1.6 % (stress 3.4 %) |
+| Krummhorn | 0.0157x | 0.0115x | 26.6 % | 1.4 % (stress 2.2 %) |
+| Trompete | 0.0195x | 0.0147x | 24.6 % | 2.0 % (stress 2.6 %) |
+| Plenum | 0.0388x | 0.0313x | 19.4 % | 6.9 % (stress 9.95 %) |
+| Tutti | 0.0663x | 0.0574x | 13.4 % | 15.5 % (stress 27.7 %) |

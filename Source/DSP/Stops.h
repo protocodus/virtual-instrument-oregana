@@ -276,8 +276,8 @@ namespace detail {
 struct FlueFamily {
     bool stopped;
     double chimney, chimneyLength, harmonic;
-    // scale, q, drive, offset, noise, chiff, shedding, corner, speech
-    double low[9], high[9];
+    // scale, q, drive, offset, stream, noise, chiff, shedding, corner, speech
+    double low[10], high[10];
 };
 
 struct ReedFamily {
@@ -288,23 +288,28 @@ struct ReedFamily {
 
 inline const FlueFamily& Flue(Family family) {
     static const FlueFamily principal { false, 0.0, 0.0, 0.0,
-        { 0.0, 35.0, 6.0, 1.3, 0.05, 0.6, 1.2, 1.0, 1.0 }, { 0.0, 30.0, 4.0, 1.0, 0.06, 0.5, 0.8, 1.0, 1.0 } };
+        { 0.0, 35.0, 5.5, 0.38, 1.85, 0.05, 0.6, 1.2, 1.0, 1.10 }, { 0.0, 30.0, 3.8, 0.32, 1.35, 0.06, 0.5, 0.8, 1.0, 1.00 } };
     static const FlueFamily flute { false, 0.0, 0.0, 0.0,
-        { 6.0, 25.0, 2.2, 0.35, 0.09, 0.4, 0.6, 1.0, 1.0 }, { 5.0, 25.0, 1.9, 0.3, 0.09, 0.4, 0.4, 1.0, 1.0 } };
+        { 6.0, 25.0, 2.2, 0.30, 0.45, 0.09, 0.4, 1.15, 1.0, 0.65 }, { 5.0, 25.0, 1.9, 0.25, 0.35, 0.09, 0.4, 0.80, 1.0, 1.00 } };
     static const FlueFamily taper { false, 0.0, 0.0, 0.0,
-        { 2.0, 30.0, 3.0, 0.6, 0.07, 0.5, 0.8, 2.0, 1.0 }, { 2.0, 28.0, 2.5, 0.5, 0.07, 0.5, 0.6, 2.0, 1.0 } };
+        { 2.0, 30.0, 3.0, 0.35, 0.85, 0.07, 0.5, 1.05, 2.0, 0.80 }, { 2.0, 28.0, 2.5, 0.30, 0.65, 0.07, 0.5, 0.80, 2.0, 0.90 } };
     static const FlueFamily stopped { true, 0.0, 0.0, 0.0,
-        { 4.0, 30.0, 2.6, 0.45, 0.10, 0.9, 0.6, 1.0, 1.0 }, { 3.0, 28.0, 2.2, 0.35, 0.10, 0.8, 0.5, 1.0, 1.0 } };
-    static const FlueFamily chimney { true, 0.3, 0.4, 0.0,
-        { 4.0, 30.0, 3.0, 0.45, 0.09, 0.8, 0.6, 1.0, 1.0 }, { 3.0, 28.0, 2.4, 0.4, 0.09, 0.7, 0.5, 1.0, 1.0 } };
+        { 4.0, 22.0, 2.40, 0.15, 0.45, 0.10, 0.9, 0.95, 1.0, 0.38 }, { 3.0, 28.0, 2.05, 0.15, 0.35, 0.10, 0.8, 0.80, 1.0, 0.25 } };
+    // Chimney length 0.28 avoids Helmholtz's 2/5 antiresonance at H5
+    // (Kokkelmans, Verge & Hirschberg, JASA 105, 546, 1999) and lets the
+    // chimney resonance strengthen the fifth harmonic cleanly.
+    static const FlueFamily chimney { true, 0.28, 0.28, 0.0,
+        { 4.0, 30.0, 2.5, 0.05, 0.55, 0.09, 0.8, 1.55, 1.0, 0.28 }, { 3.0, 28.0, 2.2, 0.12, 0.38, 0.09, 0.7, 0.95, 1.0, 0.48 } };
     static const FlueFamily quintadena { true, 0.0, 0.0, 0.0,
-        { -6.0, 40.0, 6.0, 0.3, 0.06, 1.2, 1.0, 1.0, 1.0 }, { -5.0, 35.0, 4.5, 0.3, 0.06, 1.0, 0.8, 1.0, 1.0 } };
+        { -6.0, 40.0, 3.2, 0.40, 0.48, 0.06, 1.35, 1.40, 1.0, 0.65 }, { -5.0, 35.0, 2.6, 0.35, 0.38, 0.06, 1.10, 1.10, 1.0, 0.75 } };
+    // Strings speak slowly from a larger rest offset while settling onto
+    // the same steady-state lip position (offset + stream = 2.50 .. 1.90).
     static const FlueFamily string { false, 0.0, 0.0, 0.0,
-        { -9.0, 45.0, 8.0, 1.6, 0.05, 0.4, 1.5, 1.0, 1.6 }, { -8.0, 40.0, 5.0, 1.2, 0.05, 0.4, 1.0, 1.0, 1.4 } };
+        { -9.0, 45.0, 7.0, 1.10, 1.40, 0.05, 0.4, 1.00, 1.0, 2.25 }, { -8.0, 40.0, 4.6, 0.90, 1.00, 0.05, 0.4, 0.75, 1.0, 1.85 } };
     // Blown harder than a flute of ordinary length, which would jump to its
     // octave: this one is there already.
     static const FlueFamily harmonic { false, 0.0, 0.0, 0.3,
-        { 4.0, 30.0, 4.0, 0.7, 0.07, 0.5, 0.8, 1.0, 1.0 }, { 4.0, 28.0, 3.5, 0.6, 0.07, 0.5, 0.6, 1.0, 1.0 } };
+        { 4.0, 30.0, 4.0, 0.35, 0.85, 0.07, 0.5, 0.8, 1.0, 1.15 }, { 4.0, 28.0, 3.5, 0.30, 0.70, 0.07, 0.5, 0.6, 1.0, 1.05 } };
     switch (family) {
         case Family::Harmonic: return harmonic;
         case Family::Flute: return flute;
@@ -320,48 +325,39 @@ inline const FlueFamily& Flue(Family family) {
 inline const ReedFamily& Reed(Family family) {
     // A reed's flow falls towards the treble, as the voicer thins the
     // tongues there: the top of a trumpet joins the chorus and does not lead it.
-    // A trumpet's flow in the bass sets its brightness: the flow is cut only in
-    // the short time the tongue is nearly shut, and that short gap is the
-    // brightness. Typical sizes (a slit of some 48 mm2 under the resting tongue
-    // into a shallot 12 mm wide on 70 mm of wind) give about 8, and above 6 a
-    // bass pipe speaks late (80 ms to half at 6, 132 ms at 8). 0.4.0 had 2,
-    // whose eighth harmonic of 8' C was 24 dB under the first; 6 had it 4 dB
-    // under, where a recorded Trumpet 8' has it level
-    // (Docs/research/benchmark-burea-2026-11-13.md). Between those two the
-    // owner chose half way by ear (Docs/decisions.md, 2026-11-14): a voicer's
-    // choice of how far the tongue is curved, not a measurement.
+    // A trumpet's flow in the bass sets its brightness: between 0.4.0's and
+    // 0.5.0's the owner chose half way by ear (Docs/decisions.md, 2026-11-14).
+    // All reeds are led by their tongues (Euler-Bernoulli brass cantilevers:
+    // modest closing push 0.18..0.28 and resonator slightly sharp of the note).
     static const ReedFamily trumpet { true,
-        { 1.06, 0.15, 0.0, 25.0, 3.5, 0.5, 0.01, 1.03, 40.0, 0.2, 0.01, 1.0 },
-        { 1.06, 0.15, 0.0, 25.0, 1.4, 0.5, 0.01, 1.03, 40.0, 0.2, 0.01, 1.0 } };
+        { 1.14, 0.15, 0.0, 25.0, 3.5, 0.22, 0.02, 1.02, 45.0, 0.2, 0.01, 1.00 },
+        { 1.14, 0.15, 0.0, 25.0, 1.4, 0.22, 0.02, 1.02, 30.0, 0.2, 0.01, 1.00 } };
     static const ReedFamily posaune { true,
-        { 1.06, 0.15, 3.0, 20.0, 3.3, 0.5, 0.03, 1.03, 40.0, 0.25, 0.012, 1.3 },
-        { 1.06, 0.15, 3.0, 20.0, 1.5, 0.5, 0.03, 1.03, 40.0, 0.25, 0.012, 1.3 } };
+        { 1.14, 0.15, 3.0, 20.0, 3.3, 0.22, 0.04, 1.02, 45.0, 0.25, 0.012, 0.85 },
+        { 1.14, 0.15, 3.0, 20.0, 1.5, 0.22, 0.04, 1.02, 30.0, 0.25, 0.012, 0.85 } };
     // The French trumpet's tongue is flatter and shuts at once: brassier. It is
-    // set closer by the wind (closing 0.7), and its treble keeps more of the
-    // bass's flow, as on Cavaille-Coll's higher treble pressure: the top is
-    // half as much again as the trumpets' law gives (chosen by ear,
-    // Docs/decisions.md, 2026-11-14).
+    // set closer by the wind, and its treble keeps more of the bass's flow
+    // (chosen by ear, Docs/decisions.md, 2026-11-14).
     static const ReedFamily trompette { true,
-        { 1.06, 0.15, -1.0, 28.0, 3.8, 0.7, 0.004, 1.03, 40.0, 0.2, 0.01, 1.0 },
-        { 1.06, 0.15, -1.0, 28.0, 2.6, 0.7, 0.004, 1.03, 40.0, 0.2, 0.01, 1.0 } };
+        { 1.14, 0.15, -1.0, 28.0, 3.8, 0.28, 0.006, 1.02, 45.0, 0.2, 0.01, 0.85 },
+        { 1.14, 0.15, -1.0, 28.0, 2.6, 0.28, 0.006, 1.02, 30.0, 0.2, 0.01, 0.85 } };
     static const ReedFamily hautbois { true,
-        { 1.06, 0.15, -8.0, 22.0, 1.0, 0.6, 0.02, 1.03, 40.0, 0.2, 0.012, 1.0 },
-        { 1.06, 0.15, -8.0, 22.0, 0.7, 0.6, 0.02, 1.03, 40.0, 0.2, 0.012, 1.0 } };
+        { 1.14, 0.15, -8.0, 22.0, 1.0, 0.24, 0.025, 1.02, 45.0, 0.2, 0.012, 1.05 },
+        { 1.14, 0.15, -8.0, 22.0, 0.7, 0.24, 0.025, 1.02, 30.0, 0.2, 0.012, 1.05 } };
+    // Tongue-led half-length cylindrical reeds: the tongue excites every
+    // harmonic while the quarter-wave resonator shapes odd-harmonic formants.
     static const ReedFamily krummhorn { false,
-        { 1.0, 0.15, -4.0, 25.0, 1.0, 0.8, 0.03, 2.0, 10.0, 0.2, 0.01, 1.0 },
-        { 1.0, 0.15, -4.0, 25.0, 1.0, 0.8, 0.03, 2.0, 10.0, 0.2, 0.01, 1.0 } };
+        { 1.15, 0.15, -4.0, 18.0, 1.0, 0.22, 0.03, 1.02, 38.0, 0.2, 0.01, 0.90 },
+        { 1.15, 0.15, -4.0, 18.0, 1.0, 0.22, 0.03, 1.02, 28.0, 0.2, 0.01, 0.90 } };
     static const ReedFamily dulcian { false,
-        { 1.0, 0.15, -2.0, 18.0, 0.8, 0.8, 0.08, 2.0, 10.0, 0.2, 0.01, 1.2 },
-        { 1.0, 0.15, -2.0, 18.0, 0.8, 0.8, 0.08, 2.0, 10.0, 0.2, 0.01, 1.2 } };
+        { 1.15, 0.15, -2.0, 15.0, 0.8, 0.22, 0.08, 1.02, 38.0, 0.2, 0.01, 1.15 },
+        { 1.15, 0.15, -2.0, 15.0, 0.8, 0.22, 0.08, 1.02, 28.0, 0.2, 0.01, 1.15 } };
     // A resonator a third as long as the note's: its resonance stands three
-    // times above the note as a formant, and the tongue alone sets the pitch,
-    // well above its own (so the tongue is made slow). With no resonator to
-    // hold it, its pitch follows the wind: 2.3 cents flat for each 1 % the
-    // wind falls at this flow and closing, the least of the voicings tried
-    // (4.7 at flow 0.8; a stiffer or lighter tongue did not help).
+    // times above the note as a formant, while the brass tongue sets the pitch
+    // and keeps wind-sag sensitivity near ~1 cent per 1 %.
     static const ReedFamily voxHumana { false,
-        { 3.0, 0.15, 0.0, 15.0, 2.0, 0.5, 0.05, 0.76, 15.0, 0.2, 0.015, 1.0 },
-        { 3.0, 0.15, 0.0, 15.0, 2.0, 0.5, 0.05, 0.76, 15.0, 0.2, 0.015, 1.0 } };
+        { 3.0, 0.15, 0.0, 15.0, 2.0, 0.18, 0.05, 1.00, 38.0, 0.2, 0.015, 1.00 },
+        { 3.0, 0.15, 0.0, 15.0, 1.5, 0.18, 0.05, 1.00, 28.0, 0.2, 0.015, 1.00 } };
     switch (family) {
         case Family::Trompette: return trompette;
         case Family::Hautbois: return hautbois;
@@ -445,11 +441,12 @@ inline PipePlan PlanPipe(int rank, int key) {
         v.q = at(f.low[1], f.high[1]);
         v.drive = at(f.low[2], f.high[2]);
         v.offset = at(f.low[3], f.high[3]);
-        v.noise = at(f.low[4], f.high[4]);
-        v.chiff = at(f.low[5], f.high[5]);
-        v.shedding = at(f.low[6], f.high[6]);
-        v.corner = at(f.low[7], f.high[7]);
-        v.speech = at(f.low[8], f.high[8]);
+        v.stream = at(f.low[4], f.high[4]);
+        v.noise = at(f.low[5], f.high[5]);
+        v.chiff = at(f.low[6], f.high[6]);
+        v.shedding = at(f.low[7], f.high[7]);
+        v.corner = at(f.low[8], f.high[8]);
+        v.speech = at(f.low[9], f.high[9]);
     }
     // Regulated a little down towards the treble and up towards the bass, as
     // a voicer balances a rank by ear: the ear is keenest from 2 to 4 kHz and

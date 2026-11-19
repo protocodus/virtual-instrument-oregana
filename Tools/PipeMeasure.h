@@ -122,7 +122,7 @@ inline std::vector<float> Sound(const PipePlan& plan, double tuning, std::size_t
     } else {
         flue.Design(plan.flue, plan.hz, tuning);
         loop.assign(static_cast<std::size_t>(flue.loopRoom), 0.0f);
-        jet.assign(static_cast<std::size_t>(flue.jetLength), 0.0f);
+        jet.assign(static_cast<std::size_t>(flue.jetLength + 1), 0.0f);
         upper.assign(static_cast<std::size_t>(flue.upperRoom), 0.0f);
         flue.loop = loop.data();
         flue.jet = jet.data();

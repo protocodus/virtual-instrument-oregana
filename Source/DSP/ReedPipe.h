@@ -26,6 +26,7 @@
 #include "FluePipe.h"
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 
 namespace oregana {
@@ -50,86 +51,107 @@ struct ReedPipe {
     int loopLength = 1;
     float allpass = 0.0f, lowpass = 1.0f, loopGain = 0.0f;
     float mass = 0.0f, impedance = 1.0f;   // the cone's parallel mass (T / 2M) and the shallot's impedance with it
-    float stiffness = 0.0f, damping = 0.0f, closing = 0.0f, landing = 0.0f, landingLoss = 0.0f;
-    float flow = 0.0f, curve = 0.1f, noise = 0.0f, drain = 0.0f;
+    float stiffness = 0.0f, damping = 0.0f, freeNum = 1.0f, freeDen = 1.0f, closing = 0.0f, landing = 0.0f, landingLoss = 0.0f;
+    float flow = 0.0f, curve = 0.1f, noise = 0.0f, drain = 0.0f, bootDrop = 0.2f;
     float attack = 1.0f, release = 1.0f;
     float gainLeft = 0.0f, gainRight = 0.0f;
     double air = 0.0;
+    double attackSeconds = 0.008;
+    double palletSeconds = 0.007, bootSeconds = 0.008, releaseSeconds = 0.008;
+    float kickNominal = 0.0f, kick = 0.0f, noiseNominal = 0.0f;
+
+    static constexpr float kRoll = 0.22f, kInvFourRoll = 1.0f / (4.0f * kRoll);
 
     float* loop = nullptr;
     int loopAt = 0;
-    float allpassIn = 0.0f, allpassOut = 0.0f, lowpassOut = 0.0f;
-    float tongue = 1.0f, speed = 0.0f;       // opening against rest, and its change per sample
-    float massFlow = 0.0f, shallot = 0.0f;   // flow into the cone's mass, and the shallot's pressure
-    float foot = 0.0f, wind = 0.0f;
-    // The gap's eddies push the tongue as they change its flow: their share
-    // of the boot's push on it (the boot's alone: a share of the drop across
-    // the gap made the tongue's own feedback random, and at 0.6 and at 1.2
-    // of it the Krummhorn ran away with every control at its most), which
-    // the organ sets (kReedEddy in
-    // OreganaEngine.cpp). On the bench it is 0 and the tongue is steady.
-    float eddy = 0.0f;
+    // Eight dynamic per-sample states kept contiguous for 4-lane state transpose.
+    float allpassIn = 0.0f, allpassOut = 0.0f, lowpassOut = 0.0f, tongue = 1.0f;
+    float speed = 0.0f, massFlow = 0.0f, shallot = 0.0f, foot = 0.0f;
+    float wind = 0.0f;
+    float fill = 0.0f;
     float radiates = 1.0f;
     std::uint32_t random = 1u;
     int quiet = 0;
 
-    // `tuning` is the tuner's correction, the tongue's and the resonator's
-    // frequencies together against the note: the pipe built that much smaller.
+    // `tuning` is the tuner's correction on the tongue wire against the note:
+    // the resonator is cut by the builder for the note alone, and its open-end
+    // lowpass and allpass lag are taken at the sounding frequency `hz`.
     // Buffer needed: loopLength floats.
     void Design(const ReedVoicing& v, double hz, double tuning) {
-        const double w = kTwoPi * hz * tuning * v.length / kPipeRate;
+        const double wNote = kTwoPi * hz / kPipeRate, wRes = kTwoPi * hz * v.length / kPipeRate;
         const double radius = 0.5 * PipeDiameter(v.scale, hz);
         const double corner = Min(kSoundSpeed / (kTwoPi * radius), 0.45 * kPipeRate);
         const double lp = 1.0 - std::exp(-kTwoPi * corner / kPipeRate);
         double lpGain, lpLag;
-        detail::OnePole(lp, w, lpGain, lpLag);
+        detail::OnePole(lp, wNote, lpGain, lpLag);
         // There and back takes half a period of a cylinder's first resonance.
         // A cone's lies at tan(kL) = -k x0 for a tip x0 beyond the shallot,
         // near a whole period.
-        double pass = kPi / w;
+        double pass = kPi / wRes;
         if (v.cone) {
             double u = kPi;
             for (int i = 0; i < 20; ++i) u = kPi - std::atan(u * v.apex);
-            pass = 2.0 * u / w;
+            pass = 2.0 * u / wRes;
             mass = static_cast<float>(1.0 / (v.apex * pass));
         } else {
             mass = 0.0f;
         }
         impedance = 1.0f / (1.0f + mass);
-        const double rest = pass - lpLag / w;
+        const double rest = pass - lpLag / wNote;
         loopLength = Max(1, static_cast<int>(std::lround(rest - 1.1)));
-        allpass = static_cast<float>(detail::AllpassFor(rest - loopLength, w));
+        allpass = static_cast<float>(detail::AllpassFor(rest - loopLength, wNote));
         lowpass = static_cast<float>(lp);
         const double perPeriod = 1.0 - kPi / v.q;
         const double walls = Min((v.cone ? perPeriod : std::sqrt(perPeriod)) / lpGain, 0.9999);
         loopGain = static_cast<float>(-walls);
         // What the open end radiates of the wave inside, at the note: all
         // that its low-pass does not turn back (Run, `out`).
-        double noteGain, noteLag;
-        detail::OnePole(lp, kTwoPi * hz / kPipeRate, noteGain, noteLag);
-        radiates = static_cast<float>(std::sqrt(1.0 + noteGain * noteGain - 2.0 * noteGain * std::cos(noteLag)));
+        radiates = static_cast<float>(std::sqrt(1.0 + lpGain * lpGain - 2.0 * lpGain * std::cos(lpLag)));
 
+        // Frequency-warped symplectic stiffness and contact stiffness for the
+        // tuning wire and the curved shallot face.
         const double wt = kTwoPi * hz * tuning * v.tongue / kPipeRate;
-        stiffness = static_cast<float>(wt * wt);
-        damping = static_cast<float>(wt / v.tongueQ);
+        const double sHalf = std::sin(0.5 * wt);
+        const double stiff = 4.0 * sHalf * sHalf;
+        const double sHard = std::sin(0.5 * Min(2.5 * wt, 1.4));
+        const double hard = Max(0.0, 4.0 * sHard * sHard - stiff);
+        stiffness = static_cast<float>(stiff);
+        damping = static_cast<float>(2.0 * sHalf / v.tongueQ);
+        freeNum = 1.0f - 0.5f * damping;
+        freeDen = 1.0f + 0.5f * damping;
         closing = static_cast<float>(v.closing);
-        // The shallot's face is some thirty times stiffer than the tongue,
-        // as far as the step allows: a face stiffer than 0.3 per step squared
-        // (a tongue above 760 Hz) is over within three samples, and the
-        // period then locks to whole samples.
-        const double hard = Min(30.0 * wt * wt, 0.3);
         landing = static_cast<float>(hard);
-        landingLoss = static_cast<float>(1.2 * hard / wt);
+        landingLoss = static_cast<float>(hard / (2.0 * sHalf));
         flow = static_cast<float>(v.flow);
         curve = static_cast<float>(v.curve);
-        noise = static_cast<float>(v.noise);
-        attack = static_cast<float>(1.0 - std::exp(-1.0 / (v.speech * (0.0015 + 0.3 / hz) * kPipeRate)));
-        drain = static_cast<float>(v.boot) * attack;
-        release = static_cast<float>(1.0 - std::exp(-1.0 / ((0.004 + 0.5 / hz) * kPipeRate)));
+        noiseNominal = static_cast<float>(v.noise);
+        noise = noiseNominal;
+        bootDrop = static_cast<float>(v.boot);
+        palletSeconds = 0.007;
+        bootSeconds = v.speech * (0.004 + 0.25 / hz);
+        attackSeconds = palletSeconds + bootSeconds;
+        releaseSeconds = 0.004 + 0.5 / hz;
+        kickNominal = v.cone ? 0.72f : 0.56f;
+        SetTouch(1.0);
+        SetRelease(1.0);
         air = 2.0 * radius * radius / (0.1555 * 0.1555);
     }
 
-    void SetTouch(double) {}
+    // How fast the key opens the pallet: keep steady-state boot pressure drop
+    // (drain / attack == bootDrop) independent of key velocity.
+    void SetTouch(double slowness) {
+        const double s = Clamp(slowness, 0.2, 8.0);
+        const double riseSeconds = palletSeconds * s + bootSeconds * (0.35 + 0.65 * s);
+        attack = static_cast<float>(1.0 - std::exp(-1.0 / (riseSeconds * kPipeRate)));
+        drain = bootDrop * attack;
+        const double touchSpeed = Clamp(std::pow(1.0 / s, 0.80), 0.15, 1.75);
+        kick = static_cast<float>(kickNominal * touchSpeed);
+    }
+    void SetRelease(double slowness) {
+        const double fallSeconds = releaseSeconds * Clamp(slowness, 0.35, 4.0);
+        release = static_cast<float>(1.0 - std::exp(-1.0 / (fallSeconds * kPipeRate)));
+    }
+    void SetBreath(float scale) { noise = noiseNominal * scale; }
 
     void Clear() {
         for (int i = 0; i < loopLength; ++i) loop[i] = 0.0f;
@@ -137,13 +159,14 @@ struct ReedPipe {
         allpassIn = allpassOut = lowpassOut = 0.0f;
         tongue = 1.0f;
         speed = massFlow = shallot = 0.0f;
-        foot = wind = 0.0f;
+        foot = wind = fill = 0.0f;
         quiet = 0;
     }
 
     void Tick() {
         // As a flue's (FluePipe::Tick).
         if (wind == 0.0f && foot < 1.0e-25f) foot = 0.0f;
+        if (Abs(wind - fill) < 1.0e-20f) fill = wind;
         // A reed is judged by what it radiates. A bass resonator turns
         // nearly all of its wave back, so the wave inside outlasts the sound
         // by seconds: a 16' trumpet was kept 7.6 s, its sound 116 dB down.
@@ -170,13 +193,14 @@ struct ReedPipe {
     // `frames` samples of the pipe's sound, before its gains.
     void Run(float* out, int frames) {
         float* const loopBuffer = loop;
-        int at = loopAt;
+        float* pLoop = loopBuffer + loopAt;
+        float* const pEnd = loopBuffer + loopLength;
         float apIn = allpassIn, apOut = allpassOut, lpOut = lowpassOut;
-        float y = tongue, v = speed, inMass = massFlow, p = shallot, pressure = foot;
+        float y = tongue, v = speed, inMass = massFlow, p = shallot, pressure = foot, filled = fill;
         std::uint32_t seed = random;
-        const float target = wind, rise = attack, fall = release;
+        const float target = wind, rise = attack, fall = release, kickC = kick;
         for (int i = 0; i < frames; ++i) {
-            const float x = loopBuffer[at];
+            const float x = *pLoop;
             const float ap = allpass * (x - apOut) + apIn;
             apIn = x;
             apOut = ap;
@@ -201,24 +225,34 @@ struct ReedPipe {
             const float gap = target - pressure;
             pressure += gap * (gap > 0.0f ? rise : fall) - drain * through;
             if (pressure < 0.0f) pressure = 0.0f;
+            const float fillGap = target - filled;
+            filled += fillGap * (fillGap > 0.0f ? rise : fall);
+            const float span = 0.80f * target - filled;
+            const float onset = (fillGap > 0.0f && span > 0.0f) ? kickC * span : 0.0f;
             inMass = held + mass * p;
-            loopBuffer[at] = p - returning;
-            if (++at == loopLength) at = 0;
+            *pLoop = p - returning;
+            if (++pLoop == pEnd) pLoop = loopBuffer;
 
-            float pull = stiffness * (1.0f - y) - damping * v - stiffness * closing * (pressure - p + eddy * white * pressure);
-            // The face pushes back by how far the tongue has sunk into it,
-            // harder while it sinks and less as it leaves, and takes up most
-            // of a landing (Hunt and Crossley, 1975): a loss that grows from
-            // nothing at the touch. One that set in at once stepped the pitch
-            // by up to 7 cents at c4 as the tuning moved; this holds 0.3.
-            if (y < 0.0f) pull -= y * Max(0.0f, landing - landingLoss * v);
-            v += pull;
+            // Smooth curved-shallot rolling contact over [-kRoll, +kRoll] with
+            // time-centered velocity damping avoids discrete integer-sample
+            // period locking and keeps pitch independent of sample phase.
+            const float pullFree = stiffness * (1.0f - y) - stiffness * (closing * (pressure - p) + onset);
+            const float vFree = (v * freeNum + pullFree) / freeDen;
+            if (y < kRoll) {
+                const float spanRoll = kRoll - y;
+                const float d = y <= -kRoll ? -y : spanRoll * spanRoll * kInvFourRoll;
+                const float cAll = damping + d * landingLoss;
+                const float vHit = (v * (1.0f - 0.5f * cAll) + pullFree + d * landing) / (1.0f + 0.5f * cAll);
+                v = vHit > vFree ? vHit : vFree;
+            } else {
+                v = vFree;
+            }
             y += v;
 
             // What the open end does not reflect, it radiates.
             out[i] = arrived - lpOut;
         }
-        loopAt = at;
+        loopAt = static_cast<int>(pLoop - loopBuffer);
         allpassIn = apIn;
         allpassOut = apOut;
         lowpassOut = lpOut;
@@ -227,34 +261,93 @@ struct ReedPipe {
         massFlow = inMass;
         shallot = p;
         foot = pressure;
+        fill = filled;
         random = seed;
     }
 
 #if defined(OREGANA_FOUR)
-    // Run for four pipes at once, lane for lane the same arithmetic.
-    static void RunFour(ReedPipe* const pipe[4], float* const out[4], int frames) {
-#define OREGANA_LANES(field) Float4 { pipe[0]->field, pipe[1]->field, pipe[2]->field, pipe[3]->field }
-        const Float4 allpassC = OREGANA_LANES(allpass), lowpassC = OREGANA_LANES(lowpass), loopGainC = OREGANA_LANES(loopGain);
-        const Float4 massC = OREGANA_LANES(mass), impedanceC = OREGANA_LANES(impedance), stiffnessC = OREGANA_LANES(stiffness);
-        const Float4 dampingC = OREGANA_LANES(damping), closingC = OREGANA_LANES(closing), landingC = OREGANA_LANES(landing);
-        const Float4 landingLossC = OREGANA_LANES(landingLoss), flowC = OREGANA_LANES(flow), curveC = OREGANA_LANES(curve);
-        const Float4 noiseC = OREGANA_LANES(noise), drainC = OREGANA_LANES(drain), eddyC = OREGANA_LANES(eddy);
-        const Float4 target = OREGANA_LANES(wind), rise = OREGANA_LANES(attack), fall = OREGANA_LANES(release);
-        Float4 apIn = OREGANA_LANES(allpassIn), apOut = OREGANA_LANES(allpassOut), lpOut = OREGANA_LANES(lowpassOut);
-        Float4 y = OREGANA_LANES(tongue), v = OREGANA_LANES(speed), inMass = OREGANA_LANES(massFlow), p = OREGANA_LANES(shallot);
-        Float4 pressure = OREGANA_LANES(foot);
-#undef OREGANA_LANES
-        const Float4 zero = Four(0.0f);
-        float* loopBuffer[4];
-        int at[4], loopSize[4];
-        UInt4 seed = { pipe[0]->random, pipe[1]->random, pipe[2]->random, pipe[3]->random };
+    // Pre-packed 4-pipe parameter block stored in the Engine (8-byte safe, unaligned).
+    struct ReedPack {
+        ReedPipe* pipe[4] {};
+        float* loopBuffer[4] {};
+        int loopSize[4] {};
+        PackedFloat4 allpass, lowpass, loopGain, mass, impedance, stiffness;
+        PackedFloat4 damping, freeNum, freeDen, closing, landing, landingLoss;
+        PackedFloat4 flow, curve, noise, drain, kick, attack, release;
+    };
+
+#if defined(__GNUC__) || defined(__clang__)
+    __attribute__((noinline))
+#endif
+    static void PackFour(ReedPack& pack, ReedPipe* const pipe[4]) {
+#define OREGANA_PACK_FIELD(field) \
+    Store4(pack.field, Float4 { pipe[0]->field, pipe[1]->field, pipe[2]->field, pipe[3]->field })
         for (int l = 0; l < 4; ++l) {
-            loopBuffer[l] = pipe[l]->loop;
-            at[l] = pipe[l]->loopAt;
-            loopSize[l] = pipe[l]->loopLength;
+            pack.pipe[l] = pipe[l];
+            pack.loopBuffer[l] = pipe[l]->loop;
+            pack.loopSize[l] = pipe[l]->loopLength;
         }
-        for (int i = 0; i < frames; ++i) {
-            const Float4 x = { loopBuffer[0][at[0]], loopBuffer[1][at[1]], loopBuffer[2][at[2]], loopBuffer[3][at[3]] };
+        OREGANA_PACK_FIELD(allpass);
+        OREGANA_PACK_FIELD(lowpass);
+        OREGANA_PACK_FIELD(loopGain);
+        OREGANA_PACK_FIELD(mass);
+        OREGANA_PACK_FIELD(impedance);
+        OREGANA_PACK_FIELD(stiffness);
+        OREGANA_PACK_FIELD(damping);
+        OREGANA_PACK_FIELD(freeNum);
+        OREGANA_PACK_FIELD(freeDen);
+        OREGANA_PACK_FIELD(closing);
+        OREGANA_PACK_FIELD(landing);
+        OREGANA_PACK_FIELD(landingLoss);
+        OREGANA_PACK_FIELD(flow);
+        OREGANA_PACK_FIELD(curve);
+        OREGANA_PACK_FIELD(noise);
+        OREGANA_PACK_FIELD(drain);
+        OREGANA_PACK_FIELD(kick);
+        OREGANA_PACK_FIELD(attack);
+        OREGANA_PACK_FIELD(release);
+#undef OREGANA_PACK_FIELD
+    }
+
+    static void RunFourPacked(const ReedPack& pack, float* const out[4], int frames) {
+        const Float4 allpassC = Load4(pack.allpass), lowpassC = Load4(pack.lowpass), loopGainC = Load4(pack.loopGain);
+        const Float4 massC = Load4(pack.mass), impedanceC = Load4(pack.impedance), stiffnessC = Load4(pack.stiffness);
+        const Float4 dampingC = Load4(pack.damping), freeNumC = Load4(pack.freeNum), freeDenC = Load4(pack.freeDen);
+        const Float4 closingC = Load4(pack.closing), landingC = Load4(pack.landing), landingLossC = Load4(pack.landingLoss);
+        const Float4 flowC = Load4(pack.flow), curveC = Load4(pack.curve), noiseC = Load4(pack.noise), drainC = Load4(pack.drain);
+        const Float4 kickC = Load4(pack.kick), rise = Load4(pack.attack), fall = Load4(pack.release);
+        ReedPipe* const p0Pipe = pack.pipe[0];
+        ReedPipe* const p1Pipe = pack.pipe[1];
+        ReedPipe* const p2Pipe = pack.pipe[2];
+        ReedPipe* const p3Pipe = pack.pipe[3];
+        const Float4 target { p0Pipe->wind, p1Pipe->wind, p2Pipe->wind, p3Pipe->wind };
+        Float4 filled { p0Pipe->fill, p1Pipe->fill, p2Pipe->fill, p3Pipe->fill };
+
+        Float4 apIn = Load4(&p0Pipe->allpassIn), apOut = Load4(&p1Pipe->allpassIn);
+        Float4 lpOut = Load4(&p2Pipe->allpassIn), y = Load4(&p3Pipe->allpassIn);
+        Transpose4x4(apIn, apOut, lpOut, y);
+
+        Float4 v = Load4(&p0Pipe->speed), inMass = Load4(&p1Pipe->speed);
+        Float4 p = Load4(&p2Pipe->speed), pressure = Load4(&p3Pipe->speed);
+        Transpose4x4(v, inMass, p, pressure);
+
+        const Float4 zero = Four(0.0f), half = Four(0.5f), eightTenths = Four(0.80f), one = Four(1.0f);
+        const Float4 roll = Four(kRoll), invFourRoll = Four(kInvFourRoll);
+        float* const pBase[4] = { pack.loopBuffer[0], pack.loopBuffer[1], pack.loopBuffer[2], pack.loopBuffer[3] };
+        float* pLoop[4] = {
+            pBase[0] + p0Pipe->loopAt, pBase[1] + p1Pipe->loopAt, pBase[2] + p2Pipe->loopAt, pBase[3] + p3Pipe->loopAt
+        };
+        float* const pEnd[4] = {
+            pBase[0] + pack.loopSize[0], pBase[1] + pack.loopSize[1], pBase[2] + pack.loopSize[2], pBase[3] + pack.loopSize[3]
+        };
+        UInt4 seed = { p0Pipe->random, p1Pipe->random, p2Pipe->random, p3Pipe->random };
+
+        const auto step = [&]()
+#if defined(__GNUC__) || defined(__clang__)
+                              __attribute__((always_inline))
+#endif
+            -> Float4 {
+            const Float4 x = { *pLoop[0], *pLoop[1], *pLoop[2], *pLoop[3] };
             const Float4 ap = allpassC * (x - apOut) + apIn;
             apIn = x;
             apOut = ap;
@@ -274,40 +367,83 @@ struct ReedPipe {
             const Float4 gap = target - pressure;
             pressure += gap * Choose(gap > zero, rise, fall) - drainC * through;
             pressure = Unless(pressure < zero, pressure);
+            const Float4 fillGap = target - filled;
+            filled += fillGap * Choose(fillGap > zero, rise, fall);
+            const Float4 spanRoll = eightTenths * target - filled;
+            const Float4 onset = Where(fillGap > zero, Where(spanRoll > zero, kickC * spanRoll));
             inMass = held + massC * p;
             const Float4 leaving = p - returning;
             for (int l = 0; l < 4; ++l) {
-                loopBuffer[l][at[l]] = leaving[l];
-                if (++at[l] == loopSize[l]) at[l] = 0;
+                *pLoop[l] = leaving[l];
+                if (++pLoop[l] == pEnd[l]) pLoop[l] = pBase[l];
             }
 
-            Float4 pull = stiffnessC * (1.0f - y) - dampingC * v - stiffnessC * closingC * (pressure - p + eddyC * white * pressure);
-            const Float4 face = landingC - landingLossC * v;
-            pull = Choose(y < zero, pull - y * Unless(zero > face, face), pull);
-            v += pull;
+            const Float4 pullFree = stiffnessC * (one - y) - stiffnessC * (closingC * (pressure - p) + onset);
+            const Float4 vFree = (v * freeNumC + pullFree) / freeDenC;
+            if (AnyLane(y < roll)) {
+                const Float4 span = roll - y;
+                const Float4 d = Choose(y >= roll, zero, Choose(y <= -roll, -y, span * span * invFourRoll));
+                const Float4 cAll = dampingC + d * landingLossC;
+                const Float4 vHit = (v * (one - half * cAll) + pullFree + d * landingC) / (one + half * cAll);
+                v = Choose(vHit > vFree, vHit, vFree);
+            } else {
+                v = vFree;
+            }
             y += v;
 
-            const Float4 radiated = ap - lpOut;
+            return ap - lpOut;
+        };
+
+        int i = 0;
+        for (; i + 4 <= frames; i += 4) {
+            Float4 r0 = step();
+            Float4 r1 = step();
+            Float4 r2 = step();
+            Float4 r3 = step();
+            Transpose4x4(r0, r1, r2, r3);
+            Store4(out[0] + i, r0);
+            Store4(out[1] + i, r1);
+            Store4(out[2] + i, r2);
+            Store4(out[3] + i, r3);
+        }
+        for (; i < frames; ++i) {
+            const Float4 radiated = step();
             out[0][i] = radiated[0];
             out[1][i] = radiated[1];
             out[2][i] = radiated[2];
             out[3][i] = radiated[3];
         }
+
+        Transpose4x4(apIn, apOut, lpOut, y);
+        Store4(&p0Pipe->allpassIn, apIn);
+        Store4(&p1Pipe->allpassIn, apOut);
+        Store4(&p2Pipe->allpassIn, lpOut);
+        Store4(&p3Pipe->allpassIn, y);
+
+        Transpose4x4(v, inMass, p, pressure);
+        Store4(&p0Pipe->speed, v);
+        Store4(&p1Pipe->speed, inMass);
+        Store4(&p2Pipe->speed, p);
+        Store4(&p3Pipe->speed, pressure);
+
         for (int l = 0; l < 4; ++l) {
-            ReedPipe& r = *pipe[l];
-            r.loopAt = at[l];
-            r.allpassIn = apIn[l];
-            r.allpassOut = apOut[l];
-            r.lowpassOut = lpOut[l];
-            r.tongue = y[l];
-            r.speed = v[l];
-            r.massFlow = inMass[l];
-            r.shallot = p[l];
-            r.foot = pressure[l];
+            ReedPipe& r = *pack.pipe[l];
+            r.loopAt = static_cast<int>(pLoop[l] - pBase[l]);
+            r.fill = filled[l];
             r.random = seed[l];
         }
     }
+
+    // Run for four pipes at once, lane for lane the same arithmetic.
+    static void RunFour(ReedPipe* const pipe[4], float* const out[4], int frames) {
+        ReedPack pack;
+        PackFour(pack, pipe);
+        RunFourPacked(pack, out, frames);
+    }
 #endif
 };
+
+static_assert(offsetof(ReedPipe, foot) - offsetof(ReedPipe, allpassIn) == 7 * sizeof(float),
+              "ReedPipe per-sample state must be contiguous");
 
 } // namespace oregana

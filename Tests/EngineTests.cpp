@@ -448,6 +448,72 @@ void Imperfections() {
         hum.Play(1.0);
         const double noise = Db(hum.Play(1.0).Rms(0.0, 1.0));
         Expect(noise > -60.0 && noise < -45.0, "Imperfections", "Blower: the wind is heard between the notes, dBFS", noise);
+
+        Bench zero;
+        zero.Set(kBlower, 0.0);
+        zero.Draw({ kPosGedackt8 });
+        zero.organ->KeyDown(kPositiv, 60, 80);
+        zero.Play(3.0);
+        zero.organ->KeyUp(kPositiv, 60);
+        zero.Play(1.0);
+        const double zeroWind = zero.Play(1.0).Peak();
+        Expect(zeroWind == 0.0, "Imperfections", "Wind Noise at 0: no wind noise between the notes, peak", zeroWind);
+
+        const auto cycleNoiseRatio = [](const Take& take, double hz, double from, double to) {
+            const double lag = kRate / hz;
+            const std::size_t d0 = static_cast<std::size_t>(lag);
+            const double frac = lag - static_cast<double>(d0);
+            const double u = 1.0 - frac;
+            const double c1 = -0.5 * u + u * u - 0.5 * u * u * u;
+            const double c2 = 1.0 - 2.5 * u * u + 1.5 * u * u * u;
+            const double c3 = 0.5 * u + 2.0 * u * u - 1.5 * u * u * u;
+            const double c4 = -0.5 * u * u + 0.5 * u * u * u;
+            const std::size_t start = Max(take.Frames(from), d0 + 3);
+            const std::size_t stop = take.Frames(to);
+            double diffSum = 0.0, sigSum = 0.0;
+            for (std::size_t i = start; i < stop; ++i) {
+                const std::size_t base = i - d0 - 1;
+                const double prev = c1 * take.left[base - 1] + c2 * take.left[base]
+                                  + c3 * take.left[base + 1] + c4 * take.left[base + 2];
+                const double d = static_cast<double>(take.left[i]) - prev;
+                diffSum += d * d;
+                sigSum += static_cast<double>(take.left[i]) * take.left[i];
+            }
+            return std::sqrt(diffSum / Max(sigSum, 1.0e-30));
+        };
+        const auto heldBreath = [&](double blower) {
+            Bench pipe;
+            pipe.Set(kBlower, blower);
+            pipe.Draw({ kHwRohrfloete8 });
+            pipe.organ->KeyDown(kHauptwerk, 60, 80);
+            const Take held = pipe.Play(2.4);
+            const double hz = held.Hz(pipe.organ->PipeHz(3, 60));
+            return cycleNoiseRatio(held, hz, 1.2, 2.3);
+        };
+        const double pure = heldBreath(0.0), defBreath = heldBreath(0.2), fullBreath = heldBreath(1.0);
+        Expect(pure < 1.0e-4, "Imperfections", "Wind Noise at 0: held Rohrfloete has zero breath noise, residual/rms", pure);
+        Expect(defBreath > pure * 4.0 && defBreath < fullBreath, "Imperfections",
+               "Wind Noise 0.2 scales pipe breath between 0 and 1.0, residual/rms", defBreath);
+
+        Bench pureReed;
+        pureReed.Set(kBlower, 0.0);
+        pureReed.Draw({ kPosKrummhorn8 });
+        pureReed.organ->KeyDown(kPositiv, 60, 80);
+        const Take zeroTake = pureReed.Play(1.5);
+        const double zeroNoise = cycleNoiseRatio(zeroTake, zeroTake.Hz(pureReed.organ->PipeHz(37, 60)), 0.7, 1.4);
+
+        Bench midNote;
+        midNote.Set(kBlower, 1.0);
+        midNote.Draw({ kPosKrummhorn8 });
+        midNote.organ->KeyDown(kPositiv, 60, 80);
+        const Take loud = midNote.Play(1.5);
+        const double loudNoise = cycleNoiseRatio(loud, loud.Hz(midNote.organ->PipeHz(37, 60)), 0.7, 1.4);
+        midNote.Set(kBlower, 0.0);
+        midNote.Play(0.2);
+        const Take quiet = midNote.Play(1.2);
+        const double quietNoise = cycleNoiseRatio(quiet, quiet.Hz(midNote.organ->PipeHz(37, 60)), 0.1, 1.1);
+        Expect(loudNoise > quietNoise * 5.0 && quietNoise < 1.0e-3 && Abs(quietNoise - zeroNoise) < 1.0e-4, "Imperfections",
+               "Lowering Wind Noise to 0 under a held reed silences breath noise to baseline, residual/rms", quietNoise);
     }
 }
 
@@ -595,7 +661,8 @@ void FourPipesAreFourPipes() {
                 same = same && std::memcmp(sound[l].data(), sound[l + 4].data(), static_cast<std::size_t>(frames) * sizeof(float)) == 0;
         }
         for (int l = 0; l < 4 && same; ++l)
-            same = isReed ? reed[l].tongue == reed[l + 4].tongue && reed[l].foot == reed[l + 4].foot && reed[l].random == reed[l + 4].random
+            same = isReed ? reed[l].tongue == reed[l + 4].tongue && reed[l].foot == reed[l + 4].foot
+                                && reed[l].fill == reed[l + 4].fill && reed[l].random == reed[l + 4].random
                           : flue[l].jetTransit == flue[l + 4].jetTransit && flue[l].foot == flue[l + 4].foot && flue[l].random == flue[l + 4].random
                                 && flue[l].jetAt == flue[l + 4].jetAt && flue[l].bendNow == 0.0f && flue[l + 4].bendNow == 0.0f;
         if (!same) {
@@ -1456,7 +1523,10 @@ struct Thrown {
         if (from <= 0.0) bench.Set(control, value);
         for (int note : { 48, 55, 64 }) bench.organ->KeyDown(kHauptwerk, note, 90);
         bench.organ->KeyDown(kPositiv, 60, 90);
-        bench.organ->KeyDown(kPedal, 36, 90);
+        // Three pedal keys so soloing the Pedal does not leave a single 32.7 Hz
+        // Posaune 16' tongue pulse (30.6 ms period) alone against 2 ms windows
+        // now that reed tongues no longer carry broadband white-noise hiss.
+        for (int note : { 36, 50, 57 }) bench.organ->KeyDown(kPedal, note, 90);
         Take whole;
         for (const double end : { from, until, seconds }) {
             if (end <= 0.0) continue;
@@ -1699,6 +1769,129 @@ void AirBendsTheFlues() {
     Expect(sharpest < 4.0, "AirBendsTheFlues", "the wheel swung and thrown under held flues does not click, the sharpest edge over its surroundings", sharpest);
 }
 
+void VelocityShapesAttackAndChiff() {
+    const auto onsetSharpness = [](const Take& take, double fromSec, double toSec) {
+        const std::size_t a = Max<std::size_t>(1, take.Frames(fromSec)), b = take.Frames(toSec);
+        double diffSq = 0.0;
+        for (std::size_t i = a; i < b; ++i) {
+            const double dl = static_cast<double>(take.left[i]) - take.left[i - 1];
+            const double dr = static_cast<double>(take.right[i]) - take.right[i - 1];
+            diffSq += dl * dl + dr * dr;
+        }
+        const double onsetDiff = std::sqrt(diffSq / static_cast<double>(Max<std::size_t>(b - a, 1)));
+        return Db(onsetDiff / Max(take.Rms(1.0, 2.0), 1.0e-12));
+    };
+
+    for (const int stop : { kHwOctave8, kPosQuintadena8, kHwRohrfloete8 }) {
+        const int division = kStops[stop].division;
+        double speech[3] = {}, level[3] = {}, sharp[3] = {};
+        const int vels[3] = { 12, 80, 127 };
+        for (int i = 0; i < 3; ++i) {
+            Bench bench;
+            bench.Draw({ stop });
+            bench.organ->Reset();
+            bench.organ->KeyDown(division, 60, vels[i]);
+            const Take take = bench.Play(2.0);
+            const double t0 = FirstSound(take) / 1000.0;
+            speech[i] = HalfWay(take) - FirstSound(take);
+            level[i] = Db(take.Rms(1.0, 2.0));
+            sharp[i] = onsetSharpness(take, t0, t0 + 0.015);
+        }
+        Expect(speech[2] < speech[1] && speech[1] < speech[0] && speech[0] - speech[2] > 30.0,
+               "VelocityShapesAttackAndChiff", kStops[stop].name, speech[0] - speech[2]);
+        Expect(sharp[2] - sharp[0] > 5.0, "VelocityShapesAttackAndChiff", "onset transient sharpness gain 127 vs 12, dB", sharp[2] - sharp[0]);
+        Expect(Abs(level[2] - level[0]) < 0.2, "VelocityShapesAttackAndChiff", "steady level delta 127 vs 12, dB", level[2] - level[0]);
+    }
+
+    for (const int stop : { kHwTrompete8, kPosKrummhorn8 }) {
+        const int division = kStops[stop].division;
+        double speech[3] = {}, level[3] = {};
+        const int vels[3] = { 12, 80, 127 };
+        for (int i = 0; i < 3; ++i) {
+            Bench bench;
+            bench.Draw({ stop });
+            bench.organ->Reset();
+            bench.organ->KeyDown(division, 60, vels[i]);
+            const Take take = bench.Play(2.0);
+            speech[i] = HalfWay(take) - FirstSound(take);
+            level[i] = Db(take.Rms(1.0, 2.0));
+        }
+        Expect(speech[2] < speech[1] && speech[1] < speech[0] && speech[0] - speech[2] > 20.0,
+               "VelocityShapesAttackAndChiff", kStops[stop].name, speech[0] - speech[2]);
+        Expect(Abs(level[2] - level[0]) < 0.2, "VelocityShapesAttackAndChiff", "reed steady level delta 127 vs 12, dB", level[2] - level[0]);
+    }
+
+    // Gentle vs crisp Note-Off release velocity.
+    double releaseEnergy[2] = {};
+    int rAt = 0;
+    for (const int offVel : { 8, 127 }) {
+        Bench bench;
+        bench.Draw({ kHwOctave8 });
+        bench.organ->Reset();
+        bench.organ->KeyDown(kHauptwerk, 60, 80);
+        bench.Play(0.5);
+        bench.organ->KeyUp(kHauptwerk, 60, offVel);
+        const Take decay = bench.Play(0.1);
+        releaseEnergy[rAt++] = Db(decay.Rms(0.010, 0.045));
+    }
+    Expect(releaseEnergy[0] - releaseEnergy[1] > 1.5, "VelocityShapesAttackAndChiff",
+           "gentle Note-Off retains more tail over 10..45 ms than crisp staccato, dB", releaseEnergy[0] - releaseEnergy[1]);
+
+    // Playing the same key gently on Positiv and immediately hard on Hauptwerk keeps Positiv's own slow speech.
+    const auto playDivHalfWay = [](bool withHw) {
+        Bench bench;
+        bench.Draw({ kPosGedackt8, kHwOctave8 });
+        bench.organ->Reset();
+        bench.organ->KeyDown(kPositiv, 60, 12);
+        if (withHw) bench.organ->KeyDown(kHauptwerk, 60, 127);
+        const int frames = static_cast<int>(1.0 * kRate);
+        std::vector<float> out(static_cast<std::size_t>(2 * frames));
+        std::vector<std::vector<float>> own(Engine::kDivisionOutputs, std::vector<float>(static_cast<std::size_t>(frames)));
+        float* to[Engine::kDivisionOutputs];
+        for (int done = 0; done < frames; done += 64) {
+            for (int n = 0; n < Engine::kDivisionOutputs; ++n) to[n] = &own[static_cast<std::size_t>(n)][static_cast<std::size_t>(done)];
+            bench.organ->Render(&out[static_cast<std::size_t>(done)], &out[static_cast<std::size_t>(frames + done)], Min(64, frames - done), to);
+        }
+        Take posTake { own[2 * kPositiv], own[2 * kPositiv + 1] };
+        return HalfWay(posTake) - FirstSound(posTake);
+    };
+    const double soloPos = playDivHalfWay(false), coupledKeyPos = playDivHalfWay(true);
+    Expect(Abs(soloPos - coupledKeyPos) < 2.0, "VelocityShapesAttackAndChiff",
+           "concurrent hard stroke on Hauptwerk leaves Positiv touch speech intact, ms diff", soloPos - coupledKeyPos);
+}
+
+void RegisterAttackHierarchy() {
+    const auto speechOf = [](int stop, int note) {
+        Bench bench;
+        bench.Draw({ stop });
+        bench.organ->Reset();
+        bench.organ->KeyDown(kStops[stop].division, note, 80);
+        const Take take = bench.Play(2.0);
+        return HalfWay(take) - FirstSound(take);
+    };
+    const double trompette = speechOf(kHwTrompete8, 60);
+    const double gedackt = speechOf(kPosGedackt8, 60);
+    const double rohr = speechOf(kHwRohrfloete8, 60);
+    const double octave = speechOf(kHwOctave8, 60);
+    const double viola = speechOf(kHwGamba8, 60);
+    const double gambe = speechOf(kRecGambe8, 60);
+    std::printf("     c1 speech ms: Trompete %.1f, Gedackt %.1f, Rohrfloete %.1f, Octave %.1f, Viola da Gamba %.1f, Gambe %.1f\n",
+                trompette, gedackt, rohr, octave, viola, gambe);
+    Expect(trompette < 35.0 && trompette < gedackt, "RegisterAttackHierarchy", "Trompete 8' c1 quickest (< 35 ms), ms", trompette);
+    Expect(gedackt < 55.0 && gedackt < rohr, "RegisterAttackHierarchy", "Gedackt 8' c1 prompt (< 55 ms), ms", gedackt);
+    Expect(rohr < octave, "RegisterAttackHierarchy", "Rohrfloete 8' c1 speaks before Octave 8', ms", rohr);
+    Expect(octave >= 50.0 && octave <= 88.0 && octave < viola, "RegisterAttackHierarchy", "Octave 8' c1 (50..88 ms), ms", octave);
+    Expect(viola >= 85.0 && viola <= 145.0 && viola < gambe, "RegisterAttackHierarchy", "Viola da Gamba 8' c1 (85..145 ms), ms", viola);
+    Expect(gambe >= 125.0 && gambe <= 230.0, "RegisterAttackHierarchy", "Gambe 8' c1 slowest string (125..230 ms), ms", gambe);
+
+    const double posaune16 = speechOf(kPedPosaune16, 36);
+    const double subbass16 = speechOf(kPedSubbass16, 36);
+    const double principal16 = speechOf(kPedPrincipal16, 36);
+    std::printf("     C1 speech ms: Posaune 16' %.1f, Subbass 16' %.1f, Principal 16' %.1f\n", posaune16, subbass16, principal16);
+    Expect(posaune16 < 160.0 && posaune16 < subbass16 && subbass16 < 280.0 && subbass16 < principal16 && principal16 < 520.0,
+           "RegisterAttackHierarchy", "16' Pedal speech order Posaune < Subbass < Principal, ms", subbass16);
+}
+
 int main() {
     SilentUntilPlayed();
     PipesSoundAtTheirPitch();
@@ -1733,6 +1926,8 @@ int main() {
     ExtremesStayFinite();
     EveryControlTells();
     ThrownControlsDoNotClick();
+    VelocityShapesAttackAndChiff();
+    RegisterAttackHierarchy();
     std::printf("%d failure%s\n", failures, failures == 1 ? "" : "s");
     return failures == 0 ? 0 : 1;
 }

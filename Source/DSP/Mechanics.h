@@ -51,6 +51,7 @@ public:
 
     void Clear() {
         for (Voice& v : voices) v.remaining = 0;
+        activeVoices = 0;
         random = 0x9E3779B9u;
     }
 
@@ -60,6 +61,7 @@ public:
         Voice* voice = &voices[0];
         for (Voice& v : voices)
             if (v.remaining < voice->remaining) voice = &v;
+        const bool wasFree = voice->remaining == 0;
         voice->wait = wait;
         // No two knocks alike: a tenth either way in pitch, a third in level.
         const double tune = 1.0 + 0.1 * NextNoise(random), gain = kind.level * strength * (1.0 + 0.3 * NextNoise(random));
@@ -75,16 +77,18 @@ public:
         voice->left = static_cast<float>(0.5 * (1.0 - 0.6 * pan));
         voice->right = static_cast<float>(0.5 * (1.0 + 0.6 * pan));
         voice->remaining = static_cast<int>(10.0 * longest * kPipeRate);
+        if (wasFree && voice->remaining > 0) ++activeVoices;
     }
 
     void Process(float& left, float& right) {
+        if (activeVoices == 0) return;
         for (Voice& v : voices) {
             if (v.remaining == 0) continue;
             if (v.wait > 0) {
                 --v.wait;
                 continue;
             }
-            --v.remaining;
+            if (--v.remaining == 0) --activeVoices;
             float sum = 0.0f;
             for (int m = 0; m < 2; ++m) {
                 sum += v.now[m];
@@ -104,6 +108,7 @@ private:
         int remaining = 0, wait = 0;
     };
     std::array<Voice, kVoices> voices {};
+    int activeVoices = 0;
     std::uint32_t random = 0x9E3779B9u;
 };
 
@@ -136,7 +141,7 @@ public:
 private:
     // One-pole steps for 150 Hz, 1.2 kHz and 3.5 kHz at the pipes' rate.
     static constexpr float kHumPole = 0.01944f, kHissLow = 0.1454f, kHissHigh = 0.3675f;
-    static constexpr float kHum = 0.35f, kHiss = 0.012f, kRub = 0.006f;
+    static constexpr float kHum = 0.35f, kHiss = 0.0084f, kRub = 0.006f;
     float humPole = kHumPole;
     struct Side {
         float hum = 0.0f, hum2 = 0.0f, low = 0.0f, high = 0.0f;

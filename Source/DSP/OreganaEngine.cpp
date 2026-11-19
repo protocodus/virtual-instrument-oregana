@@ -96,9 +96,10 @@ constexpr double kUnrest = 0.16, kUnrestPole = 0.0042;
 // foot's pressure here (0.55 cents and 0.08 dB for 1 %), so it is taken as
 // that: each pipe's wind through noise under kWaverHz, kWaverDepth RMS with
 // the Wind as modelled. Set by that recording and the measurement in
-// Tools/benchmark_steadiness.py, which reads 0.7 cents and 0.09 dB here. The
-// reeds waver by another cause (kReedEddy).
-[[maybe_unused]] constexpr double kWaverHz = 8.0;   // only in kWaverPole's literal below
+// Tools/benchmark_steadiness.py, which reads 0.7 cents and 0.09 dB here.
+// The reeds waver by slow boot pressure unrest (`kReedWaver` * `waverDepth`
+// in `Engine::Tick`), which the boot's ~11 Hz low-pass smooths per sample so the
+// tongue walks gently without injecting 48 kHz white-noise rasp.
 constexpr double kWaverDepth = 0.015;
 // Written out, because a global the compiler must work out when the module
 // loads is one the Rack's SDK refuses (Oregana.NoLoadTimeGlobals):
@@ -110,19 +111,9 @@ constexpr float kWaverGain = 0.200723454f;
 static_assert(kWaverGain * kWaverGain * 0.57735 * 0.57735 * kWaverPole / (2.0 - kWaverPole) > 0.999 * kWaverDepth * kWaverDepth
                   && kWaverGain * kWaverGain * 0.57735 * 0.57735 * kWaverPole / (2.0 - kWaverPole) < 1.001 * kWaverDepth * kWaverDepth,
               "kWaverGain is kWaverDepth through kWaverPole");
-// A reed's own unrest. A recorded Trumpet 8' wanders as its organ's flues do:
-// 0.8 to 0.9 cents and 0.1 to 0.2 dB RMS in its two lower octaves, most of it
-// between 2 and 12 Hz (Docs/research/known-gaps-2026-11-13.md). The cause
-// taken is Respira's (its ReedModel.h and kTurbulence): the jet through the
-// gap is turbulent, and its eddies push the tongue as they change its flow,
-// so the tongue's phase walks. The same noise that moves the flow moves the
-// boot's push on the tongue by kReedEddy of itself with the Wind as
-// modelled: even in -1 .. 1, so 14 % RMS, where a jet's turbulence is some
-// 10 to 20 % of its speed. Set by that recording, a little under it: the
-// Trompete 8' reads 0.4 to 0.8 cents. A tongue its resonator holds less walks
-// further on the same push: the Vox humana 1.0 to 1.9 and the Krummhorn 1.5 to 4.8,
-// which no recording has checked.
-constexpr double kReedEddy = 0.25;
+// Slow (< 8 Hz) turbulent wind unrest on the reed boot (~0.3 cents 0.5 s walk
+// in `ReedsWaver`), keeping the audio band free of broadband tongue hiss.
+constexpr float kReedWaver = 1.15f;
 // A channel's pipes share one pallet: with every stop drawn each gets 3 %
 // less pressure than a stop alone, falling with the square of the wind taken.
 constexpr float kRobbing = 0.03f;
@@ -182,9 +173,13 @@ constexpr float kGainStep = 0.001f;   // output gains glide in about 20 ms
 // are still going in.
 constexpr float kGainRise = 0.0001f;
 
-// The noises at Action and Blower 1: a key's knock peaks near -38 dBFS and
-// the wind noise sits at -50 dBFS RMS, at the pipes (estimates).
-constexpr double kKnockLevel = 0.012, kBlowerLevel = 0.22;
+// The noises at Action 1 and Blower 1 (scaled to 70% of real values): a key's
+// knock peaks near -38 dBFS, wind noise at Blower 1 sits around -53 dBFS RMS,
+// and pipe breath glides in 25 ms with Wind Noise.
+constexpr double kKnockLevel = 0.012, kBlowerLevel = 0.154, kWindThudScale = 0.70;
+constexpr float kBreathStep = static_cast<float>(kStepSeconds / 0.025);
+// 3.2 kHz one-pole coefficient at 48 kHz for subtle case/distance direct air absorption.
+constexpr float kDirectAirPole = 0.34222f;
 // A slider's rub is at its loudest with three or more stops moving, quiet
 // beside their knobs' knocks, and the shutters knock as a thrown pedal lands
 // them: a tenth of the travel in one step is a full knock (estimates).
@@ -255,6 +250,34 @@ double Sanitized(int index, double value) {
     return c.steps > 0 ? std::floor(value + 0.5) : value;
 }
 
+// Tracker key stroke velocity -> pallet/foot opening slowness relative to velocity 80 (1.0).
+float TouchSlowness(int velocity) {
+    const double v = Clamp(velocity, 1, 127);
+    if (v >= 80.0) return static_cast<float>(std::pow(2.0, -1.35 * (v - 80.0) / 47.0));
+    return static_cast<float>(1.0 + 4.2 * std::pow((80.0 - v) / 79.0, 1.35));
+}
+
+// Note-off velocity -> pallet closing slowness relative to velocity 64 (1.0).
+float ReleaseSlowness(int velocity) {
+    if (velocity <= 0) return 1.0f;
+    const double v = Clamp(velocity, 1, 127);
+    if (v >= 64.0) return static_cast<float>(std::pow(2.0, -0.9 * (v - 64.0) / 63.0));
+    return static_cast<float>(1.0 + 2.5 * std::pow((64.0 - v) / 63.0, 1.3));
+}
+
+// Pipe mouth turbulence scale: 0 at Wind Noise 0, 70% of real values at default 0.2.
+float PipeBreathScale(double blower) {
+    const double b = Clamp(blower, 0.0, 1.0);
+    if (b <= 0.2) return static_cast<float>(3.5 * b);
+    return static_cast<float>(0.70 + 0.90 * (b - 0.2) / 0.8);
+}
+
+// Perceptual curve for background blower hum and chest windage hiss.
+float BlowerNoiseScale(double blower) {
+    const double b = Clamp(blower, 0.0, 1.0);
+    return static_cast<float>(b * (0.15 + 0.85 * b));
+}
+
 } // namespace
 
 Engine::Engine() {
@@ -312,6 +335,10 @@ Engine::Engine() {
     for (auto& list : flueAt) list.reserve(flues.size() + kSpares);
     reedList.reserve(reeds.size() + kSpares);
     reedSound.reserve(reeds.size() + kSpares);
+#if defined(OREGANA_FOUR)
+    for (auto& packs : fluePacks) packs.reserve((flues.size() + kSpares) / 4 + 1);
+    reedPacks.reserve((reeds.size() + kSpares) / 4 + 1);
+#endif
     {
         FlueVoicing plain, chimneyed;
         chimneyed.stopped = true;
@@ -320,7 +347,7 @@ Engine::Engine() {
         for (std::size_t upper = 0; upper < 2; ++upper)
             for (FluePipe& pipe : spareFlue[upper]) {
                 pipe.Design(upper ? chimneyed : plain, 440.0, 1.0);
-                spareRoom += static_cast<std::size_t>(pipe.loopRoom + pipe.jetLength + pipe.upperRoom);
+                spareRoom += static_cast<std::size_t>(pipe.loopRoom + pipe.jetLength + 1 + pipe.upperRoom);
             }
         for (ReedPipe& pipe : spareReed) {
             pipe.Design(ReedVoicing {}, 440.0, 1.0);
@@ -332,7 +359,7 @@ Engine::Engine() {
             for (FluePipe& pipe : kind) {
                 pipe.loop = spot;
                 pipe.jet = spot + pipe.loopRoom;
-                pipe.upper = pipe.jet + pipe.jetLength;
+                pipe.upper = pipe.jet + pipe.jetLength + 1;
                 spot = pipe.upper + pipe.upperRoom;
                 pipe.Clear();
             }
@@ -379,8 +406,9 @@ Engine::Engine() {
 void Engine::Reset() {
     for (std::size_t i = 0; i < slots.size(); ++i) {
         Slot& s = slots[i];
-        s.active = s.resting = s.coupled = false;
+        s.active = s.resting = s.coupled = s.winded = false;
         s.offered = s.share = 0.0f;
+        s.nextTouch = s.nextRelease = 0.0f;
         s.lastDue = 0;
         if (s.index < 0) continue;
         // Each pipe's turbulence is its own.
@@ -390,7 +418,6 @@ void Engine::Reset() {
         if (s.reed) {
             reeds[static_cast<std::size_t>(s.index)].Clear();
             reeds[static_cast<std::size_t>(s.index)].random = seed;
-            reeds[static_cast<std::size_t>(s.index)].eddy = 0.0f;
         } else {
             flues[static_cast<std::size_t>(s.index)].Clear();
             flues[static_cast<std::size_t>(s.index)].random = seed;
@@ -398,6 +425,8 @@ void Engine::Reset() {
     }
     active.clear();
     pending.clear();
+    hearingDirty = true;
+    groupsDirty = true;
     now = 0;
     bendAir = bendSet;
     stretch = bendAir == 0.0 ? 0.0f : StretchFor(bendAir);
@@ -414,17 +443,22 @@ void Engine::Reset() {
         for (auto& rows : rowBus[d])
             for (auto& channel : rows) channel.fill(0.0f);
     }
-    touch.fill(1.0f);
+    for (auto& division : touch) division.fill(1.0f);
+    for (auto& division : releaseTouch) division.fill(1.0f);
     for (Tremulant& t : tremulants) t.Reset();
     unrestRandom = 0x2545F491u;
     untilTick = 0;
-    boxLow[0] = boxLow[1] = rawBoxLow[0] = rawBoxLow[1] = 0.0f;
+    boxLow[0] = boxLow[1] = rawBoxLow[0] = rawBoxLow[1] = directLow[0] = directLow[1] = 0.0f;
     boxLowGain = boxLowTarget;
     boxHighGain = boxHighTarget;
     dry = dryTarget;
     wet = wetTarget;
     apartGain = apartTarget;
-    levelGain = levelTarget;
+    directAir = directAirTarget;
+    breathGain = breathTarget;
+    for (FluePipe& pipe : flues) pipe.SetBreath(breathGain);
+    for (ReedPipe& pipe : reeds) pipe.SetBreath(breathGain);
+    levelSlewed = levelGain = levelTarget;
     peaks.fill(0.0f);
     for (auto& line : apartLine) line.fill(0.0f);
     apartAt = 0;
@@ -497,6 +531,7 @@ void Engine::Apply(const Controls& before, bool all) {
         pressureSet = controls[kPressure];
         PlaceKeys();
     }
+    if (changed(kBlower)) breathTarget = PipeBreathScale(controls[kBlower]);
     if (changed(kVolume) || changed(kRoom)) {
         // The listener walks down the nave: the organ's own sound gives way
         // to the church's, at one loudness.
@@ -504,6 +539,7 @@ void Engine::Apply(const Controls& before, bool all) {
         dryTarget = static_cast<float>(volume * std::sqrt(1.0 - controls[kRoom]));
         wetTarget = static_cast<float>(volume * std::sqrt(controls[kRoom]));
         apartTarget = static_cast<float>(volume);
+        directAirTarget = static_cast<float>(0.50 * controls[kRoom]);
     }
     bool mixer = false, soloed = false;
     for (int d = 0; d < kDivisions; ++d) {
@@ -578,9 +614,10 @@ void Engine::UpdateKey(int key, bool struck, int own) {
 
     int late[kDivisions] = {};
     if (struck && controls[kAction] > 0.0) {
+        const double slackTouch = 0.45 + 0.55 * Min(static_cast<double>(own >= 0 ? touch[static_cast<std::size_t>(own)][k] : 1.0f), 2.2);
         const auto lost = [&](int coupler) {
             return static_cast<int>(kCouplerSeconds * kPipeRate * controls[kAction]
-                                    * (0.5 + Unit(coupler * 128 + kFirstNote + key, kSlack)) * touch[k]);
+                                    * (0.5 + Unit(coupler * 128 + kFirstNote + key, kSlack)) * slackTouch);
         };
         // By the quickest way the pull comes: a key's own division is not late.
         const int never = 1 << 20;
@@ -599,6 +636,10 @@ void Engine::UpdateKey(int key, bool struck, int own) {
     for (int d = 0; d < kDivisions; ++d) {
         if (key >= kDivisionKeys[d] || pulled[d] == open[static_cast<std::size_t>(d)][k]) continue;
         open[static_cast<std::size_t>(d)][k] = opened[d] = pulled[d];
+        if (own >= 0 && d != own) {
+            if (pulled[d]) touch[static_cast<std::size_t>(d)][k] = touch[static_cast<std::size_t>(own)][k];
+            else releaseTouch[static_cast<std::size_t>(d)][k] = releaseTouch[static_cast<std::size_t>(own)][k];
+        }
         // A pallet that hangs is pulled free by its key, and hangs again
         // when the key lets it go.
         const int place = KeyPlace(d, key);
@@ -606,9 +647,12 @@ void Engine::UpdateKey(int key, bool struck, int own) {
         hang[static_cast<std::size_t>(d)][k] = hangs ? static_cast<float>(0.35 + 0.55 * Unit(place, kCipherLeak)) : 0.0f;
         // A pallet a coupler moves knocks at its own chest, when the lost
         // motion is taken up; the key's own is in the key's knock.
-        if (d != own && controls[kAction] > 0.0)
-            knocks.Strike(pulled[d] ? kPalletPulled : kPalletShut, kKnockLevel * controls[kAction] * (pulled[d] ? 1.9 - touch[k] : 1.0),
+        if (d != own && controls[kAction] > 0.0) {
+            const double strength = pulled[d] ? Clamp(1.5 / static_cast<double>(touch[static_cast<std::size_t>(d)][k]), 0.3, 1.6)
+                                              : Clamp(1.0 / static_cast<double>(releaseTouch[static_cast<std::size_t>(d)][k]), 0.35, 1.5);
+            knocks.Strike(pulled[d] ? kPalletPulled : kPalletShut, kKnockLevel * controls[kAction] * strength,
                           controls[kWidth] * Stand(d, key), late[d]);
+        }
     }
     for (int d = 0; d < kDivisions; ++d)
         for (int near : { key - 2, key, key + 2 })
@@ -647,21 +691,22 @@ void Engine::UpdateChannel(int division, int key, int late) {
     }
     const float load = taken / fullAir[d][k];
     robbed[d][k] = 1.0f / (1.0f + kRobbing * load * load);
+    const float slowness = wind > 0.0f ? (open[d][k] ? touch[d][k] : 1.0f) : releaseTouch[d][k];
     for (int rank = firstRank; rank < endRank; ++rank) {
         const int index = kRankFirst[static_cast<std::size_t>(rank)] + key;
-        if (slots[static_cast<std::size_t>(index)].index >= 0) Offer(index, speaks(rank, index) ? wind : 0.0f, late);
+        if (slots[static_cast<std::size_t>(index)].index >= 0) Offer(index, speaks(rank, index) ? wind : 0.0f, late, slowness);
     }
 }
 
 // A pallet gives a pipe its share of the wind, or takes it away: heard when
 // the sound has come from where the pipe stands, `late` samples later for a
 // pallet a coupler pulls.
-void Engine::Offer(int index, float given, int late) {
+void Engine::Offer(int index, float given, int late, float slowness) {
     Slot& s = slots[static_cast<std::size_t>(index)];
     if (given == s.offered) return;
     s.offered = given;
     if (pending.size() == pending.capacity()) {
-        Take(index, given);
+        Take(index, given, slowness);
         return;
     }
     // Kept in the order the wind arrives, so that pipes begin in that order
@@ -672,20 +717,42 @@ void Engine::Offer(int index, float given, int late) {
     s.lastDue = due;
     auto at = pending.end();
     while (at != pending.begin() && (at - 1)->due > due) --at;
-    pending.insert(at, { index, due, given });
+    pending.insert(at, { index, due, given, slowness });
 }
 
 // The wind reaches the pipe. True if the pipe was silent and now begins: it
 // has then joined the speaking pipes, and its wind is on. A pipe already
 // speaking or ringing takes its new share at the next tick.
-bool Engine::Take(int index, float given) {
+bool Engine::Take(int index, float given, float slowness) {
     Slot& s = slots[static_cast<std::size_t>(index)];
     const bool starting = s.share == 0.0f && given > 0.0f;
+    const bool releasing = s.share > 0.0f && given == 0.0f;
     s.share = given;
+    if (s.active) {
+        if (starting) {
+            s.nextTouch = slowness;
+            s.nextRelease = 1.0f;
+        } else if (releasing) {
+            s.nextRelease = slowness;
+        }
+        return false;
+    }
+    if (!starting) return false;
     // Made first: a pipe's making sets its speech for an ordinary touch.
-    if (starting && !s.active && s.epoch != epoch) Design(index);
-    if (starting && !s.reed) flues[static_cast<std::size_t>(s.index)].SetTouch(touch[s.key]);
-    if (s.active || !starting) return false;
+    if (s.epoch != epoch) Design(index);
+    s.nextTouch = s.nextRelease = 0.0f;
+    groupsDirty = true;
+    if (s.reed) {
+        ReedPipe& pipe = reeds[static_cast<std::size_t>(s.index)];
+        pipe.SetTouch(slowness);
+        pipe.SetRelease(1.0);
+        pipe.SetBreath(breathGain);
+    } else {
+        FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
+        pipe.SetTouch(slowness);
+        pipe.SetRelease(1.0);
+        pipe.SetBreath(breathGain);
+    }
     const float wind = given * opening[s.rank] * pressure[s.division] * robbed[s.division][s.key];
     if (s.reed) {
         ReedPipe& pipe = reeds[static_cast<std::size_t>(s.index)];
@@ -697,6 +764,8 @@ bool Engine::Take(int index, float given) {
         pipe.SetBend(stretch);
         pipe.wind = wind;
         s.coupled = false;
+        s.winded = false;
+        if (!s.apart && wind > 0.0f) hearingDirty = true;
     }
     Place(s);
     s.active = true;
@@ -740,6 +809,7 @@ void Engine::Design(int index) {
         plan.tongue.noise *= noise;
         ReedPipe& pipe = reeds[static_cast<std::size_t>(s.index)];
         pipe.Design(plan.tongue, plan.hz * ratio, regulated.tuning);
+        pipe.SetBreath(breathGain);
         s.air = static_cast<float>(pipe.air);
     } else {
         plan.flue.speech *= speech;
@@ -747,6 +817,7 @@ void Engine::Design(int index) {
         plan.flue.chiff *= 1.0 + 0.6 * voicing * Spread(place, kChiff);
         FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
         pipe.Design(plan.flue, plan.hz * ratio, regulated.tuning);
+        pipe.SetBreath(breathGain);
         s.air = static_cast<float>(pipe.air);
     }
     s.gain = kMaster * static_cast<float>(plan.level * std::pow(10.0, 3.0 * voicing * Spread(place, kLevel) / 20.0)) / regulated.rms;
@@ -783,8 +854,10 @@ void Engine::Midi(const std::uint8_t* bytes, int size) {
     const int division = channel < kDivisions ? channel : kHauptwerk;
     if (status == 0x90 && value > 0) {
         KeyDown(division, data, value);
-    } else if (status == 0x80 || status == 0x90) {
-        KeyUp(division, data);
+    } else if (status == 0x90) {
+        KeyUp(division, data, 64);
+    } else if (status == 0x80) {
+        KeyUp(division, data, value == 0 ? 64 : value);
     } else if (status == 0xE0) {
         SetBend((((bytes[2] & 0x7F) << 7 | data) - 8192) / 8192.0);
     } else if (status == 0xB0) {
@@ -801,29 +874,37 @@ void Engine::KeyDown(int division, int note, int velocity) {
     const auto d = static_cast<std::size_t>(division), k = static_cast<std::size_t>(key);
     if (played[d][k]) return;
     played[d][k] = true;
-    // A hard stroke opens the pallet in half the time of an ordinary one, a
-    // soft one in half as much again.
+    // Tracker touch follows the stroke velocity nonlinearly around velocity 80.
     const double stroke = Clamp(velocity, 1, 127) / 127.0;
-    touch[k] = static_cast<float>(1.5 - stroke);
+    touch[d][k] = TouchSlowness(velocity);
     if (controls[kAction] > 0.0)
-        knocks.Strike(division == kPedal ? kPedalDown : kKeyDown, kKnockLevel * controls[kAction] * (0.4 + stroke),
+        knocks.Strike(division == kPedal ? kPedalDown : kKeyDown, kKnockLevel * controls[kAction] * (0.25 + 1.15 * stroke * stroke),
                       controls[kWidth] * Stand(division, key));
     UpdateKey(key, true, division);
 }
 
 void Engine::KeyUp(int division, int note) {
+    KeyUp(division, note, 64);
+}
+
+void Engine::KeyUp(int division, int note, int velocity) {
     const int key = note - kFirstNote;
     if (division < 0 || division >= kDivisions || key < 0 || key >= kDivisionKeys[division]) return;
     const auto d = static_cast<std::size_t>(division), k = static_cast<std::size_t>(key);
     if (!played[d][k]) return;
     played[d][k] = false;
-    if (controls[kAction] > 0.0)
-        knocks.Strike(division == kPedal ? kPedalUp : kKeyUp, kKnockLevel * controls[kAction], controls[kWidth] * Stand(division, key));
+    releaseTouch[d][k] = ReleaseSlowness(velocity);
+    if (controls[kAction] > 0.0) {
+        const double releaseStrength = Clamp(1.0 / static_cast<double>(releaseTouch[d][k]), 0.35, 1.5);
+        knocks.Strike(division == kPedal ? kPedalUp : kKeyUp, kKnockLevel * controls[kAction] * releaseStrength,
+                      controls[kWidth] * Stand(division, key));
+    }
     UpdateKey(key, false, division);
 }
 
 void Engine::AllKeysUp() {
     for (auto& division : played) division.fill(false);
+    for (auto& division : releaseTouch) division.fill(1.0f);
     for (int key = 0; key < kManualKeys; ++key) UpdateKey(key);
 }
 
@@ -879,7 +960,17 @@ void Engine::Tick() {
 
     const double live = 2.0 * controls[kWind], depth = 0.01 * controls[kTremulantDepth];
     const float waverDepth = kWaverGain * static_cast<float>(live);
-    const float reedEddy = static_cast<float>(kReedEddy * live);
+
+    if (breathGain != breathTarget) {
+        const float diff = breathTarget - breathGain;
+        breathGain = Abs(diff) <= kBreathStep ? breathTarget : breathGain + (diff > 0.0f ? kBreathStep : -kBreathStep);
+        for (const int index : active) {
+            const Slot& s = slots[static_cast<std::size_t>(index)];
+            if (s.reed) reeds[static_cast<std::size_t>(s.index)].SetBreath(breathGain);
+            else flues[static_cast<std::size_t>(s.index)].SetBreath(breathGain);
+        }
+        groupsDirty = true;
+    }
 
     // The supply (kSpinUp and below): what it holds for every division.
     const int supply = static_cast<int>(controls[kWindSupply]);
@@ -898,7 +989,7 @@ void Engine::Tick() {
             // The fresh bellows starts where the spent one's droop left the
             // wind, less the dip, and the reservoirs bring it back.
             for (Reservoir& reservoir : reservoirs) reservoir.pressure -= kWedge * (1.0 - kChangeover) + kChangeDip;
-            if (controls[kBlower] > 0.0) knocks.Strike(kBellowsTurn, kKnockLevel * controls[kBlower], 0.0);
+            if (controls[kBlower] > 0.0) knocks.Strike(kBellowsTurn, kWindThudScale * kKnockLevel * controls[kBlower], 0.0);
         }
     } else {
         stock = Clamp(stock + kFill * spin * spin * (1.0 - stock) - kLeak - kDrain * load, 0.0, 1.0);
@@ -923,7 +1014,7 @@ void Engine::Tick() {
         if (d == kPositiv || d == kRecit) {
             const Tremulant& t = tremulants[d == kPositiv ? 0 : 1];
             if (t.beat && controls[kBlower] > 0.0 && presence > 0.0f)
-                knocks.Strike(kTremulantBeat, kKnockLevel * controls[kBlower] * presence * t.running * Min(1.0, 10.0 * depth), 0.0);
+                knocks.Strike(kTremulantBeat, kWindThudScale * kKnockLevel * controls[kBlower] * presence * t.running * Min(1.0, 10.0 * depth), 0.0);
         }
         pressure[d] = static_cast<float>(Max(p, 0.0));
         diag.pressure[d] = pressure[d];
@@ -934,33 +1025,60 @@ void Engine::Tick() {
     std::size_t speaking = 0;
     for (std::size_t i = 0; i < active.size();) {
         Slot& s = slots[static_cast<std::size_t>(active[i])];
+        if (s.nextTouch > 0.0f || s.nextRelease > 0.0f) {
+            if (s.reed) {
+                ReedPipe& pipe = reeds[static_cast<std::size_t>(s.index)];
+                if (s.nextTouch > 0.0f) pipe.SetTouch(s.nextTouch);
+                if (s.nextRelease > 0.0f) pipe.SetRelease(s.nextRelease);
+            } else {
+                FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
+                if (s.nextTouch > 0.0f) pipe.SetTouch(s.nextTouch);
+                if (s.nextRelease > 0.0f) pipe.SetRelease(s.nextRelease);
+            }
+            s.nextTouch = s.nextRelease = 0.0f;
+            groupsDirty = true;
+        }
+        const bool wasResting = s.resting;
         const float wind = s.share * opening[s.rank] * pressure[s.division] * robbed[s.division][s.key];
         bool silent = s.resting && wind == 0.0f;
         if (!silent) {
             s.resting = false;
+            s.waver += kWaverPole * (NextNoise(s.waverRandom) - s.waver);
             if (s.reed) {
                 ReedPipe& pipe = reeds[static_cast<std::size_t>(s.index)];
-                pipe.wind = wind;
-                pipe.eddy = reedEddy;
+                pipe.wind = wind * (1.0f + kReedWaver * waverDepth * s.waver);
                 pipe.Tick();
                 demand[s.division] += pipe.air * Sqrt(static_cast<double>(pipe.foot));
                 silent = pipe.Silent();
                 if (silent && s.share > 0.0f) pipe.Clear();
             } else {
                 FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
-                s.waver += kWaverPole * (NextNoise(s.waverRandom) - s.waver);
                 pipe.wind = wind * (1.0f + waverDepth * s.waver);
                 pipe.Tick(stretch);
                 demand[s.division] += pipe.air * Sqrt(static_cast<double>(pipe.foot));
                 silent = pipe.Silent();
                 if (silent && s.share > 0.0f) pipe.Clear();
+                const bool nowWinded = !silent && !s.apart && pipe.wind > 0.0f;
+                if (nowWinded != s.winded) {
+                    s.winded = nowWinded;
+                    hearingDirty = true;
+                }
             }
+        } else if (s.winded) {
+            s.winded = false;
+            hearingDirty = true;
         }
         // A silent pipe whose key is still held (the wind has gone) waits
         // for it, cleared; any other has rung out.
         s.resting = silent && s.share > 0.0f;
+        if (s.resting != wasResting) groupsDirty = true;
         if (silent && !s.resting) {
             s.active = false;
+            if (s.winded) {
+                s.winded = false;
+                hearingDirty = true;
+            }
+            groupsDirty = true;
             active[i] = active.back();
             active.pop_back();
         } else {
@@ -970,39 +1088,46 @@ void Engine::Tick() {
     }
     diag.pipes = static_cast<int>(speaking);
 
-    // Who hears whom, now that the speaking pipes are known.
-    for (const int index : active) {
-        Slot& s = slots[static_cast<std::size_t>(index)];
-        if (s.reed) continue;
-        const bool was = s.coupled;
-        s.coupled = false;
-        s.hears[0] = s.hears[1] = -1;
-        // A pipe without wind has no jet to be drawn along: it rings out
-        // alone, and comes to rest.
-        if (s.resting || s.apart || flues[static_cast<std::size_t>(s.index)].wind <= 0.0f) continue;
-        const int firstRank = kDivisionRank[s.division], endRank = kDivisionRank[static_cast<std::size_t>(s.division) + 1];
-        for (int side = 0; side < 2; ++side) {
-            for (int rows = 1; rows <= kHearRows; ++rows) {
-                const int rank = s.rank + (side == 0 ? -rows : rows);
-                if (rank < firstRank || rank >= endRank) break;
-                const Slot& near = slots[static_cast<std::size_t>(kRankFirst[static_cast<std::size_t>(rank)] + s.key)];
-                if (near.index < 0 || near.reed || !near.active || near.resting || near.apart
-                    || flues[static_cast<std::size_t>(near.index)].wind <= 0.0f)
-                    continue;
-                const double metres = Max(kRowMetres * rows, static_cast<double>(s.radius + near.radius) + kClearance);
-                const int after = Max(kRowSamples, static_cast<int>(metres / kSoundSpeed * kPipeRate + 0.5));
-                if (after <= kLongestHearing) {
-                    s.hears[side] = near.index;
-                    s.hearGain[side] = static_cast<float>(-1.0 / metres);
-                    s.hearDelay[side] = static_cast<std::uint8_t>(after);
-                    s.coupled = true;
-                }
-                break;
+    // Who hears whom, updated whenever a flue joins, leaves or crosses zero wind.
+    if (hearingDirty) {
+        hearingDirty = false;
+        for (const int index : active) {
+            Slot& s = slots[static_cast<std::size_t>(index)];
+            if (s.reed) continue;
+            const bool was = s.coupled;
+            s.coupled = false;
+            s.hears[0] = s.hears[1] = -1;
+            // A pipe without wind has no jet to be drawn along: it rings out
+            // alone, and comes to rest.
+            if (s.resting || s.apart || flues[static_cast<std::size_t>(s.index)].wind <= 0.0f) {
+                if (was) groupsDirty = true;
+                continue;
             }
+            const int firstRank = kDivisionRank[s.division], endRank = kDivisionRank[static_cast<std::size_t>(s.division) + 1];
+            for (int side = 0; side < 2; ++side) {
+                for (int rows = 1; rows <= kHearRows; ++rows) {
+                    const int rank = s.rank + (side == 0 ? -rows : rows);
+                    if (rank < firstRank || rank >= endRank) break;
+                    const Slot& near = slots[static_cast<std::size_t>(kRankFirst[static_cast<std::size_t>(rank)] + s.key)];
+                    if (near.index < 0 || near.reed || !near.active || near.resting || near.apart
+                        || flues[static_cast<std::size_t>(near.index)].wind <= 0.0f)
+                        continue;
+                    const double metres = Max(kRowMetres * rows, static_cast<double>(s.radius + near.radius) + kClearance);
+                    const int after = Max(kRowSamples, static_cast<int>(metres / kSoundSpeed * kPipeRate + 0.5));
+                    if (after <= kLongestHearing) {
+                        s.hears[side] = near.index;
+                        s.hearGain[side] = static_cast<float>(-1.0 / metres);
+                        s.hearDelay[side] = static_cast<std::uint8_t>(after);
+                        s.coupled = true;
+                    }
+                    break;
+                }
+            }
+            if (s.coupled != was) groupsDirty = true;
+            // What it told before anyone listened is not known.
+            if (s.coupled && !was)
+                for (int i = 0; i < kRingSize; ++i) toldRing[static_cast<std::size_t>(s.index) * kRingSize + static_cast<std::size_t>(i)] = 0.0f;
         }
-        // What it told before anyone listened is not known.
-        if (s.coupled && !was)
-            for (int i = 0; i < kRingSize; ++i) toldRing[static_cast<std::size_t>(s.index) * kRingSize + static_cast<std::size_t>(i)] = 0.0f;
     }
 
     // The wind is heard while the organ is played and a little after: the
@@ -1012,10 +1137,11 @@ void Engine::Tick() {
     presence += (speaking > 0 || turning ? kPresenceRise * (1.0f - presence) : -kPresenceFall * presence);
     if (speaking == 0 && !turning && presence < 1.0e-4f) presence = 0.0f;
     windNoise.SetSpin(spin);
-    const float noise = static_cast<float>(kBlowerLevel * controls[kBlower]) * presence;
+    const float noise = static_cast<float>(kBlowerLevel) * BlowerNoiseScale(controls[kBlower]) * presence;
+    const double flowShare = 0.12 + 0.88 * Clamp(4.0 * load, 0.0, 1.0);
     hum = noise * static_cast<float>(spin);
-    hiss = noise * static_cast<float>(Min(head, 1.5));
-    for (float* lows : { boxLow, rawBoxLow })
+    hiss = noise * static_cast<float>(Min(head, 1.5) * flowShare);
+    for (float* lows : { boxLow, rawBoxLow, directLow })
         for (int c = 0; c < 2; ++c)
             if (Abs(lows[c]) < 1.0e-20f) lows[c] = 0.0f;
 
@@ -1033,8 +1159,14 @@ void Engine::Tick() {
 
 void Engine::RenderChunk(float* left, float* right, int frames, float* const* divisions, int offset) {
     for (auto& division : bus)
-        for (auto& channel : division)
-            for (int i = 0; i < frames; ++i) channel[static_cast<std::size_t>(i)] = 0.0f;
+        for (auto& channel : division) {
+            int i = 0;
+#if defined(OREGANA_FOUR)
+            const Float4 zero = Four(0.0f);
+            for (; i + 4 <= frames; i += 4) Store4(channel.data() + i, zero);
+#endif
+            for (; i < frames; ++i) channel[static_cast<std::size_t>(i)] = 0.0f;
+        }
     // The pipes already speaking, then those whose wind arrives within
     // these frames, each from its own sample on. Each pipe's sound is made
     // first, four pipes of a kind at a time where there are four, and then
@@ -1070,49 +1202,64 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
             busRight[i] += gainRight * sound[i];
         }
     };
-    // Open flues, flues with a pipe beyond a junction, either hearing
-    // neighbours or not, and reeds.
-    for (auto& list : flueList) list.clear();
-    for (auto& list : flueSound) list.clear();
-    for (auto& list : flueAt) list.clear();
-    reedList.clear();
-    reedSound.clear();
     const std::size_t count = active.size();
-    for (std::size_t j = 0; j < count; ++j) {
-        const Slot& s = slots[static_cast<std::size_t>(active[j])];
-        if (s.resting) continue;
-        float* const sound = scratch.data() + j * kChunk;
-        if (s.reed) {
-            reedList.push_back(&reeds[static_cast<std::size_t>(s.index)]);
-            reedSound.push_back(sound);
-        } else {
-            FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
-            const std::size_t kind = (pipe.upperLength > 0 ? 1 : 0) + (s.coupled ? 2 : 0);
-            flueList[kind].push_back(&pipe);
-            flueSound[kind].push_back(sound);
-            if (s.coupled) flueAt[kind - 2].push_back(j);
+    if (groupsDirty) {
+        groupsDirty = false;
+        // Open flues, flues with a pipe beyond a junction, either hearing
+        // neighbours or not, and reeds.
+        for (auto& list : flueList) list.clear();
+        for (auto& list : flueSound) list.clear();
+        for (auto& list : flueAt) list.clear();
+        reedList.clear();
+        reedSound.clear();
+        for (std::size_t j = 0; j < count; ++j) {
+            const Slot& s = slots[static_cast<std::size_t>(active[j])];
+            if (s.resting) continue;
+            float* const sound = scratch.data() + j * kChunk;
+            if (s.reed) {
+                reedList.push_back(&reeds[static_cast<std::size_t>(s.index)]);
+                reedSound.push_back(sound);
+            } else {
+                FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
+                const std::size_t kind = (pipe.upperLength > 0 ? 1 : 0) + (s.coupled ? 2 : 0);
+                flueList[kind].push_back(&pipe);
+                flueSound[kind].push_back(sound);
+                if (s.coupled) flueAt[kind - 2].push_back(j);
+            }
         }
-    }
 #if defined(OREGANA_FOUR)
-    // Two or three left over of a kind are made a four with silent pipes: a
-    // lane's arithmetic is its pipe's own, so theirs is as it would be alone.
-    for (std::size_t kind = 0; kind < 4; ++kind)
-        for (std::size_t spare = 0; flueList[kind].size() % 4 >= 2; ++spare) {
-            flueList[kind].push_back(&spareFlue[kind & 1][spare]);
-            flueSound[kind].push_back(spareSound[spare].data());
-            if (kind >= 2) flueAt[kind - 2].push_back(count + spare);
+        // Two or three left over of a kind are made a four with silent pipes: a
+        // lane's arithmetic is its pipe's own, so theirs is as it would be alone.
+        for (std::size_t kind = 0; kind < 4; ++kind) {
+            for (std::size_t spare = 0; flueList[kind].size() % 4 >= 2; ++spare) {
+                flueList[kind].push_back(&spareFlue[kind & 1][spare]);
+                flueSound[kind].push_back(spareSound[spare].data());
+                if (kind >= 2) flueAt[kind - 2].push_back(count + spare);
+            }
+            fluePacks[kind].clear();
+            for (std::size_t p = 0; p + 4 <= flueList[kind].size(); p += 4) {
+                fluePacks[kind].emplace_back();
+                FluePipe::PackFour(fluePacks[kind].back(), flueList[kind].data() + p);
+            }
         }
-    for (std::size_t spare = 0; reedList.size() % 4 >= 2; ++spare) {
-        reedList.push_back(&spareReed[spare]);
-        reedSound.push_back(spareSound[spare].data());
-    }
+        for (std::size_t spare = 0; reedList.size() % 4 >= 2; ++spare) {
+            reedList.push_back(&spareReed[spare]);
+            reedSound.push_back(spareSound[spare].data());
+        }
+        reedPacks.clear();
+        for (std::size_t p = 0; p + 4 <= reedList.size(); p += 4) {
+            reedPacks.emplace_back();
+            ReedPipe::PackFour(reedPacks.back(), reedList.data() + p);
+        }
 #endif
+    }
     for (std::size_t kind = 0; kind < 2; ++kind) {
         std::size_t done = 0;
 #if defined(OREGANA_FOUR)
-        for (; done + 4 <= flueList[kind].size(); done += 4) {
-            if (kind == 0) FluePipe::RunFour<false, false>(flueList[kind].data() + done, flueSound[kind].data() + done, frames);
-            else FluePipe::RunFour<true, false>(flueList[kind].data() + done, flueSound[kind].data() + done, frames);
+        for (const FluePipe::FluePack& pack : fluePacks[kind]) {
+            if (kind == 0) FluePipe::RunFourPacked<false, false>(pack, flueSound[kind].data() + done, frames);
+            else FluePipe::RunFourPacked<true, false>(pack, flueSound[kind].data() + done, frames);
+            done += 4;
         }
 #endif
         for (; done < flueList[kind].size(); ++done) flueList[kind][done]->Run(flueSound[kind][done], frames);
@@ -1124,9 +1271,11 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
     // ring never wraps, and a ring's first block is kept again after its
     // last, so nor does a block that is read.
     if (!flueAt[0].empty() || !flueAt[1].empty()) {
-        for (int sub = 0; sub < frames; sub += kHearBlock) {
-            const int n = Min(kHearBlock, frames - sub);
+        int step = 0;
+        for (int sub = 0; sub < frames; sub += step) {
             const std::size_t at = static_cast<std::size_t>((now + static_cast<std::uint64_t>(sub)) & (kRing - 1));
+            const int n = Min(frames - sub, kHearBlock - static_cast<int>(at & (kHearBlock - 1)));
+            step = n;
             for (const auto& places : flueAt) {
                 for (const std::size_t j : places) {
                     if (j >= count) continue;   // a spare
@@ -1163,7 +1312,7 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
                 };
                 std::size_t done = 0;
 #if defined(OREGANA_FOUR)
-                for (; done + 4 <= places.size(); done += 4) {
+                for (const FluePipe::FluePack& pack : fluePacks[kind]) {
                     float* sound[4];
                     const float* heard[4];
                     float* told[4];
@@ -1172,8 +1321,9 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
                         heard[l] = heardOf(done + l);
                         told[l] = toldOf(done + l);
                     }
-                    if (kind == 2) FluePipe::RunFour<false, true>(flueList[kind].data() + done, sound, n, heard, told);
-                    else FluePipe::RunFour<true, true>(flueList[kind].data() + done, sound, n, heard, told);
+                    if (kind == 2) FluePipe::RunFourPacked<false, true>(pack, sound, n, heard, told);
+                    else FluePipe::RunFourPacked<true, true>(pack, sound, n, heard, told);
+                    done += 4;
                 }
 #endif
                 for (; done < places.size(); ++done)
@@ -1189,7 +1339,10 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
     }
     std::size_t done = 0;
 #if defined(OREGANA_FOUR)
-    for (; done + 4 <= reedList.size(); done += 4) ReedPipe::RunFour(reedList.data() + done, reedSound.data() + done, frames);
+    for (const ReedPipe::ReedPack& pack : reedPacks) {
+        ReedPipe::RunFourPacked(pack, reedSound.data() + done, frames);
+        done += 4;
+    }
 #endif
     for (; done < reedList.size(); ++done) reedList[done]->Run(reedSound[done], frames);
     for (std::size_t j = 0; j < count; ++j) {
@@ -1199,7 +1352,7 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
     std::size_t arrived = 0;
     for (; arrived < pending.size() && pending[arrived].due < now + static_cast<std::uint64_t>(frames); ++arrived) {
         const Pending arriving = pending[arrived];
-        if (!Take(arriving.slot, arriving.share)) continue;
+        if (!Take(arriving.slot, arriving.share, arriving.slowness)) continue;
         const Slot& s = slots[static_cast<std::size_t>(arriving.slot)];
         const int from = static_cast<int>(arriving.due - now);
         if (s.reed) reeds[static_cast<std::size_t>(s.index)].Run(scratch.data(), frames - from);
@@ -1212,10 +1365,20 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
         for (auto& rows : rowBus[d]) {
             for (std::size_t c = 0; c < 2; ++c) {
                 float* const row = rows[c].data();
-                for (int i = 0; i < frames; ++i) bus[d][c][static_cast<std::size_t>(i)] += row[i];
+                float* const dst = bus[d][c].data();
+                int i = 0;
+#if defined(OREGANA_FOUR)
+                for (; i + 4 <= frames; i += 4) Store4(dst + i, Load4(dst + i) + Load4(row + i));
+#endif
+                for (; i < frames; ++i) dst[i] += row[i];
                 const int kept = static_cast<int>(rows[c].size()) - frames;
-                for (int i = 0; i < kept; ++i) row[i] = row[i + frames];
-                for (int i = kept; i < kept + frames; ++i) row[i] = 0.0f;
+                for (int k = 0; k < kept; ++k) row[k] = row[k + frames];
+                int z = kept;
+#if defined(OREGANA_FOUR)
+                const Float4 zero = Four(0.0f);
+                for (; z + 4 <= kept + frames; z += 4) Store4(row + z, zero);
+#endif
+                for (; z < kept + frames; ++z) row[z] = 0.0f;
             }
         }
     }
@@ -1227,8 +1390,10 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
         boxHighGain += kGainStep * (boxHighTarget - boxHighGain);
         apartGain += (apartTarget > apartGain ? kGainRise : kGainStep) * (apartTarget - apartGain);
         // At 0 dB a level is exactly 1, so the sound is the same sample for sample as without it.
-        for (std::size_t d = 0; d < kDivisions; ++d)
-            levelGain[d] += (levelTarget[d] > levelGain[d] ? kGainRise : kGainStep) * (levelTarget[d] - levelGain[d]);
+        for (std::size_t d = 0; d < kDivisions; ++d) {
+            levelSlewed[d] += (levelTarget[d] > levelSlewed[d] ? kGainRise : kGainStep) * (levelTarget[d] - levelSlewed[d]);
+            levelGain[d] += kGainStep * (levelSlewed[d] - levelGain[d]);
+        }
         // What the church hears from the divisions after the first, in
         // their order: the Positiv, the Recit through its box, the Pedal.
         float apart[kDivisions - 1] = {};
@@ -1265,9 +1430,14 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
         float roomLeft, roomRight;
         nave.Process(sound[0], sound[1], roomLeft, roomRight, apart);
         nave.Direct(sound[0], sound[1]);
+        directAir += kGainStep * (directAirTarget - directAir);
+        directLow[0] += kDirectAirPole * (sound[0] - directLow[0]);
+        directLow[1] += kDirectAirPole * (sound[1] - directLow[1]);
+        const float directLeft = sound[0] - directAir * (sound[0] - directLow[0]);
+        const float directRight = sound[1] - directAir * (sound[1] - directLow[1]);
         dry += (dryTarget > dry ? kGainRise : kGainStep) * (dryTarget - dry);
         wet += (wetTarget > wet ? kGainRise : kGainStep) * (wetTarget - wet);
-        std::array<float, 2> frame { dry * sound[0] + wet * roomLeft, dry * sound[1] + wet * roomRight };
+        std::array<float, 2> frame { dry * directLeft + wet * roomLeft, dry * directRight + wet * roomRight };
         output.Process(frame);
         left[i] = frame[0];
         right[i] = frame[1];

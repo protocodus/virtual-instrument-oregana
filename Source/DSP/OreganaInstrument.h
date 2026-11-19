@@ -53,6 +53,7 @@ public:
     void Reset() {
         engine.Reset();
         for (auto& source : held) source.fill(0);
+        releaseVel.fill(64);
         for (auto& division : sent) division.fill(false);
         for (auto& channel : history) channel.fill(0.0f);
         phase = 0;
@@ -75,8 +76,12 @@ public:
         Sync();
     }
     void KeyUp(int note, int source = 0) {
+        KeyUp(note, 64, source);
+    }
+    void KeyUp(int note, int velocity, int source) {
         if (note < 0 || note > 127 || source < 0 || source >= kSources) return;
         held[static_cast<std::size_t>(source)][static_cast<std::size_t>(note)] = 0;
+        releaseVel[static_cast<std::size_t>(note)] = static_cast<std::uint8_t>(Clamp(velocity <= 0 ? 64 : velocity, 1, 127));
         Sync();
     }
     void AllKeysUp() {
@@ -119,18 +124,39 @@ public:
                 const float* x = &history[0][static_cast<std::size_t>(passed)];
                 const float* y = &history[1][static_cast<std::size_t>(passed)];
                 float l = 0.0f, r = 0.0f;
+#if defined(OREGANA_FOUR)
+                float weights[kTaps];
+                const Float4 mix4 = Four(mix);
+                for (int k = 0; k < kTaps; k += 4) {
+                    const Float4 a4 = Load4(a + k);
+                    const Float4 w4 = a4 + mix4 * (Load4(b + k) - a4);
+                    Store4(weights + k, w4);
+                    const Float4 pL = w4 * Load4(x + k);
+                    const Float4 pR = w4 * Load4(y + k);
+                    l = (((l + pL[0]) + pL[1]) + pL[2]) + pL[3];
+                    r = (((r + pR[0]) + pR[1]) + pR[2]) + pR[3];
+                }
+#else
                 for (int k = 0; k < kTaps; ++k) {
                     const float c = a[k] + mix * (b[k] - a[k]);
                     l += c * x[k];
                     r += c * y[k];
                 }
+#endif
                 left[i] = l;
                 right[i] = r;
                 if (divisions != nullptr)
                     for (int n = 0; n < Engine::kDivisionOutputs; ++n) {
                         const float* z = &history[static_cast<std::size_t>(2 + n)][static_cast<std::size_t>(passed)];
                         float sum = 0.0f;
+#if defined(OREGANA_FOUR)
+                        for (int k = 0; k < kTaps; k += 4) {
+                            const Float4 pZ = Load4(weights + k) * Load4(z + k);
+                            sum = (((sum + pZ[0]) + pZ[1]) + pZ[2]) + pZ[3];
+                        }
+#else
                         for (int k = 0; k < kTaps; ++k) sum += (a[k] + mix * (b[k] - a[k])) * z[k];
+#endif
                         divisions[n][done + i] = sum;
                     }
             }
@@ -180,7 +206,7 @@ private:
                 if (want == is) continue;
                 is = want;
                 if (want) engine.KeyDown(d, note, down);
-                else engine.KeyUp(d, note);
+                else engine.KeyUp(d, note, releaseVel[static_cast<std::size_t>(note)]);
             }
         }
     }
@@ -218,6 +244,7 @@ private:
 
     Engine engine;
     std::array<std::array<std::uint8_t, 128>, kSources> held {};    // each source's keys: the velocity it holds one with, or 0
+    std::array<std::uint8_t, 128> releaseVel {};
     std::array<std::array<bool, 128>, kDivisions> sent {};
     std::uint32_t rate = kEngineRate;
     bool direct = true;

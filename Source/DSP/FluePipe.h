@@ -42,6 +42,7 @@
 #include "DspMath.h"
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 
 namespace oregana {
@@ -54,7 +55,8 @@ struct FlueVoicing {
     double q = 40.0;         // Q of the first resonance
     double jetTransit = 0.33;   // the jet's transit across the cut-up, periods of the note
     double drive = 1.8;      // the jet's swing at the lip in steady speech, jet half-widths
-    double offset = 0.25;    // the lip's offset from the jet's centre, jet half-widths
+    double offset = 0.25;    // the lip's offset from the jet's centre at rest, jet half-widths
+    double stream = 0.0;     // outward deflection carried by steady mouth outflow, jet half-widths
     double noise = 0.06;     // turbulence, jet half-widths
     double chiff = 0.5;      // the wind's first puff into the pipe
     double shedding = 1.5;   // the loss to vortices shed at the lip in steady speech, against the linear losses
@@ -142,17 +144,21 @@ struct FluePipe {
     int jetLength = 4;
     float jetNominal = 1.0f, jetLongest = 1.0f;   // transit at nominal wind and the longest kept, samples
     float jetLowpass = 1.0f, jetGain = 0.0f, offset = 0.0f, source = 0.0f, noise = 0.0f, puff = 0.0f;
+    float biasPole = 0.0f, biasGain = 0.0f, biasCap = 0.0f;   // acoustic-streaming deflection of the jet in steady speech
     float breathPole = 0.0f, breathFloor = 0.0f, breathLow = 0.0f;   // the turbulence's band and its strength there (kBreathLow)
     float shed = 0.0f;
     // The pipe beyond a junction (a chimney, or a harmonic pipe's upper
     // half): its round trip, what the junction passes each way, and its open top.
     int upperLength = 0;
     float upFromBelow = 0.0f, upFromAbove = 0.0f, downFromBelow = 1.0f, downFromAbove = 0.0f;
-    float upperLowpass = 1.0f, upperGain = 0.0f, upperAllpass = 0.0f;
+    float upperLowpass = 1.0f, upperGain = 0.0f, upperAllpass = 0.0f, chimneyArea = 0.0f;
     // The foot and the radiation.
-    float attack = 1.0f, release = 1.0f, radiation = 0.0f;
+    float attack = 1.0f, release = 1.0f, radiation = 0.0f, directMouth = 0.0f;
     float gainLeft = 0.0f, gainRight = 0.0f;
     double air = 0.0;   // the wind it takes at nominal pressure, against an 8' C principal
+    double attackSeconds = 0.008;
+    double palletSeconds = 0.009, footSeconds = 0.008, releaseSeconds = 0.008;
+    float puffNominal = 0.0f, noiseNominal = 0.0f;
     // What a neighbour a metre away hears of this pipe, against its own wave,
     // for each unit of its radiation filter's output (Run, `told`).
     float telling = 0.0f;
@@ -167,15 +173,14 @@ struct FluePipe {
     // to bend), `upperShare` the upper pipe's against the loop's.
     int loopRoom = 1, upperRoom = 0;
     float loopPass = 0.0f, upperShare = 0.0f;
-    float bendNow = 0.0f, bendStep = 0.0f, bendTarget = 0.0f;
+    float bendStep = 0.0f, bendTarget = 0.0f, jetStep = 0.0f, wind = 0.0f;
+    // Sixteen dynamic per-sample states kept contiguous for 4-lane state transpose.
+    float allpassIn = 0.0f, allpassOut = 0.0f, lowpassOut = 0.0f, dcIn = 0.0f;
+    float dcOut = 0.0f, jetOut = 0.0f, jetBias = 0.0f, breathOut = 0.0f;
+    float breathSlow = 0.0f, radiationIn = 0.0f, radiationOut = 0.0f, foot = 0.0f;
+    float filledFrom = 0.0f, puffNow = 0.0f, jetTransit = 1.0f, bendNow = 0.0f;
     float upperOut = 0.0f, upperAllpassIn = 0.0f, upperAllpassOut = 0.0f;
-    float allpassIn = 0.0f, allpassOut = 0.0f, lowpassOut = 0.0f, dcIn = 0.0f, dcOut = 0.0f;
-    float jetOut = 0.0f, radiationIn = 0.0f, radiationOut = 0.0f, breathOut = 0.0f, breathSlow = 0.0f;
-    float foot = 0.0f, wind = 0.0f;       // foot pressure and what the pallet offers it, against nominal
-    float jetTransit = 1.0f, jetStep = 0.0f;
     std::uint32_t random = 1u;
-    float filledFrom = 0.0f;   // the foot's pressure when its wind last began to rise
-    float puffNow = 0.0f;      // the puff's drive: the gap times the pressure gained, or what is left of it
     int quiet = 0;
 
     static constexpr int kTick = 32;   // samples between Tick() calls
@@ -186,7 +191,7 @@ struct FluePipe {
     static constexpr float kLongestJet = 3.0f;   // the transit kept as the wind falls, against nominal
 
     // `resonance` is the tuner's correction: the loop's first resonance
-    // against the note. Buffers needed: loopRoom, jetLength and
+    // against the note. Buffers needed: loopRoom, jetLength + 1 and
     // upperRoom floats.
     void Design(const FlueVoicing& v, double hz, double resonance) {
         const double w = kTwoPi * hz / kPipeRate, wr = w * resonance;
@@ -198,6 +203,7 @@ struct FluePipe {
         const double top = Clamp(std::log2(hz / 4186.0) * 2.0, 0.0, 1.0);
         const double drive = v.drive + top * (Min(v.drive, 2.2) - v.drive);
         const double lip = v.offset * drive / v.drive;
+        const double stream = v.stream * (1.0 - top);
         const double shedding = v.shedding * (1.0 - top);
         const double radius = 0.5 * PipeDiameter(v.scale, hz);
         const double corner = Min(v.corner * kSoundSpeed / (kTwoPi * radius), 0.45 * kPipeRate);
@@ -216,18 +222,20 @@ struct FluePipe {
         detail::DcBlock(dc, w, dcGain, dcLead);
         // One pass is a period of an open pipe and half a period of a stopped one.
         const double pass = (v.stopped ? kPi : kTwoPi) / wr;
-        // The mouth's end correction, 2.9 radii for a mouth a quarter of the
-        // circumference wide and a quarter of that high (Ingerslev and
-        // Frobenius, 1947), there and back.
-        const double mouth = Max(1.1, 2.0 * 2.9 * radius / kSoundSpeed * kPipeRate);
+        // Bound the dispersive end correction carried by the first-order
+        // allpass (Ingerslev and Frobenius, 1947): an open pipe already carries
+        // its top end's radiation reactance in `lowpass` (0.08 * pass ~ 0.5 / w),
+        // whereas a stopped pipe's mouth is its only open end (0.85 / w).
+        const double mouth = Max(1.1, Min(2.0 * 2.9 * radius / kSoundSpeed * kPipeRate, v.stopped ? 0.85 / w : 0.08 * pass));
         const double rest = pass - (lpLag - dcLead) / w;
         loopLength = Max(1, static_cast<int>(std::lround(rest - mouth)));
         allpass = static_cast<float>(detail::AllpassFor(rest - loopLength, w));
         // The bend reads between the loop's samples, four at a time, from
         // one newer than the shortest loop to two older than the longest.
-        const int bendMost = static_cast<int>(pass * kBendMost);
+        const double bendPass = 1.04 * pass;
+        const int bendMost = static_cast<int>(bendPass * kBendMost);
         loopRoom = loopLength + bendMost + 4;
-        loopPass = loopLength >= bendMost + 3 ? static_cast<float>(pass) : 0.0f;
+        loopPass = loopLength >= bendMost + 3 ? static_cast<float>(bendPass) : 0.0f;
         upperRoom = 0;
         upperShare = 0.0f;
         lowpass = static_cast<float>(lp);
@@ -264,44 +272,58 @@ struct FluePipe {
         // g / (1 + g), and the jet must supply what the pass loses of it,
         // (1 - g) / g, and what the lip sheds, `shedding` times as much: the
         // fundamental of r |r| is 8 / (3 pi) of its amplitude squared. The
-        // source is sized for that, and the jet's gain for the swing asked for.
+        // jet starts from a small geometric rest offset `lip` (so its slope at
+        // rest starts oscillation easily) and steady mouth outflow pushes it
+        // outward by `stream` (acoustic streaming, Fletcher 1976 / Verge 1997)
+        // as oscillation builds. The source is sized at that steady offset
+        // `lip + stream`.
         const double g = walls * lpGain * dcGain;
-        const double fundamental = JetFundamental(drive, lip);
+        const double fundamental = JetFundamental(drive, lip + stream);
         const double returning = g / (1.0 + g), lost = (1.0 - g) / g;
         source = static_cast<float>(returning * lost * (1.0 + shedding) / fundamental);
         shed = static_cast<float>(shedding * lost * 3.0 * kPi / (8.0 * returning));
         jetGain = static_cast<float>(drive / (returning * jetLpGain * readGain));
         offset = static_cast<float>(lip);
-        noise = static_cast<float>(v.noise);
+        biasPole = static_cast<float>(1.0 - std::exp(-kTwoPi * Min(hz / 15.0, 200.0) / kPipeRate));
+        biasGain = static_cast<float>((kPi / (2.0 * drive)) * stream);
+        biasCap = static_cast<float>(1.5 * drive);
+        directMouth = v.stopped ? 1.0f : 0.0f;
+        noiseNominal = static_cast<float>(v.noise);
+        noise = noiseNominal;
         breathPole = static_cast<float>(1.0 - std::exp(-kTwoPi * kBreathCorner * hz / kPipeRate));
         breathFloor = static_cast<float>(1.0 - std::exp(-kTwoPi * kBreathFloor * hz / kPipeRate));
         // The top octave's short loops cannot carry it either: at 7.4 kHz it
         // threw a pipe to the octave below.
         breathLow = static_cast<float>(kBreathLow * (1.0 - top));
-        puff = static_cast<float>(1.2 * v.chiff);
+        puffNominal = static_cast<float>(1.2 * v.chiff);
 
         // Beyond a junction. Neither a chimney nor a harmonic pipe's upper
         // half is the tuner's to move: the builder cut them for the note.
         if (v.stopped && v.chimney > 0.0) {
             // A wave meeting a bore of s times the area turns back by
             // (1 - s) / (1 + s). The chimney's top radiates as an opening of
-            // its own radius.
+            // its own radius, and its open-end lag shortens the physical tube.
             const double area = v.chimney * v.chimney;
             const double bore = (1.0 - area) / (1.0 + area);
             upFromBelow = static_cast<float>(1.0 + bore);
             upFromAbove = static_cast<float>(-bore);
             downFromBelow = static_cast<float>(bore);
             downFromAbove = static_cast<float>(1.0 - bore);
+            const double opening = Min(kSoundSpeed / (kTwoPi * radius * v.chimney), 0.45 * kPipeRate);
+            const double upLp = 1.0 - std::exp(-kTwoPi * opening / kPipeRate);
+            double upLpGain, upLpLag;
+            detail::OnePole(upLp, w, upLpGain, upLpLag);
             // Its length there and back is a whole number of samples and
             // an allpass for the rest: cut to whole samples alone, it stepped
             // the pipe's pitch by up to 4 cents as the organ was retuned.
-            const double chimney = v.chimneyLength * kPi / w;
+            const double acousticChimney = v.chimneyLength * kPi / w;
+            const double chimney = Max(1.2, acousticChimney - upLpLag / w);
             upperLength = Max(1, static_cast<int>(std::lround(chimney - 1.0)));
-            SetUpperBend(chimney, pass);
-            upperAllpass = static_cast<float>(detail::AllpassFor(Max(chimney - upperLength, 0.1), w));
-            const double opening = Min(kSoundSpeed / (kTwoPi * radius * v.chimney), 0.45 * kPipeRate);
-            upperLowpass = static_cast<float>(1.0 - std::exp(-kTwoPi * opening / kPipeRate));
-            upperGain = static_cast<float>(std::sqrt(perPeriod));
+            SetUpperBend(acousticChimney, pass);
+            upperAllpass = static_cast<float>(detail::AllpassFor(Max(chimney - upperLength, 0.05), w));
+            upperLowpass = static_cast<float>(upLp);
+            upperGain = static_cast<float>(Min(std::sqrt(perPeriod) / upLpGain, 0.9999));
+            chimneyArea = static_cast<float>(area);
         } else if (!v.stopped && v.harmonic > 0.0) {
             // A hole that lets a share h of the pressure out turns a wave
             // back by -h and passes 1 - h (a shunt on a line). The loop above
@@ -326,15 +348,23 @@ struct FluePipe {
             detail::OnePole(1.0 - topPole, w, topGain, topLag);
             upperLowpass = static_cast<float>(1.0 - topPole);
             upperGain = static_cast<float>(Min(perPeriod / topGain, 0.9999));
+            chimneyArea = 0.0f;
         } else {
             upperLength = 0;
+            chimneyArea = 0.0f;
         }
 
         // The foot fills through the pallet and the toe, the faster the
-        // smaller the pipe, and empties through the flue.
-        attackSeconds = v.speech * (0.0012 + 0.35 / hz);
+        // smaller and wider the pipe, and empties through the flue. Narrower
+        // string ranks (v.scale < 0) fill and excite more slowly by Töpfer's
+        // diameter ratio, while wider stopped flutes speak promptly.
+        const double narrow = v.scale < 0.0 ? std::pow(2.0, Clamp(-v.scale, 0.0, 14.0) / 16.0) : 1.0;
+        palletSeconds = Min(0.0090, 0.0007 + 2.0 / hz);
+        footSeconds = v.speech * narrow * Min(0.052, 0.0008 + 1.3 / hz);
+        attackSeconds = palletSeconds + footSeconds;
+        releaseSeconds = 0.004 + 0.5 / hz;
         SetTouch(1.0);
-        release = static_cast<float>(1.0 - std::exp(-1.0 / ((0.004 + 0.5 / hz) * kPipeRate)));
+        SetRelease(1.0);
         radiation = static_cast<float>(std::exp(-kTwoPi * corner / kPipeRate));
         // Wind through the flue: its area goes with the diameter squared.
         air = 4.0 * radius * radius / (0.1555 * 0.1555);
@@ -349,17 +379,26 @@ struct FluePipe {
         telling = static_cast<float>(radius * radius * kPipeRate / (4.0 * kSoundSpeed) * (1.0 - radiation) / radiation);
     }
 
-    // How fast the key opens the pallet: 1 is an ordinary stroke.
+    // How fast the key opens the pallet: 1 is an ordinary stroke (velocity 80).
     void SetTouch(double slowness) {
-        attack = static_cast<float>(1.0 - std::exp(-1.0 / (attackSeconds * slowness * kPipeRate)));
+        const double s = Clamp(slowness, 0.2, 8.0);
+        const double riseSeconds = palletSeconds * s + footSeconds * (0.35 + 0.65 * s);
+        attack = static_cast<float>(1.0 - std::exp(-1.0 / (riseSeconds * kPipeRate)));
+        const double speed = Clamp(std::pow(1.0 / s, 1.15), 0.06, 2.25);
+        puff = static_cast<float>(puffNominal * speed);
     }
+    void SetRelease(double slowness) {
+        const double fallSeconds = releaseSeconds * Clamp(slowness, 0.35, 4.0);
+        release = static_cast<float>(1.0 - std::exp(-1.0 / (fallSeconds * kPipeRate)));
+    }
+    void SetBreath(float scale) { noise = noiseNominal * scale; }
 
     void Clear() {
         for (int i = 0; i < loopRoom; ++i) loop[i] = 0.0f;
-        for (int i = 0; i < jetLength; ++i) jet[i] = 0.0f;
+        for (int i = 0; i <= jetLength; ++i) jet[i] = 0.0f;
         for (int i = 0; i < upperRoom; ++i) upper[i] = 0.0f;
         loopAt = jetAt = upperAt = 0;
-        allpassIn = allpassOut = lowpassOut = dcIn = dcOut = jetOut = radiationIn = radiationOut = upperOut = breathOut = breathSlow = 0.0f;
+        allpassIn = allpassOut = lowpassOut = dcIn = dcOut = jetOut = jetBias = radiationIn = radiationOut = upperOut = breathOut = breathSlow = 0.0f;
         upperAllpassIn = upperAllpassOut = 0.0f;
         foot = wind = filledFrom = puffNow = 0.0f;
         jetTransit = jetLongest;
@@ -441,7 +480,7 @@ struct FluePipe {
         const bool bent = bend != 0.0f || bendBy != 0.0f;
         float upperLp = upperOut, upperApIn = upperAllpassIn, upperApOut = upperAllpassOut;
         float apIn = allpassIn, apOut = allpassOut, lpOut = lowpassOut, blockIn = dcIn, blockOut = dcOut;
-        float jetLp = jetOut, radIn = radiationIn, radOut = radiationOut, pressure = foot, transit = jetTransit, breath = breathOut, slow = breathSlow;
+        float jetLp = jetOut, bias = jetBias, radIn = radiationIn, radOut = radiationOut, pressure = foot, transit = jetTransit, breath = breathOut, slow = breathSlow;
         float filled = filledFrom, pushing = puffNow;
         const float keep = 1.0f - release;
         std::uint32_t seed = random;
@@ -456,16 +495,19 @@ struct FluePipe {
             const float ap = allpass * (x - apOut) + apIn;
             apIn = x;
             apOut = ap;
-            float turned = ap;
+            float turned = ap, topFlow = 0.0f;
             if (upperTrip > 0) {
                 const float stored = bent ? Bent(upperBuffer, upperSize, upperWrite, upperTrip, share * bend) : upperBuffer[upperRead];
                 const float back = upperAllpass * (stored - upperApOut) + upperApIn;
                 upperApIn = stored;
                 upperApOut = back;
-                upperLp += upperLowpass * (upFromBelow * ap + upFromAbove * back - upperLp);
-                upperBuffer[upperWrite] = -upperGain * upperLp;
+                const float intoUpper = upFromBelow * ap + upFromAbove * back;
+                upperLp += upperLowpass * (intoUpper - upperLp);
+                const float up = -upperGain * upperLp;
+                upperBuffer[upperWrite] = up;
                 if (++upperWrite == upperSize) upperWrite = 0;
                 if (++upperRead == upperSize) upperRead = 0;
+                topFlow = chimneyArea * (intoUpper - up);
                 turned = downFromBelow * ap + downFromAbove * back;
             }
             lpOut += lowpass * (turned - lpOut);
@@ -475,14 +517,15 @@ struct FluePipe {
             blockOut = returned;
 
             jetBuffer[jetWrite] = returned;
+            if (jetWrite == 0) jetBuffer[jetLength] = returned;
             float read = static_cast<float>(jetWrite) - transit;
             if (read < 0.0f) read += jetSize;
             // A read just under 0 rounds up to the buffer's length as a float.
             int older = static_cast<int>(read);
             if (older >= jetLength) older = 0;
-            const int newer = older + 1 == jetLength ? 0 : older + 1;
             const float between = read - static_cast<float>(older);
-            const float deflection = jetBuffer[older] + between * (jetBuffer[newer] - jetBuffer[older]);
+            const float* const jp = jetBuffer + older;
+            const float deflection = jp[0] + between * (jp[1] - jp[0]);
             if (++jetWrite == jetLength) jetWrite = 0;
             jetLp += jetLowpass * (deflection - jetLp);
 
@@ -499,7 +542,10 @@ struct FluePipe {
             // as the foot empties: cut off, it ended with the same step.
             if (gap > 0.0f) pushing = gap * (pressure - filled);
             else pushing = pushing > 1.0e-20f ? pushing * keep : 0.0f;
-            const float blown = -source * pressure * JetShape(jetGain * jetLp + offset + turbulence) + puff * pushing;
+            const float jetSwing = jetGain * jetLp;
+            const float jetRect = Abs(jetSwing);
+            bias += biasPole * ((jetRect < biasCap ? jetRect : biasCap) * biasGain - bias);
+            const float blown = -source * pressure * JetShape(jetSwing + offset + bias + turbulence) + puff * pushing;
             float leaving = returned + blown - shed * Abs(returned) * returned;
             // The pressure a neighbour makes at the mouth enters as a wave.
             if (heard != nullptr) leaving += heard[i];
@@ -510,7 +556,11 @@ struct FluePipe {
 
             // The mouth's flow radiates as its rate of change up to the
             // corner where the opening is a wavelength round, evenly above.
-            const float flow = returned + leaving;
+            // On stopped pipes, the mouth radiates the jet's direct volume
+            // flow at even-harmonic antiresonances (Fletcher & Rossing, eq.
+            // 16.6); on a chimney flute, the open chimney top radiates too.
+            float flow = (returned + leaving) + directMouth * blown;
+            if (upperTrip > 0) flow += topFlow;
             radOut = radiation * (radOut + flow - radIn);
             radIn = flow;
             if (told != nullptr) told[i] = telling * radOut;
@@ -530,6 +580,7 @@ struct FluePipe {
         dcIn = blockIn;
         dcOut = blockOut;
         jetOut = jetLp;
+        jetBias = bias;
         breathOut = breath;
         breathSlow = slow;
         radiationIn = radIn;
@@ -542,72 +593,236 @@ struct FluePipe {
     }
 
 #if defined(OREGANA_FOUR)
+    // Pre-packed 4-pipe parameter block stored in the Engine (8-byte safe, unaligned).
+    struct FluePack {
+        FluePipe* pipe[4] {};
+        float* loopBuffer[4] {};
+        float* jetBuffer[4] {};
+        float* upperBuffer[4] {};
+        int jetCount[4] {}, loopSize[4] {}, upperTrip[4] {}, room[4] {}, upperSize[4] {};
+        PackedFloat4 allpass, lowpass, loopGain, dcPole, jetLowpass, jetGain;
+        PackedFloat4 offset, source, noise, biasPole, biasGain, biasCap;
+        PackedFloat4 directMouth, puff, shed, radiation, keep, jetSize;
+        PackedFloat4 breathPole, breathFloor, breathLow, attack, release;
+        PackedFloat4 upperShare, upFromBelow, upFromAbove, downFromBelow, downFromAbove;
+        PackedFloat4 upperLowpass, upperGain, upperAllpass, chimneyArea, telling;
+    };
+
+#if defined(__GNUC__) || defined(__clang__)
+    __attribute__((noinline))
+#endif
+    static void PackFour(FluePack& pack, FluePipe* const pipe[4]) {
+#define OREGANA_PACK_FIELD(field) \
+    Store4(pack.field, Float4 { pipe[0]->field, pipe[1]->field, pipe[2]->field, pipe[3]->field })
+        for (int l = 0; l < 4; ++l) {
+            pack.pipe[l] = pipe[l];
+            pack.loopBuffer[l] = pipe[l]->loop;
+            pack.jetBuffer[l] = pipe[l]->jet;
+            pack.upperBuffer[l] = pipe[l]->upper;
+            pack.jetCount[l] = pipe[l]->jetLength;
+            pack.loopSize[l] = pipe[l]->loopLength;
+            pack.upperTrip[l] = pipe[l]->upperLength;
+            pack.room[l] = pipe[l]->loopRoom;
+            pack.upperSize[l] = pipe[l]->upperRoom;
+        }
+        OREGANA_PACK_FIELD(allpass);
+        OREGANA_PACK_FIELD(lowpass);
+        OREGANA_PACK_FIELD(loopGain);
+        OREGANA_PACK_FIELD(dcPole);
+        OREGANA_PACK_FIELD(jetLowpass);
+        OREGANA_PACK_FIELD(jetGain);
+        OREGANA_PACK_FIELD(offset);
+        OREGANA_PACK_FIELD(source);
+        OREGANA_PACK_FIELD(noise);
+        OREGANA_PACK_FIELD(biasPole);
+        OREGANA_PACK_FIELD(biasGain);
+        OREGANA_PACK_FIELD(biasCap);
+        OREGANA_PACK_FIELD(directMouth);
+        OREGANA_PACK_FIELD(puff);
+        OREGANA_PACK_FIELD(shed);
+        OREGANA_PACK_FIELD(radiation);
+        const Float4 fall = { pipe[0]->release, pipe[1]->release, pipe[2]->release, pipe[3]->release };
+        Store4(pack.release, fall);
+        Store4(pack.keep, Four(1.0f) - fall);
+        Store4(pack.jetSize, Float4 { static_cast<float>(pipe[0]->jetLength), static_cast<float>(pipe[1]->jetLength),
+                                      static_cast<float>(pipe[2]->jetLength), static_cast<float>(pipe[3]->jetLength) });
+        OREGANA_PACK_FIELD(breathPole);
+        OREGANA_PACK_FIELD(breathFloor);
+        OREGANA_PACK_FIELD(breathLow);
+        OREGANA_PACK_FIELD(attack);
+        OREGANA_PACK_FIELD(upperShare);
+        OREGANA_PACK_FIELD(upFromBelow);
+        OREGANA_PACK_FIELD(upFromAbove);
+        OREGANA_PACK_FIELD(downFromBelow);
+        OREGANA_PACK_FIELD(downFromAbove);
+        OREGANA_PACK_FIELD(upperLowpass);
+        OREGANA_PACK_FIELD(upperGain);
+        OREGANA_PACK_FIELD(upperAllpass);
+        OREGANA_PACK_FIELD(chimneyArea);
+        OREGANA_PACK_FIELD(telling);
+#undef OREGANA_PACK_FIELD
+    }
+
+    template <bool Upper, bool Hears>
+    static void RunFourPacked(const FluePack& pack, float* const out[4], int frames, const float* const heard[4] = nullptr,
+                              float* const told[4] = nullptr) {
+        bool bent = false;
+        for (int l = 0; l < 4; ++l) bent = bent || pack.pipe[l]->bendNow != 0.0f || pack.pipe[l]->bendStep != 0.0f;
+        if (bent) RunFourPackedAs<Upper, Hears, true>(pack, out, frames, heard, told);
+        else RunFourPackedAs<Upper, Hears, false>(pack, out, frames, heard, told);
+    }
+
     // Run for four pipes at once, lane for lane the same arithmetic. `Upper`:
     // all four have a pipe beyond a junction, else none has. `Hears`: all
     // four hear neighbours and tell them, else none does.
     template <bool Upper, bool Hears>
     static void RunFour(FluePipe* const pipe[4], float* const out[4], int frames, const float* const heard[4] = nullptr,
                         float* const told[4] = nullptr) {
-        bool bent = false;
-        for (int l = 0; l < 4; ++l) bent = bent || pipe[l]->bendNow != 0.0f || pipe[l]->bendStep != 0.0f;
-        if (bent) RunFourAs<Upper, Hears, true>(pipe, out, frames, heard, told);
-        else RunFourAs<Upper, Hears, false>(pipe, out, frames, heard, told);
+        FluePack pack;
+        PackFour(pack, pipe);
+        RunFourPacked<Upper, Hears>(pack, out, frames, heard, told);
     }
 
     // `Bends`: the loops are read between their samples, where the air's
     // bend has them; else none is bent, and each is read where it was made.
     template <bool Upper, bool Hears, bool Bends>
-    static void RunFourAs(FluePipe* const pipe[4], float* const out[4], int frames, const float* const heard[4],
-                          float* const told[4]) {
-#define OREGANA_LANES(field) Float4 { pipe[0]->field, pipe[1]->field, pipe[2]->field, pipe[3]->field }
-        const Float4 allpassC = OREGANA_LANES(allpass), lowpassC = OREGANA_LANES(lowpass), loopGainC = OREGANA_LANES(loopGain);
-        const Float4 dcPoleC = OREGANA_LANES(dcPole), jetLowpassC = OREGANA_LANES(jetLowpass), jetGainC = OREGANA_LANES(jetGain);
-        const Float4 offsetC = OREGANA_LANES(offset), sourceC = OREGANA_LANES(source), noiseC = OREGANA_LANES(noise);
-        const Float4 puffC = OREGANA_LANES(puff), shedC = OREGANA_LANES(shed), radiationC = OREGANA_LANES(radiation);
-        const Float4 upFromBelowC = OREGANA_LANES(upFromBelow), upFromAboveC = OREGANA_LANES(upFromAbove);
-        const Float4 downFromBelowC = OREGANA_LANES(downFromBelow), downFromAboveC = OREGANA_LANES(downFromAbove);
-        const Float4 upperLowpassC = OREGANA_LANES(upperLowpass), upperGainC = OREGANA_LANES(upperGain), upperAllpassC = OREGANA_LANES(upperAllpass);
-        const Float4 target = OREGANA_LANES(wind), rise = OREGANA_LANES(attack), fall = OREGANA_LANES(release);
-        const Float4 tellingC = OREGANA_LANES(telling);
-        Float4 upperLp = OREGANA_LANES(upperOut), upperApIn = OREGANA_LANES(upperAllpassIn), upperApOut = OREGANA_LANES(upperAllpassOut);
-        Float4 apIn = OREGANA_LANES(allpassIn), apOut = OREGANA_LANES(allpassOut), lpOut = OREGANA_LANES(lowpassOut);
-        Float4 blockIn = OREGANA_LANES(dcIn), blockOut = OREGANA_LANES(dcOut), jetLp = OREGANA_LANES(jetOut);
-        Float4 breath = OREGANA_LANES(breathOut), slow = OREGANA_LANES(breathSlow);
-        const Float4 breathPoleC = OREGANA_LANES(breathPole), breathFloorC = OREGANA_LANES(breathFloor), breathLowC = OREGANA_LANES(breathLow);
-        Float4 radIn = OREGANA_LANES(radiationIn), radOut = OREGANA_LANES(radiationOut), pressure = OREGANA_LANES(foot);
-        Float4 filled = OREGANA_LANES(filledFrom), pushing = OREGANA_LANES(puffNow);
-        const Float4 keep = Four(1.0f) - fall;
-#undef OREGANA_LANES
+    static void RunFourPackedAs(const FluePack& pack, float* const out[4], int frames, const float* const heard[4],
+                                float* const told[4]) {
+        FluePipe* const p0 = pack.pipe[0];
+        FluePipe* const p1 = pack.pipe[1];
+        FluePipe* const p2 = pack.pipe[2];
+        FluePipe* const p3 = pack.pipe[3];
+
+        const Float4 target { p0->wind, p1->wind, p2->wind, p3->wind };
+        const Float4 stepC { p0->jetStep, p1->jetStep, p2->jetStep, p3->jetStep };
+
+        Float4 apIn = Load4(&p0->allpassIn), apOut = Load4(&p1->allpassIn);
+        Float4 lpOut = Load4(&p2->allpassIn), blockIn = Load4(&p3->allpassIn);
+        Transpose4x4(apIn, apOut, lpOut, blockIn);
+
+        Float4 blockOut = Load4(&p0->dcOut), jetLp = Load4(&p1->dcOut);
+        Float4 bias = Load4(&p2->dcOut), breath = Load4(&p3->dcOut);
+        Transpose4x4(blockOut, jetLp, bias, breath);
+
+        Float4 slow = Load4(&p0->breathSlow), radIn = Load4(&p1->breathSlow);
+        Float4 radOut = Load4(&p2->breathSlow), pressure = Load4(&p3->breathSlow);
+        Transpose4x4(slow, radIn, radOut, pressure);
+
+        Float4 filled = Load4(&p0->filledFrom), pushing = Load4(&p1->filledFrom);
+        Float4 transit = Load4(&p2->filledFrom), bend = Load4(&p3->filledFrom);
+        Transpose4x4(filled, pushing, transit, bend);
+
+        const Float4 bendBy = [&]() {
+            if constexpr (Bends) return Float4 { p0->bendStep, p1->bendStep, p2->bendStep, p3->bendStep };
+            else return Four(0.0f);
+        }();
+        const Float4 share = [&]() {
+            if constexpr (Upper && Bends) return Load4(pack.upperShare);
+            else return Four(0.0f);
+        }();
+        Float4 upperLp = [&]() {
+            if constexpr (Upper) return Float4 { p0->upperOut, p1->upperOut, p2->upperOut, p3->upperOut };
+            else return Four(0.0f);
+        }();
+        Float4 upperApIn = [&]() {
+            if constexpr (Upper) return Float4 { p0->upperAllpassIn, p1->upperAllpassIn, p2->upperAllpassIn, p3->upperAllpassIn };
+            else return Four(0.0f);
+        }();
+        Float4 upperApOut = [&]() {
+            if constexpr (Upper) return Float4 { p0->upperAllpassOut, p1->upperAllpassOut, p2->upperAllpassOut, p3->upperAllpassOut };
+            else return Four(0.0f);
+        }();
+
         const Float4 zero = Four(0.0f), one = Four(1.0f);
-        float* loopBuffer[4];
-        float* jetBuffer[4];
-        float* upperBuffer[4];
-        int at[4], from[4], upperWrite[4], upperRead[4], loopSize[4], upperTrip[4], room[4], upperSize[4];
+        int at[4], from[4], upperWrite[4], upperRead[4];
+        float* const loopBase[4] = { pack.loopBuffer[0], pack.loopBuffer[1], pack.loopBuffer[2], pack.loopBuffer[3] };
+        float* const loopEnd[4] = {
+            loopBase[0] + pack.room[0], loopBase[1] + pack.room[1], loopBase[2] + pack.room[2], loopBase[3] + pack.room[3]
+        };
+        float* loopWritePtr[4];
+        float* loopReadPtr[4];
         for (int l = 0; l < 4; ++l) {
-            loopBuffer[l] = pipe[l]->loop;
-            jetBuffer[l] = pipe[l]->jet;
-            upperBuffer[l] = pipe[l]->upper;
-            at[l] = pipe[l]->loopAt;
-            upperWrite[l] = pipe[l]->upperAt;
-            loopSize[l] = pipe[l]->loopLength;
-            upperTrip[l] = pipe[l]->upperLength;
-            room[l] = pipe[l]->loopRoom;
-            upperSize[l] = pipe[l]->upperRoom;
-            from[l] = at[l] - loopSize[l];
-            if (from[l] < 0) from[l] += room[l];
-            upperRead[l] = upperWrite[l] - upperTrip[l];
-            if (upperRead[l] < 0) upperRead[l] += upperSize[l];
+            at[l] = pack.pipe[l]->loopAt;
+            from[l] = at[l] - pack.loopSize[l];
+            if (from[l] < 0) from[l] += pack.room[l];
+            loopWritePtr[l] = loopBase[l] + at[l];
+            loopReadPtr[l] = loopBase[l] + from[l];
+            if constexpr (Upper) {
+                upperWrite[l] = pack.pipe[l]->upperAt;
+                upperRead[l] = upperWrite[l] - pack.upperTrip[l];
+                if (upperRead[l] < 0) upperRead[l] += pack.upperSize[l];
+            }
         }
-        Float4 bend = { pipe[0]->bendNow, pipe[1]->bendNow, pipe[2]->bendNow, pipe[3]->bendNow };
-        const Float4 bendBy = { pipe[0]->bendStep, pipe[1]->bendStep, pipe[2]->bendStep, pipe[3]->bendStep };
-        const Float4 share = { pipe[0]->upperShare, pipe[1]->upperShare, pipe[2]->upperShare, pipe[3]->upperShare };
-        Int4 jetWrite = { pipe[0]->jetAt, pipe[1]->jetAt, pipe[2]->jetAt, pipe[3]->jetAt };
-        const Int4 jetCount = { pipe[0]->jetLength, pipe[1]->jetLength, pipe[2]->jetLength, pipe[3]->jetLength };
-        const Float4 jetSize = ToFloat(jetCount);
-        Float4 transit = { pipe[0]->jetTransit, pipe[1]->jetTransit, pipe[2]->jetTransit, pipe[3]->jetTransit };
-        const Float4 step = { pipe[0]->jetStep, pipe[1]->jetStep, pipe[2]->jetStep, pipe[3]->jetStep };
-        UInt4 seed = { pipe[0]->random, pipe[1]->random, pipe[2]->random, pipe[3]->random };
-        for (int i = 0; i < frames; ++i) {
+        float* upBase[4] {};
+        float* upEnd[4] {};
+        float* upWritePtr[4] {};
+        float* upReadPtr[4] {};
+        if constexpr (Upper) {
+            for (int l = 0; l < 4; ++l) {
+                upBase[l] = pack.upperBuffer[l];
+                upEnd[l] = upBase[l] + pack.upperSize[l];
+                if constexpr (!Bends) {
+                    upWritePtr[l] = upBase[l] + upperWrite[l];
+                    upReadPtr[l] = upBase[l] + upperRead[l];
+                }
+            }
+        }
+
+        Int4 jetWrite = { p0->jetAt, p1->jetAt, p2->jetAt, p3->jetAt };
+        const Int4 jetCount = { pack.jetCount[0], pack.jetCount[1], pack.jetCount[2], pack.jetCount[3] };
+        const Float4 jetSize = Load4(pack.jetSize);
+        UInt4 seed = { p0->random, p1->random, p2->random, p3->random };
+
+        const Float4 allpassC = Load4(pack.allpass), lowpassC = Load4(pack.lowpass), loopGainC = Load4(pack.loopGain);
+        const Float4 dcPoleC = Load4(pack.dcPole), jetLowpassC = Load4(pack.jetLowpass), jetGainC = Load4(pack.jetGain);
+        const Float4 offsetC = Load4(pack.offset), sourceC = Load4(pack.source), noiseC = Load4(pack.noise);
+        const Float4 biasPoleC = Load4(pack.biasPole), biasGainC = Load4(pack.biasGain), biasCapC = Load4(pack.biasCap);
+        const Float4 directMouthC = Load4(pack.directMouth), puffC = Load4(pack.puff), shedC = Load4(pack.shed);
+        const Float4 radiationC = Load4(pack.radiation), keep = Load4(pack.keep);
+        const Float4 rise = Load4(pack.attack), fall = Load4(pack.release);
+        const Float4 breathPoleC = Load4(pack.breathPole), breathFloorC = Load4(pack.breathFloor), breathLowC = Load4(pack.breathLow);
+        const Float4 chimneyAreaC = [&]() {
+            if constexpr (Upper) return Load4(pack.chimneyArea);
+            else return Four(0.0f);
+        }();
+        const Float4 upFromBelowC = [&]() {
+            if constexpr (Upper) return Load4(pack.upFromBelow);
+            else return Four(0.0f);
+        }();
+        const Float4 upFromAboveC = [&]() {
+            if constexpr (Upper) return Load4(pack.upFromAbove);
+            else return Four(0.0f);
+        }();
+        const Float4 downFromBelowC = [&]() {
+            if constexpr (Upper) return Load4(pack.downFromBelow);
+            else return Four(0.0f);
+        }();
+        const Float4 downFromAboveC = [&]() {
+            if constexpr (Upper) return Load4(pack.downFromAbove);
+            else return Four(0.0f);
+        }();
+        const Float4 upperLowpassC = [&]() {
+            if constexpr (Upper) return Load4(pack.upperLowpass);
+            else return Four(0.0f);
+        }();
+        const Float4 upperGainC = [&]() {
+            if constexpr (Upper) return Load4(pack.upperGain);
+            else return Four(0.0f);
+        }();
+        const Float4 upperAllpassC = [&]() {
+            if constexpr (Upper) return Load4(pack.upperAllpass);
+            else return Four(0.0f);
+        }();
+        const Float4 tellingC = [&]() {
+            if constexpr (Hears) return Load4(pack.telling);
+            else return Four(0.0f);
+        }();
+
+        const auto step = [&](int sampleIndex)
+#if defined(__GNUC__) || defined(__clang__)
+                              __attribute__((always_inline))
+#endif
+            -> Float4 {
             const Float4 gap = target - pressure;
             const Int4 filling = gap > zero;
             pressure += gap * Choose(filling, rise, fall);
@@ -615,27 +830,42 @@ struct FluePipe {
             pushing = Choose(filling, gap * (pressure - filled), Where(pushing > Four(1.0e-20f), pushing * keep));
 
             Float4 x;
-            if (Bends) x = BentFour(loopBuffer, room, at, loopSize, bend);
-            else x = Float4 { loopBuffer[0][from[0]], loopBuffer[1][from[1]], loopBuffer[2][from[2]], loopBuffer[3][from[3]] };
+            if constexpr (Bends) {
+                x = BentFour(pack.loopBuffer, pack.room, at, pack.loopSize, bend);
+            } else {
+                x = Float4 { *loopReadPtr[0], *loopReadPtr[1], *loopReadPtr[2], *loopReadPtr[3] };
+            }
             const Float4 ap = allpassC * (x - apOut) + apIn;
             apIn = x;
             apOut = ap;
-            Float4 turned = ap;
-            if (Upper) {
+            Float4 turned = ap, topFlow = zero;
+            if constexpr (Upper) {
                 Float4 stored;
-                if (Bends) stored = BentFour(upperBuffer, upperSize, upperWrite, upperTrip, share * bend);
-                else stored = Float4 { upperBuffer[0][upperRead[0]], upperBuffer[1][upperRead[1]], upperBuffer[2][upperRead[2]],
-                                       upperBuffer[3][upperRead[3]] };
+                if constexpr (Bends) {
+                    stored = BentFour(pack.upperBuffer, pack.upperSize, upperWrite, pack.upperTrip, share * bend);
+                } else {
+                    stored = Float4 { *upReadPtr[0], *upReadPtr[1], *upReadPtr[2], *upReadPtr[3] };
+                }
                 const Float4 back = upperAllpassC * (stored - upperApOut) + upperApIn;
                 upperApIn = stored;
                 upperApOut = back;
-                upperLp += upperLowpassC * (upFromBelowC * ap + upFromAboveC * back - upperLp);
+                const Float4 intoUpper = upFromBelowC * ap + upFromAboveC * back;
+                upperLp += upperLowpassC * (intoUpper - upperLp);
                 const Float4 up = -upperGainC * upperLp;
-                for (int l = 0; l < 4; ++l) {
-                    upperBuffer[l][upperWrite[l]] = up[l];
-                    if (++upperWrite[l] == upperSize[l]) upperWrite[l] = 0;
-                    if (++upperRead[l] == upperSize[l]) upperRead[l] = 0;
+                if constexpr (Bends) {
+                    for (int l = 0; l < 4; ++l) {
+                        pack.upperBuffer[l][upperWrite[l]] = up[l];
+                        if (++upperWrite[l] == pack.upperSize[l]) upperWrite[l] = 0;
+                        if (++upperRead[l] == pack.upperSize[l]) upperRead[l] = 0;
+                    }
+                } else {
+                    for (int l = 0; l < 4; ++l) {
+                        *upWritePtr[l] = up[l];
+                        if (++upWritePtr[l] == upEnd[l]) upWritePtr[l] = upBase[l];
+                        if (++upReadPtr[l] == upEnd[l]) upReadPtr[l] = upBase[l];
+                    }
                 }
+                topFlow = chimneyAreaC * (intoUpper - up);
                 turned = downFromBelowC * ap + downFromAboveC * back;
             }
             lpOut += lowpassC * (turned - lpOut);
@@ -644,79 +874,139 @@ struct FluePipe {
             blockIn = passed;
             blockOut = returned;
 
-            for (int l = 0; l < 4; ++l) jetBuffer[l][jetWrite[l]] = returned[l];
+            for (int l = 0; l < 4; ++l) {
+                float* const jb = pack.jetBuffer[l];
+                const int jw = jetWrite[l];
+                jb[jw] = returned[l];
+                if (jw == 0) jb[pack.jetCount[l]] = returned[l];
+            }
             Float4 read = ToFloat(jetWrite) - transit;
             read += Where(read < zero, jetSize);
             // A read just under 0 rounds up to the buffer's length as a float.
             Int4 older = Truncated(read);
             older &= ~(older >= jetCount);
-            Int4 newer = older + 1;
-            newer &= ~(newer == jetCount);
             const Float4 between = read - ToFloat(older);
-            const Float4 early = { jetBuffer[0][older[0]], jetBuffer[1][older[1]], jetBuffer[2][older[2]], jetBuffer[3][older[3]] };
-            const Float4 late = { jetBuffer[0][newer[0]], jetBuffer[1][newer[1]], jetBuffer[2][newer[2]], jetBuffer[3][newer[3]] };
+            const float* const jp0 = pack.jetBuffer[0] + older[0];
+            const float* const jp1 = pack.jetBuffer[1] + older[1];
+            const float* const jp2 = pack.jetBuffer[2] + older[2];
+            const float* const jp3 = pack.jetBuffer[3] + older[3];
+            const Float4 early { jp0[0], jp1[0], jp2[0], jp3[0] };
+            const Float4 late { jp0[1], jp1[1], jp2[1], jp3[1] };
             const Float4 deflection = early + between * (late - early);
             jetWrite += 1;
             jetWrite &= ~(jetWrite == jetCount);
-            transit += step;
+            transit += stepC;
             const Float4 white = NextNoise(seed);
             jetLp += jetLowpassC * (deflection - jetLp);
 
             breath += breathPoleC * (white - breath);
             slow += breathFloorC * (white - slow);
             const Float4 turbulence = noiseC * (white + breathLowC * (breath - slow));
-            const Float4 swing = jetGainC * jetLp + offsetC + turbulence;
+            const Float4 jetSwing = jetGainC * jetLp;
+            const Float4 jetRect = Abs(jetSwing);
+            bias += biasPoleC * (Choose(jetRect < biasCapC, jetRect, biasCapC) * biasGainC - bias);
+            const Float4 swing = jetSwing + offsetC + bias + turbulence;
             const Float4 swing2 = swing * swing;
             const Float4 shape = Choose(swing > Four(3.0f), one,
                                         Choose(swing < Four(-3.0f), -one, swing * (27.0f + swing2) / (27.0f + 9.0f * swing2)));
             const Float4 blown = -sourceC * pressure * shape + puffC * pushing;
             Float4 leaving = returned + blown - shedC * Abs(returned) * returned;
-            if (Hears) leaving += Float4 { heard[0][i], heard[1][i], heard[2][i], heard[3][i] };
-            for (int l = 0; l < 4; ++l) {
-                loopBuffer[l][at[l]] = leaving[l];
-                if (++at[l] == room[l]) at[l] = 0;
-                if (++from[l] == room[l]) from[l] = 0;
+            if constexpr (Hears) leaving += Float4 { heard[0][sampleIndex], heard[1][sampleIndex], heard[2][sampleIndex], heard[3][sampleIndex] };
+            if constexpr (Bends) {
+                for (int l = 0; l < 4; ++l) {
+                    pack.loopBuffer[l][at[l]] = leaving[l];
+                    if (++at[l] == pack.room[l]) at[l] = 0;
+                    if (++from[l] == pack.room[l]) from[l] = 0;
+                }
+                bend += bendBy;
+            } else {
+                for (int l = 0; l < 4; ++l) {
+                    *loopWritePtr[l] = leaving[l];
+                    if (++loopWritePtr[l] == loopEnd[l]) loopWritePtr[l] = loopBase[l];
+                    if (++loopReadPtr[l] == loopEnd[l]) loopReadPtr[l] = loopBase[l];
+                }
             }
-            if (Bends) bend += bendBy;
 
-            const Float4 flow = returned + leaving;
+            Float4 flow = (returned + leaving) + directMouthC * blown;
+            if constexpr (Upper) flow += topFlow;
             radOut = radiationC * (radOut + flow - radIn);
             radIn = flow;
-            if (Hears) {
-                const Float4 tells = tellingC * radOut;
+            return radOut;
+        };
+
+        int i = 0;
+        for (; i + 4 <= frames; i += 4) {
+            Float4 r0 = step(i);
+            Float4 r1 = step(i + 1);
+            Float4 r2 = step(i + 2);
+            Float4 r3 = step(i + 3);
+            if constexpr (Hears) {
+                Float4 t0 = tellingC * r0;
+                Float4 t1 = tellingC * r1;
+                Float4 t2 = tellingC * r2;
+                Float4 t3 = tellingC * r3;
+                Transpose4x4(t0, t1, t2, t3);
+                Store4(told[0] + i, t0);
+                Store4(told[1] + i, t1);
+                Store4(told[2] + i, t2);
+                Store4(told[3] + i, t3);
+            }
+            Transpose4x4(r0, r1, r2, r3);
+            Store4(out[0] + i, r0);
+            Store4(out[1] + i, r1);
+            Store4(out[2] + i, r2);
+            Store4(out[3] + i, r3);
+        }
+        for (; i < frames; ++i) {
+            const Float4 r = step(i);
+            if constexpr (Hears) {
+                const Float4 tells = tellingC * r;
                 told[0][i] = tells[0];
                 told[1][i] = tells[1];
                 told[2][i] = tells[2];
                 told[3][i] = tells[3];
             }
-            out[0][i] = radOut[0];
-            out[1][i] = radOut[1];
-            out[2][i] = radOut[2];
-            out[3][i] = radOut[3];
+            out[0][i] = r[0];
+            out[1][i] = r[1];
+            out[2][i] = r[2];
+            out[3][i] = r[3];
         }
+
+        Transpose4x4(apIn, apOut, lpOut, blockIn);
+        Store4(&p0->allpassIn, apIn);
+        Store4(&p1->allpassIn, apOut);
+        Store4(&p2->allpassIn, lpOut);
+        Store4(&p3->allpassIn, blockIn);
+
+        Transpose4x4(blockOut, jetLp, bias, breath);
+        Store4(&p0->dcOut, blockOut);
+        Store4(&p1->dcOut, jetLp);
+        Store4(&p2->dcOut, bias);
+        Store4(&p3->dcOut, breath);
+
+        Transpose4x4(slow, radIn, radOut, pressure);
+        Store4(&p0->breathSlow, slow);
+        Store4(&p1->breathSlow, radIn);
+        Store4(&p2->breathSlow, radOut);
+        Store4(&p3->breathSlow, pressure);
+
+        Transpose4x4(filled, pushing, transit, bend);
+        Store4(&p0->filledFrom, filled);
+        Store4(&p1->filledFrom, pushing);
+        Store4(&p2->filledFrom, transit);
+        Store4(&p3->filledFrom, bend);
+
         for (int l = 0; l < 4; ++l) {
-            FluePipe& p = *pipe[l];
-            p.loopAt = at[l];
+            FluePipe& p = *pack.pipe[l];
+            p.loopAt = Bends ? at[l] : static_cast<int>(loopWritePtr[l] - loopBase[l]);
             p.jetAt = jetWrite[l];
-            p.upperAt = upperWrite[l];
-            p.bendNow = bend[l];
-            p.upperOut = upperLp[l];
-            p.upperAllpassIn = upperApIn[l];
-            p.upperAllpassOut = upperApOut[l];
-            p.allpassIn = apIn[l];
-            p.allpassOut = apOut[l];
-            p.lowpassOut = lpOut[l];
-            p.dcIn = blockIn[l];
-            p.dcOut = blockOut[l];
-            p.jetOut = jetLp[l];
-            p.breathOut = breath[l];
-            p.breathSlow = slow[l];
-            p.radiationIn = radIn[l];
-            p.radiationOut = radOut[l];
-            p.foot = pressure[l];
-            p.filledFrom = filled[l];
-            p.puffNow = pushing[l];
-            p.jetTransit = Clamp(transit[l], 0.0f, p.jetLongest);
+            if constexpr (Upper) {
+                p.upperAt = Bends ? upperWrite[l] : static_cast<int>(upWritePtr[l] - upBase[l]);
+                p.upperOut = upperLp[l];
+                p.upperAllpassIn = upperApIn[l];
+                p.upperAllpassOut = upperApOut[l];
+            }
+            p.jetTransit = Clamp(p.jetTransit, 0.0f, p.jetLongest);
             p.random = seed[l];
         }
     }
@@ -781,8 +1071,12 @@ private:
         upperRoom = upperLength + most + 4;
         upperShare = loopPass > 0.0f && upperLength >= most + 3 ? static_cast<float>(trip / pass) : 0.0f;
     }
-
-    double attackSeconds = 0.003;
 };
+
+static_assert(offsetof(FluePipe, dcIn) - offsetof(FluePipe, allpassIn) == 3 * sizeof(float)
+                  && offsetof(FluePipe, breathOut) - offsetof(FluePipe, dcOut) == 3 * sizeof(float)
+                  && offsetof(FluePipe, foot) - offsetof(FluePipe, breathSlow) == 3 * sizeof(float)
+                  && offsetof(FluePipe, bendNow) - offsetof(FluePipe, filledFrom) == 3 * sizeof(float),
+              "FluePipe per-sample state blocks must be contiguous");
 
 } // namespace oregana
