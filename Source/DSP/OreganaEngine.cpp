@@ -379,13 +379,10 @@ void Engine::Reset() {
         const std::uint32_t seed = Hash(static_cast<std::uint32_t>(PipePlace(s.rank, s.key)) + 0x51ED270Bu) | 1u;
         s.waver = 0.0f;
         s.waverRandom = Hash(seed) | 1u;
-        if (s.reed) {
-            reeds[static_cast<std::size_t>(s.index)].Clear();
-            reeds[static_cast<std::size_t>(s.index)].random = seed;
-        } else {
-            flues[static_cast<std::size_t>(s.index)].Clear();
-            flues[static_cast<std::size_t>(s.index)].random = seed;
-        }
+        // Take clears the delay lines and filters before a silent pipe
+        // speaks. A reset silences every slot, so only reseed it here.
+        if (s.reed) reeds[static_cast<std::size_t>(s.index)].random = seed;
+        else flues[static_cast<std::size_t>(s.index)].random = seed;
     }
     active.clear();
     pending.clear();
@@ -397,6 +394,7 @@ void Engine::Reset() {
         open[d].fill(false);
         hang[d].fill(0.0f);
         share[d].fill(0.0f);
+        windUntil[d].fill(0);
         robbed[d].fill(1.0f);
         reservoirs[d].Reset();
         demand[d] = unrest[d] = unrestSlow[d] = 0.0;
@@ -624,6 +622,9 @@ void Engine::UpdateChannel(int division, int key, int late, bool pallet) {
                 wind = Max(wind, static_cast<float>(0.35 + 0.3 * Unit(place, kRunningLeak)));
         }
     }
+    // A closed channel needs its load only while wind that it already sent
+    // is still reaching its pipes. Calculate a new load when it next opens.
+    if (wind == 0.0f && share[d][k] == 0.0f && now >= windUntil[d][k]) return;
     share[d][k] = wind;
 
     const double dead = kDeadShare * controls[kDeadPipes];
@@ -671,6 +672,8 @@ void Engine::Offer(int index, float given, int late, bool pallet) {
     // coupler's lost motion would otherwise leave the pipe sounding.
     const std::uint64_t due = Max(now + s.delay + static_cast<std::uint64_t>(late), s.lastDue);
     s.lastDue = due;
+    auto& until = windUntil[s.division][s.key];
+    until = Max(until, due + 1);
     auto at = pending.end();
     while (at != pending.begin() && (at - 1)->due > due) --at;
     pending.insert(at, { index, due, given, pallet, moved });

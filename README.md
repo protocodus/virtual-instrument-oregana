@@ -62,8 +62,10 @@ now starts with the same samples as a continuously connected output. Previously
 the resampler could replay a short burst from an earlier note. The resampler
 recovers its 64 input samples from the division delay line when a cable is
 connected and processes only the main pair while all division outputs are
-disconnected. Loading a registration or resetting the audio also skips retuning
-closed pipes until they are needed.
+disconnected. Loading registrations and changing wind controls while playing
+retune a closed channel when its key opens. The channel retains its load while
+wind from an earlier key stroke is still on the way. Audio reset clears pipe
+delay lines when their next note begins.
 
 ### 0.12.1 — 2026-11-19 — gentler reeds, and in tune however their wind arrives
 

@@ -213,6 +213,8 @@ private:
 
     // The keys and what they open.
     std::array<std::array<bool, kManualKeys>, kDivisions> played {}, open {};
+    // First sample after every wind change sent by this channel has arrived.
+    std::array<std::array<std::uint64_t, kManualKeys>, kDivisions> windUntil {};
     std::array<std::array<float, kManualKeys>, kDivisions> hang {}, share {}, robbed {}, fullAir {};
     std::array<std::array<float, kManualKeys>, kDivisions> placeLeft {}, placeRight {};
     std::array<float, kManualKeys> touch {};
