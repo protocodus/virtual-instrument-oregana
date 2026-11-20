@@ -55,6 +55,10 @@ and plenty.
 
 ## Version history
 
+### 0.12.3 — 2026-11-20 — Master tuning and repeated notes
+
+Host master tuning now spans its full range at every Pitch setting. A low key below the pedal compass leaves the held bass sounding. Rapidly repeating a ringing pipe keeps its attack at the same sample across host block sizes, and a pipe preserves its neighbour’s delay history.
+
 ### 0.12.2 — 2026-11-20 — reconnecting division outputs
 
 At 44.1, 88.2, 96 and 192 kHz, connecting a dry division output during playing
