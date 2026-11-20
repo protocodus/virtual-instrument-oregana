@@ -4,7 +4,7 @@
 // There is no plug-in yet, so the device stores each control normalised and
 // maps it as the Rack adapter's Push() does (Examples/Oregana/Oregana.cpp):
 // every control of OreganaControls.h by its id, the mod wheel (the crescendo
-// roller), its fine byte and expression (the swell pedal), which Reason
+// roller) and expression (the swell pedal), which Reason
 // automates like them, and, with the editor-only controls since no
 // automation reaches it, Reason's master tune on the organ's Pitch, which the
 // host's settings change. The Rack device has no Crescendo property (its mod
@@ -43,7 +43,7 @@ namespace matrix = protocodus::matrix;
 
 // The engine's controls in their own order, then the Rack's performance
 // controls; the editor-only master tune last.
-enum Extra { kModWheel = kControlCount, kWheelFine, kExpression, kAutomatable, kMasterTune = kAutomatable, kValueCount };
+enum Extra { kModWheel = kControlCount, kExpression, kAutomatable, kMasterTune = kAutomatable, kValueCount };
 
 // The stops of the base patch, Principal 8 (OreganaPresets.h).
 constexpr int kBaseStops[] = { kHwOctave8, kPedSubbass16, kPedOctave8 };
@@ -69,7 +69,6 @@ public:
         for (int i = 0; i < kControlCount; ++i)
             values[static_cast<std::size_t>(i)] = static_cast<float>(ToNormalized(i, kControlInfo[static_cast<std::size_t>(i)].initial));
         values[kModWheel] = 0.0f;
-        values[kWheelFine] = 0.0f;
         values[kExpression] = 1.0f;
         values[kMasterTune] = 0.5f;
         LoadPreset(0);   // Principal 8
@@ -82,7 +81,6 @@ public:
             parameters.push_back({ c.id, c.steps, static_cast<float>(ToNormalized(i, c.initial)) });
         }
         parameters.push_back({ "mod_wheel", 0, 0.0f });
-        parameters.push_back({ "wheel_fine", 0, 0.0f });
         parameters.push_back({ "expression", 0, 1.0f });
         return parameters;
     }
@@ -105,12 +103,17 @@ public:
     }
     float GetParameter(std::size_t index) const override { return values[index]; }
     void SetParameter(std::size_t index, float value) override {
-        values[index] = value;
-        Apply();
+        if (values[index] != value) {
+            values[index] = value;
+            pending = true;
+        }
     }
     // Instrument::Render takes no events, so the block is split at each one,
     // as the Rack device splits its batch at each change.
     void Process(float* left, float* right, int frames, const matrix::Event* events, int count) override {
+        // The host applies a batch of simultaneous control changes before
+        // sounding the first note at this frame.
+        if (pending) Apply();
         int done = 0;
         for (int e = 0; e < count; ++e) {
             const int at = std::clamp(events[e].offset, done, frames);
@@ -129,6 +132,23 @@ public:
         if (state.size() != sizeof values) return;
         std::memcpy(values.data(), state.data(), sizeof values);
         Apply();
+    }
+
+    matrix::Limits LimitsFor(const matrix::Case& c) const override {
+        matrix::Limits limits;
+        const auto& v = c.values;
+        const bool stopDrawn = std::any_of(v.begin(), v.begin() + kStopCount, [](float x) { return x > 0; });
+        const bool audibleDivision = std::any_of(v.begin() + kMuteHauptwerk, v.begin() + kMutePedal + 1,
+                                                [](float x) { return x < .5f; });
+        // The ordinary held-note assertion applies when a registration can
+        // reach the main mix. A silent organ at all-min is a valid result.
+        limits.soundsWhileHeld = (stopDrawn || v[kModWheel] > 0 || v[kCrescendo] > 0) && audibleDivision;
+        // With the blower running or pallets stuck open the organ can sound
+        // after every key is released. A church can also have a long decay.
+        if ((v[kWindSupply] > 0 && v[kBlower] > 0) || v[kCiphers] > 0 || v[kRoom] > 0) {
+            limits.releaseSeconds = -1;
+        }
+        return limits;
     }
 
     // Every other control reaches the pipes, the wind, the keys or the
@@ -225,14 +245,6 @@ public:
         // The church's decay at the top of the range, over the one 8' rank's
         // few high partials, is heard where the church is all there is.
         case kDecayTreble: return Rule(Reach::Held, "", { { kRoom, drawn } });
-        // Oregana.cpp, Push: the fine byte (CC 33) is the low seven bits of
-        // the mod wheel's 14-bit position, at most 127/16383 of the roller's
-        // travel, 0.35 of one of its 45 stages. The roller lets a stage go
-        // only 0.4 of a stage under it (kStageBack), so the fine byte alone
-        // can add a stage but never take it off again; mod_wheel carries the
-        // roller, and Oregana.Instrument holds the wheel as the roller.
-        case kWheelFine:
-            return Rule(Reach::Exempt, "the mod wheel's low seven bits, a third of one of the roller's stages, under its 0.4-stage backlash");
         // A coupler is heard only where the manual it brings has a stop
         // drawn and its keys are not already played; a Pedal coupler, from
         // keys that play a manual with nothing drawn.
@@ -286,20 +298,17 @@ private:
     }
     // Oregana.cpp, COregana::Push.
     void Apply() {
+        pending = false;
         Controls played;
         for (int i = 0; i < kControlCount; ++i) played[i] = FromNormalized(i, values[static_cast<std::size_t>(i)]);
         // Reason's master tune, -100 to +100 cents, on the organ's pitch.
         played[kPitch] *= std::pow(2.0, (200.0 * values[kMasterTune] - 100.0) / 1200.0);
-        double wheel = Unit(values[kModWheel]);
-        const double fine = std::floor(Unit(values[kWheelFine]) * 127 + 0.5);
-        fineWheel = fineWheel || fine != 0;
-        if (fineWheel) wheel = Unit((std::floor(wheel * 127 + 0.5) * 128 + fine) / 16383);
-        instrument->SetControls(played, wheel, Unit(values[kExpression]));
+        instrument->SetControls(played, Unit(values[kModWheel]), Unit(values[kExpression]));
     }
 
     std::unique_ptr<Instrument> instrument;
     std::array<float, kValueCount> values {};
-    bool fineWheel = false;
+    bool pending = false;
 };
 
 } // namespace

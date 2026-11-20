@@ -62,7 +62,8 @@ now starts with the same samples as a continuously connected output. Previously
 the resampler could replay a short burst from an earlier note. The resampler
 recovers its 64 input samples from the division delay line when a cable is
 connected and processes only the main pair while all division outputs are
-disconnected.
+disconnected. Loading a registration or resetting the audio also skips retuning
+closed pipes until they are needed.
 
 ### 0.12.1 — 2026-11-19 — gentler reeds, and in tune however their wind arrives
 
@@ -732,7 +733,10 @@ it still brings on the whole stop list, a chapel organ's too.
   taken up when a key goes down, not when a slider opens.
 - **The bass decay is a little under what Decay Bass asks**: at 2 an 80 Hz
   tail lasts 1.9 times as long, at 0.5 it lasts 0.59 of it.
-- **No parameter matrix yet** (U4). The engine suite checks the extremes of
+- **Parameter-matrix coverage** (U4). The default patch and the all-minimum,
+  all-midpoint and all-maximum configurations run at 44.1, 48 and 96 kHz
+  with block sizes of 1, 64 and 512. The full pairwise and per-preset
+  rotation remains outside the registered release tests. The engine suite checks the extremes of
   every control together, that each control at its other end changes the
   sound and that none clicks when thrown under held notes, the fuzz target
   writes any value to any control, and `Oregana.ParameterReach` (U11) holds

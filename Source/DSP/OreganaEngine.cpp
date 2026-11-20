@@ -434,8 +434,11 @@ void Engine::Reset() {
     pressureSet = controls[kPressure];
     widthSet = controls[kWidth];
     PlaceKeys();
-    Register();
-    for (int i = 0; i < kStopCount; ++i) SetSlider(i, sliderTarget[static_cast<std::size_t>(i)]);
+    // All pallets are closed, pending arrivals are empty and no pipes are
+    // active. Only set the registration here. The next key opening computes
+    // its channel's load and designs any newly requested pipe at its tuning.
+    Register(false);
+    for (int i = 0; i < kStopCount; ++i) SetSlider(i, sliderTarget[static_cast<std::size_t>(i)], false);
     const int supply = static_cast<int>(controls[kWindSupply]);
     spin = supply == kWindBlower ? 1.0 : 0.0;
     stock = supply == kWindOff ? 0.0 : 1.0;
@@ -527,19 +530,20 @@ void Engine::SetCrescendo(double position) {
 
 // What the knobs and the roller want drawn, and what every key then gives.
 // The sliders follow in their own time (Tick).
-void Engine::Register() {
+void Engine::Register(bool updateKeys) {
     for (int i = 0; i < kStopCount; ++i) sliderTarget[static_cast<std::size_t>(i)] = static_cast<float>(controls[i]);
     for (int i = 0; i < kCouplerCount; ++i) coupled[static_cast<std::size_t>(i)] = controls[kCouplerPosHw + i] >= 0.5;
     for (int i = 0; i < stage; ++i) {
         if (kCrescendoOrder[i] < kStopCount) sliderTarget[static_cast<std::size_t>(kCrescendoOrder[i])] = 1.0f;
         else coupled[static_cast<std::size_t>(kCrescendoOrder[i] - kCouplerPosHw)] = true;
     }
-    for (int key = 0; key < kManualKeys; ++key) UpdateKey(key);
+    if (updateKeys)
+        for (int key = 0; key < kManualKeys; ++key) UpdateKey(key);
 }
 
 // A stop's slider at `position`: the wind it leaves its pipes, and, as it
 // opens or shuts, which pipes of the open channels take wind at all.
-void Engine::SetSlider(int stop, float position) {
+void Engine::SetSlider(int stop, float position, bool updateChannels) {
     const auto i = static_cast<std::size_t>(stop);
     const bool was = slider[i] > 0.0f, is = position > 0.0f;
     slider[i] = position;
@@ -549,7 +553,7 @@ void Engine::SetSlider(int stop, float position) {
         opening[static_cast<std::size_t>(kStops[stop].firstRank + r)] = through;
         rankOpen[static_cast<std::size_t>(kStops[stop].firstRank + r)] = is;
     }
-    if (was != is)
+    if (updateChannels && was != is)
         for (int key = 0; key < kDivisionKeys[kStops[stop].division]; ++key) UpdateChannel(kStops[stop].division, key);
 }
 

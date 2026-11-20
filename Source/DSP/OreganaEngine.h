@@ -184,8 +184,8 @@ private:
 
     void Apply(const Controls& before, bool all);
     void PlaceKeys();
-    void Register();
-    void SetSlider(int stop, float position);
+    void Register(bool updateKeys = true);
+    void SetSlider(int stop, float position, bool updateChannels = true);
     void UpdateKey(int key, bool struck = false, int own = -1);
     void UpdateChannel(int division, int key, int late = 0, bool pallet = false);
     void Offer(int slot, float share, int late, bool pallet);

@@ -142,6 +142,13 @@ if(BUILD_TESTING)
     add_test(NAME Oregana.ParameterReach COMMAND OreganaParameterReachTests --reach --jobs 4)
     set_tests_properties(Oregana.ParameterReach PROPERTIES LABELS unit TIMEOUT 1800)
 
+    # The four whole-patch matrix cases each run at three rates and block
+    # sizes. They supplement per-control reach and the engine's extremes.
+    foreach(patch IN ITEMS default all-min all-mid all-max)
+        add_test(NAME Oregana.Matrix.${patch} COMMAND OreganaParameterReachTests --case ${patch})
+        set_tests_properties(Oregana.Matrix.${patch} PROPERTIES LABELS fuzz TIMEOUT 1200)
+    endforeach()
+
     # The Rack's SDK refuses a global whose value is worked out when the
     # module loads (0.5.0d2's first build failed on two). GCC folds std::exp
     # and std::sqrt of constants and hides them, so Clang is asked, with the
