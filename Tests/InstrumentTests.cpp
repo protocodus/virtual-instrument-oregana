@@ -314,6 +314,44 @@ void DivisionOutputsAtEveryRate() {
     }
 }
 
+void ReconnectingDivisionOutputs() {
+    // Both organs play the same registration. One stays cabled, the other
+    // reconnects in mid-note and again after a release while uncabled.
+    for (double rate : {44100., 48000., 88200., 96000., 192000.}) {
+        auto reference = std::make_unique<Instrument>(), switched = std::make_unique<Instrument>();
+        const auto controls = kPresets[0].ToControls();
+        for (auto organ : {reference.get(), switched.get()}) {
+            organ->Prepare(rate);
+            organ->SetControls(controls);
+            organ->Reset();
+            organ->KeyDown(60, 100);
+        }
+        constexpr int frames = 61;   // preserve fractional phases across cable changes
+        using Divisions = std::array<std::array<float, frames>, Engine::kDivisionOutputs>;
+        Divisions always{}, routed{};
+        float* alwaysTo[Engine::kDivisionOutputs];
+        float* routedTo[Engine::kDivisionOutputs];
+        for (std::size_t n = 0; n < always.size(); ++n) {
+            alwaysTo[n] = always[n].data();
+            routedTo[n] = routed[n].data();
+        }
+        float l[frames], r[frames], expectedL[frames], expectedR[frames];
+        bool equal = true, soundingOnReconnect = false;
+        for (int block = 0; block < 1500; ++block) {
+            const bool connected = block < 100 || (block >= 401 && block < 500) || block >= 1490;
+            if (block == 510) { reference->KeyUp(60); switched->KeyUp(60); }
+            reference->Render(expectedL, expectedR, frames, alwaysTo);
+            switched->Render(l, r, frames, connected ? routedTo : nullptr);
+            if (connected) equal = equal && always == routed;
+            equal = equal && std::equal(l, l + frames, expectedL) && std::equal(r, r + frames, expectedR);
+            if (block == 401)
+                for (float x : always[0]) soundingOnReconnect |= std::abs(x) > 1e-5f;
+        }
+        Expect(equal && soundingOnReconnect, "ReconnectingDivisionOutputs",
+               "reconnected divisions and main match continuously cabled output sample for sample, at Hz", rate);
+    }
+}
+
 } // namespace
 
 int main() {
@@ -325,6 +363,7 @@ int main() {
     WheelAndExpression();
     EveryKeySounds();
     DivisionOutputsAtEveryRate();
+    ReconnectingDivisionOutputs();
     std::printf("%d failure(s)\n", failures);
     return failures ? 1 : 0;
 }

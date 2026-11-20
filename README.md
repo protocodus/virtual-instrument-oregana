@@ -55,6 +55,15 @@ and plenty.
 
 ## Version history
 
+### 0.12.2 — 2026-11-20 — reconnecting division outputs
+
+At 44.1, 88.2, 96 and 192 kHz, connecting a dry division output during playing
+now starts with the same samples as a continuously connected output. Previously
+the resampler could replay a short burst from an earlier note. The resampler
+recovers its 64 input samples from the division delay line when a cable is
+connected and processes only the main pair while all division outputs are
+disconnected.
+
 ### 0.12.1 — 2026-11-19 — gentler reeds, and in tune however their wind arrives
 
 - **The cone reeds are voiced gentler.** Every Trumpet, Trompette, Posaune,
@@ -744,15 +753,10 @@ it still brings on the whole stop list, a chapel organ's too.
   (2026-11-13) and taken out, because the resonator then set a reed's
   pitch. Since 0.12.0 the tongue does, and the warming has not been tried
   again.
-- **The trumpets' brightness is 0.12.0's, not yet the ear's.** The owner
-  chose the flow under the tongue by ear in 0.8.0, half way between a dull
-  and a bright trumpet. 0.12.0 keeps that flow, and its tongues make the
-  trumpets brighter than either: nearer a recorded Trumpet 8'
-  ([benchmark](Docs/research/benchmark-burea-2026-11-13.md)) in the bass,
-  where the fourth harmonic now stands 3 dB over the first and the eighth 4
-  under (recorded +2 and +3). That organ is one organ, not a verdict. The
-  shallot has no resonance of its own here, and the Dulcian, Vox humana and
-  Hautbois have been compared with no recording.
+- **Reed measurements cover only some families.** The owner chose the gentler
+  cone reeds in 0.12.1 ([listening record](Docs/decisions.md)). The shallot
+  has no resonance of its own in this model. Recorded comparisons of the
+  Dulcian, Vox humana and Hautbois remain open.
 - **The Krummhorn is dull above its fourth harmonic.** Its octave is as
   recorded since 0.12.0; its fifth to eighth harmonics stand 13 to 33 dB
   under the first, where a recorded one's stand 4 to 11 dB over it in the
@@ -803,9 +807,8 @@ it still brings on the whole stop list, a chapel organ's too.
   100 ms ahead only the bass breathes (at 62 and 123 Hz on a Principal 16',
   measured at Voicing 0.3), not 247 or 494 Hz. Castellengo's "slow"
   attack would give the recorded lead and make every note speak some 100 ms
-  late; how fast the recorded organ's pallets open is not known, and which
-  attack is an ordinary stroke waits for the ear. A reed's boot takes no
-  account of the pallet's speed. And no short note has been compared with a
+  late; how fast the recorded organ's pallets open is not known, and the owner chose the short attack for ordinary strokes. A reed's boot
+  fills through the opening pallet at its key's speed. And no short note has been compared with a
   recording: the one set with known key times holds only notes of 4 s
   ([benchmark](Docs/research/benchmark-ilmenau-2026-11-13.md)).
 - **No mouth tones.** Below the pressure at which it speaks, a flue's jet
@@ -842,11 +845,10 @@ it still brings on the whole stop list, a chapel organ's too.
   Treble is raised; and Room loads as a seat near the organ, as clear as
   Ilmenau's 8.8 m seat, where the measured seats 15 to 17 m away hear the
   organ 11 to 12 dB weaker against the church.
-- **Six listening sets wait for the ear.** The pipes' hearing, the
-  divisions' places and the mechanism's noises were judged on 2026-11-14
-  ([Docs/decisions.md](Docs/decisions.md)); 0.10.0's jet-drive pipes and
-  0.11.0's breath, voicing, tremulant and swell box have not been, nor
-  0.12.0's reeds, and ship as the candidates.
+- **Four listening sets remain open.** The jet-drive flues, default voicing,
+  tremulant and swell box use the documented candidate settings. The owner
+  has selected the breath lead, tongue-led reeds and gentler cone-reed voicing.
+  See the [listening decisions](Docs/decisions.md).
 
 ## Build
 

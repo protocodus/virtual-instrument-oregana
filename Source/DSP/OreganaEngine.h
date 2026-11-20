@@ -130,6 +130,16 @@ public:
     static constexpr int kDivisionOutputs = 2 * kDivisions;
     void Render(float* left, float* right, int frames, float* const* divisions = nullptr);
 
+    // The resampler can be connected in mid-note. Its input then needs the
+    // last Frames samples the delayed division output would have delivered.
+    template <int Frames>
+    void CopyDivisionHistory(std::size_t channel, float* destination) const {
+        static_assert(Frames > 0 && Frames + protocodus::OutputStage<2>::kMaximumDelay <= kApartSize);
+        const int first = apartAt - output.DelaySamples() - Frames;
+        for (int i = 0; i < Frames; ++i)
+            destination[i] = apartLine[channel][static_cast<std::size_t>((first + i) & (kApartSize - 1))];
+    }
+
     // The output stage's look-ahead, samples: a front end reports it to its
     // host as latency.
     int LatencySamples() const { return output.DelaySamples(); }

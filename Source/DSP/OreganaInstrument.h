@@ -57,6 +57,7 @@ public:
         lift.fill(64);
         for (auto& channel : history) channel.fill(0.0f);
         phase = 0;
+        divisionsConnected = false;
     }
 
     void SetControls(const Controls& controls, double wheel = 0.0, double expression = 1.0) {
@@ -100,8 +101,17 @@ public:
             engine.Render(left, right, frames, divisions);
             return;
         }
+        if (frames <= 0) return;
         float* fresher[Engine::kDivisionOutputs];
-        for (int n = 0; n < Engine::kDivisionOutputs; ++n) fresher[n] = &history[static_cast<std::size_t>(2 + n)][kTaps];
+        if (divisions != nullptr) {
+            for (std::size_t n = 0; n < Engine::kDivisionOutputs; ++n) {
+                auto& channel = history[2 + n];
+                if (!divisionsConnected) engine.CopyDivisionHistory<kTaps>(n, channel.data());
+                fresher[n] = &channel[kTaps];
+            }
+        }
+        divisionsConnected = divisions != nullptr;
+        const std::size_t channels = divisionsConnected ? history.size() : 2;
         int done = 0;
         while (frames > 0) {
             const int count = Min(frames, kChunk);
@@ -139,7 +149,10 @@ public:
                         divisions[n][done + i] = sum;
                     }
             }
-            for (auto& channel : history) std::memmove(channel.data(), channel.data() + fresh, kTaps * sizeof(float));
+            for (std::size_t n = 0; n < channels; ++n) {
+                float* samples = history[n].data();
+                std::memmove(samples, samples + fresh, kTaps * sizeof(float));
+            }
             left += count;
             right += count;
             done += count;
@@ -227,6 +240,7 @@ private:
     std::array<std::uint8_t, 128> lift {};   // the velocity each key was last let go with
     std::uint32_t rate = kEngineRate;
     bool direct = true;
+    bool divisionsConnected = false;
     std::uint64_t phase = 0;                                        // the output's place between two engine samples, in 1 / rate
     float phaseScale = 0.0f;
     // The main pair, then the divisions' own outputs.
