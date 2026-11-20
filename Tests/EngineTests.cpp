@@ -1087,6 +1087,25 @@ void ChurchIsThePlayers() {
     }
     Expect(first[0] == 136.0 && first[1] == 272.0, "ChurchIsThePlayers", "the first reflection comes twice as late in a church twice the size, samples", first[1]);
 
+    // Changing a sounding room's width and clearing it takes the selected
+    // late-field width immediately, as in a newly opened room.
+    {
+        auto fresh = std::make_unique<Nave>();
+        for (auto* room : {nave.get(), fresh.get()}) {
+            room->Set(4.0, 1.5, .48, .5, 0.0);
+            room->Clear();
+        }
+        double difference = 0.0;
+        for (int i = 0; i < 8000; ++i) {
+            const float input = i % 43 == 0 ? .5f : 0.0f;
+            float left, right, expectedLeft, expectedRight;
+            nave->Process(input, 0, left, right);
+            fresh->Process(input, 0, expectedLeft, expectedRight);
+            difference = Max(difference, static_cast<double>(Max(Abs(left - expectedLeft), Abs(right - expectedRight))));
+        }
+        Expect(difference == 0.0, "ChurchIsThePlayers", "a cleared room uses its selected stereo width on the first note", difference);
+    }
+
     // A source stood 0.5 m nearer and 2 m lower has its own paths: the
     // floor's reflection is then 0.78 m behind its direct sound, not 0.97 m.
     {

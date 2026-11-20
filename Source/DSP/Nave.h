@@ -179,6 +179,8 @@ public:
         for (auto& ear : directBuffer) ear.fill(0.0f);
         Build(shapes[1], asked);
         fade = 1.0f;
+        lateMid = lateMidAsked;
+        lateSide = lateSideAsked;
         resting = true;
         quietFor = 0;
     }
