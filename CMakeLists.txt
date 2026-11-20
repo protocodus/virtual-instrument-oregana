@@ -149,6 +149,9 @@ if(BUILD_TESTING)
         set_tests_properties(Oregana.Matrix.${patch} PROPERTIES LABELS fuzz TIMEOUT 1200)
     endforeach()
 
+    add_test(NAME Oregana.Matrix.all-max-quiet-wind COMMAND OreganaParameterReachTests --all-max-quiet-wind)
+    set_tests_properties(Oregana.Matrix.all-max-quiet-wind PROPERTIES LABELS fuzz TIMEOUT 1200)
+
     # The Rack's SDK refuses a global whose value is worked out when the
     # module loads (0.5.0d2's first build failed on two). GCC folds std::exp
     # and std::sqrt of constants and hides them, so Clang is asked, with the

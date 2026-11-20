@@ -737,7 +737,10 @@ it still brings on the whole stop list, a chapel organ's too.
   tail lasts 1.9 times as long, at 0.5 it lasts 0.59 of it.
 - **Parameter-matrix coverage** (U4). The default patch and the all-minimum,
   all-midpoint and all-maximum configurations run at 44.1, 48 and 96 kHz
-  with block sizes of 1, 64 and 512. The full pairwise and per-preset
+  with block sizes of 1, 64 and 512. In the largest church the all-maximum
+  case checks the level left by the treading bellows after 32 seconds;
+  turning Wind Noise down must also leave the room below −60 dBFS.
+  The full pairwise and per-preset
   rotation remains outside the registered release tests. The engine suite checks the extremes of
   every control together, that each control at its other end changes the
   sound and that none clicks when thrown under held notes, the fuzz target

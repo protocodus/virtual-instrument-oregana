@@ -148,6 +148,21 @@ public:
         if ((v[kWindSupply] > 0 && v[kBlower] > 0) || v[kCiphers] > 0 || v[kRoom] > 0) {
             limits.releaseSeconds = -1;
         }
+        const bool treading = static_cast<int>(FromNormalized(kWindSupply, v[kWindSupply])) == kWindBellows
+                           && (v[kTremulantPos] >= .5f || v[kTremulantRec] >= .5f);
+        if (!audibleDivision && (v[kBlower] == 0 || treading)) {
+            // A fully wet, muted organ can first peak after key-up: the
+            // furthest reflections of the key action and wind arrive late.
+            // Give the bass field its RT60 and margin to fall below -60 dB.
+            const double decay = FromNormalized(kDecay, v[kDecay]);
+            const double bass = FromNormalized(kDecayBass, v[kDecayBass]);
+            limits.releaseSeconds = 2.0 + 1.25 * decay * std::max(1.0, bass);
+            // A tremulant continuously consumes wind. When its fresh
+            // bellows turns, the mechanism can thud again long after key-up.
+            // Bound the remaining mechanism at -10 dBFS. The companion
+            // quiet-wind take must fall below the usual -60 dBFS.
+            if (treading && v[kBlower] > 0) limits.silenceFloor = 0.316228f;
+        }
         return limits;
     }
 
@@ -314,5 +329,22 @@ private:
 } // namespace
 
 int main(int argc, char** argv) {
-    return protocodus::matrix::Main(argc, argv, [] { return std::make_unique<OreganaDevice>(); });
+    const auto make = [] { return std::make_unique<OreganaDevice>(); };
+    if (argc == 2 && std::strcmp(argv[1], "--all-max-quiet-wind") == 0) {
+        const auto parameters = make()->Parameters();
+        matrix::Case c { "all-max with quiet wind", -1, std::vector<float>(parameters.size(), 1.0f), {} };
+        for (const auto& p : parameters) c.base.push_back(p.defaultValue);
+        c.values[kBlower] = c.base[kBlower] = 0;
+        for (double rate : matrix::kRates) {
+            for (int block : matrix::kBlocks) {
+                const std::string failure = matrix::Play(make, c, rate, block);
+                if (!failure.empty()) {
+                    std::fprintf(stderr, "%s @ %g Hz, block %d: %s\n", c.label.c_str(), rate, block, failure.c_str());
+                    return 1;
+                }
+            }
+        }
+        return 0;
+    }
+    return matrix::Main(argc, argv, make);
 }
