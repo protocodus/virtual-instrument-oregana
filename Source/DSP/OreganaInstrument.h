@@ -189,7 +189,7 @@ private:
             return Max(held[0][n], held[1][n]);
         };
         int lowest = -1;
-        for (int note = 0; note < 128 && lowest < 0; ++note)
+        for (int note = kFirstNote; note < kFirstNote + kPedalKeys && lowest < 0; ++note)
             if (velocity(note)) lowest = note;
         for (int note = 0; note < 128; ++note) {
             const int down = velocity(note);

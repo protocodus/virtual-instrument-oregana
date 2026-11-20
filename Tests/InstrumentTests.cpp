@@ -195,6 +195,28 @@ void PedalFromTheKeyboard() {
     Expect(pedal > 100.0 * kSilent, "PedalFromTheKeyboard", "Split: a key below the split on a Pedal stop", pedal);
 }
 
+void NotesBelowCompassLeaveBassAlone() {
+    Rig expected, actual;
+    for (Rig* rig : {&expected, &actual}) {
+        rig->Set(kPedSubbass16, 1.0);
+        rig->Set(kPedalMode, kPedalBass);
+        rig->organ->KeyDown(43, 95);
+        rig->Play(0.25);
+    }
+    // An unused key immediately below A0 and the minimum MIDI/CV value
+    // neither take the held bass nor retrigger it when released.
+    actual.organ->KeyDown(kFirstNote - 1, 100, 0);
+    actual.organ->KeyDown(0, 120, 1);
+    expected.Play(0.25);
+    actual.Play(0.25);
+    actual.organ->KeyUp(kFirstNote - 1, 0);
+    actual.organ->KeyUp(0, 1);
+    const double bass = expected.Play(0.25);
+    actual.Play(0.25);
+    Expect(bass > 100.0 * kSilent && actual.left == expected.left && actual.right == expected.right,
+           "NotesBelowCompassLeaveBassAlone", "MIDI and CV outside the compass leave a sustained Pedal unchanged", bass);
+}
+
 void TwoSourcesHoldOneKey() {
     Rig rig;
     rig.Set(kHwOctave8, 1.0);
@@ -359,6 +381,7 @@ int main() {
     OtherRates();
     KeyboardPlaysItsManual();
     PedalFromTheKeyboard();
+    NotesBelowCompassLeaveBassAlone();
     TwoSourcesHoldOneKey();
     WheelAndExpression();
     EveryKeySounds();
