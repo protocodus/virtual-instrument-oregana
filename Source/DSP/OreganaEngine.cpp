@@ -665,7 +665,7 @@ void Engine::Offer(int index, float given, int late, bool pallet) {
         if (given == 0.0f) return;
         s.generation = playGeneration;
         s.active = s.resting = s.coupled = false;
-        s.offered = s.share = s.waver = 0.0f;
+        s.offered = s.share = s.waver = s.retouch = 0.0f;
         s.lastDue = 0;
         const std::uint32_t seed = Hash(static_cast<std::uint32_t>(PipePlace(s.rank, s.key)) + 0x51ED270Bu) | 1u;
         s.waverRandom = Hash(seed) | 1u;
@@ -704,7 +704,12 @@ bool Engine::Take(int index, float given, bool pallet, float moved) {
     // Made first: a pipe's making sets its speech for an ordinary touch.
     if (starting && !s.active && s.epoch != epoch) Design(index);
     if (starting) {
-        if (s.reed) reeds[static_cast<std::size_t>(s.index)].SetTouch(moved, pallet);
+        if (s.active) {
+            // The pipe is ringing. Its new touch and wind must arrive on
+            // the same tick, even if the host splits the frames before it.
+            s.retouch = moved;
+            s.retouchPallet = pallet;
+        } else if (s.reed) reeds[static_cast<std::size_t>(s.index)].SetTouch(moved, pallet);
         else flues[static_cast<std::size_t>(s.index)].SetTouch(moved, pallet);
         s.lift = 1.0f;
     } else if (given == 0.0f && pallet) {
@@ -983,6 +988,7 @@ void Engine::Tick() {
             s.resting = false;
             if (s.reed) {
                 ReedPipe& pipe = reeds[static_cast<std::size_t>(s.index)];
+                if (s.retouch > 0.0f) pipe.SetTouch(s.retouch, s.retouchPallet);
                 if (s.lift > 0.0f) pipe.SetRelease(s.lift);
                 pipe.wind = wind;
                 pipe.Tick();
@@ -991,6 +997,7 @@ void Engine::Tick() {
                 if (silent && s.share > 0.0f) pipe.Clear();
             } else {
                 FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
+                if (s.retouch > 0.0f) pipe.SetTouch(s.retouch, s.retouchPallet);
                 if (s.lift > 0.0f) pipe.SetRelease(s.lift);
                 s.waver += kWaverPole * (NextNoise(s.waverRandom) - s.waver);
                 pipe.wind = wind * (1.0f + waverDepth * s.waver);
@@ -1000,7 +1007,7 @@ void Engine::Tick() {
                 if (silent && s.share > 0.0f) pipe.Clear();
             }
         }
-        s.lift = 0.0f;
+        s.lift = s.retouch = 0.0f;
         // A silent pipe whose key is still held (the wind has gone) waits
         // for it, cleared; any other has rung out.
         s.resting = silent && s.share > 0.0f;
@@ -1222,12 +1229,14 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
 #endif
                 for (; done < places.size(); ++done)
                     flueList[kind][done]->Run(flueSound[kind][done] + sub, n, heardOf(done), toldOf(done));
-                if (at < kHearBlock)
+                if (at < kHearBlock) {
+                    const int mirrored = Min(n, kHearBlock - static_cast<int>(at));
                     for (std::size_t m = 0; m < places.size(); ++m) {
                         if (places[m] >= count) continue;
                         float* const told = toldOf(m);
-                        for (int i = 0; i < n; ++i) told[kRing + i] = told[i];
+                        for (int i = 0; i < mirrored; ++i) told[kRing + i] = told[i];
                     }
+                }
             }
         }
     }

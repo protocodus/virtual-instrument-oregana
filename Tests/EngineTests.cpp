@@ -1279,6 +1279,37 @@ void BlockPartitionInvariance() {
     Expect(energy > 1.0, "BlockPartitionInvariance", "and it is a piece, not silence", energy);
 }
 
+void RepeatedAndAdjacentKeysAcrossBlocks() {
+    const auto phrase = [](bool repeat, int block) {
+        Bench bench;
+        bench.Draw({ kHwOctave8 });
+        if (repeat) {
+            bench.Draw({ kHwTrompete8 });
+            // The flue and reed are still ringing on the next stroke.
+            for (int strike = 0; strike < 12; ++strike) {
+                bench.organ->KeyDown(kHauptwerk, 60, 40 + 6 * strike);
+                bench.Play(.018, block);
+                bench.organ->KeyUp(kHauptwerk, 60, 90);
+                bench.Play(.011, block);
+            }
+        } else {
+            // Adjacent keys on two flue ranks exercise neighboring pipes'
+            // hearing rings across an unaligned block boundary.
+            bench.Draw({ kHwPrincipal16 });
+            bench.organ->KeyDown(kHauptwerk, 61, 90);
+        }
+        bench.organ->KeyDown(kHauptwerk, 60, 90);
+        return bench.Play(.25, block);
+    };
+    for (bool repeat : {false, true}) {
+        const Take whole = phrase(repeat, 64), split = phrase(repeat, 37);
+        Expect(whole.Peak() > .001 && split.left == whole.left && split.right == whole.right,
+               "RepeatedAndAdjacentKeysAcrossBlocks",
+               repeat ? "a ringing flue and reed take the next stroke on their wind tick" :
+                        "two adjacent keys on neighboring ranks retain their own hearing histories", whole.Peak());
+    }
+}
+
 void DivisionsHaveTheirOwnOutputs() {
     // A stop of each division and a key on each: every division's pair
     // carries its own pipes and nothing else, the Recit's follows its box,
@@ -1800,6 +1831,7 @@ int main() {
     CrescendoIsSmooth();
     ChurchIsThePlayers();
     BlockPartitionInvariance();
+    RepeatedAndAdjacentKeysAcrossBlocks();
     DivisionsHaveTheirOwnOutputs();
     DivisionLevels();
     ResetPlaysAsNew();

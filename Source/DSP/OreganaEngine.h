@@ -171,6 +171,8 @@ private:
         std::uint32_t airEpoch = 0;   // tuning used for the load, even if its resonator still awaits its wind
         float air = 0.0f;             // the wind it takes
         float waver = 0.0f;           // a flue's own unrest (OreganaEngine.cpp, kWaverDepth)
+        float retouch = 0.0f;          // a ringing pipe takes its new touch at its next wind update
+        bool retouchPallet = false;
         float lift = 0.0f;            // how slowly its pallet shuts from the next tick on (SetRelease), or 0: as it is
         std::uint32_t waverRandom = 1u;
         // A flue pipe among its neighbours (OreganaEngine.cpp, kHearMetres).
