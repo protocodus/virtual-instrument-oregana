@@ -161,10 +161,13 @@ private:
         bool resting = false;         // its key is held and there is no wind for it: silent and cleared until some comes
         std::uint32_t epoch = 0;      // the tuning it was last made for
         std::uint16_t delay = 0;      // samples from its pallet's opening to its being heard (Engine::Engine)
+        std::uint64_t generation = 0; // last audio reset after which this pipe was offered wind
         std::uint64_t lastDue = 0;    // when the wind last sent to it arrives
         float offered = 0.0f;         // the share of its division's wind its pallet now gives
         float share = 0.0f;           // and the share that has reached it
         float gain = 0.0f;            // its regulated level
+        double baseHz = 0.0, scale = 0.0; // fixed rank plan for calculating the wind its tuned diameter draws
+        std::uint32_t airEpoch = 0;   // tuning used for the load, even if its resonator still awaits its wind
         float air = 0.0f;             // the wind it takes
         float waver = 0.0f;           // a flue's own unrest (OreganaEngine.cpp, kWaverDepth)
         float lift = 0.0f;            // how slowly its pallet shuts from the next tick on (SetRelease), or 0: as it is
@@ -194,6 +197,7 @@ private:
     void Place(Slot& slot);
     void Tick();
     void RenderChunk(float* left, float* right, int frames, float* const* divisions, int offset);
+    double TunedHz(const Slot& s) const;
     double Cents(const Slot& slot) const;
 
     Controls controls;
@@ -208,6 +212,7 @@ private:
     struct Pending { int slot; std::uint64_t due; float share; bool pallet; float touch; };
     std::vector<Pending> pending;                // wind on its way to a pipe, soonest first
     std::uint64_t now = 0;                       // samples rendered
+    std::uint64_t playGeneration = 0;
     std::uint32_t epoch = 1;
     int redesignAt = 0, stale = 0;
 

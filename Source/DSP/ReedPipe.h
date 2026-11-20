@@ -147,7 +147,7 @@ struct ReedPipe {
         releaseSeconds = 0.004 + 0.5 / hz;
         SetTouch(1.0, true);
         SetRelease(1.0);
-        air = 2.0 * radius * radius / (0.1555 * 0.1555);
+        air = PipeWindLoad(radius, true);
     }
 
     // As a flue's (FluePipe::SetTouch). The drain goes with the filling, so

@@ -63,9 +63,11 @@ the resampler could replay a short burst from an earlier note. The resampler
 recovers its 64 input samples from the division delay line when a cable is
 connected and processes only the main pair while all division outputs are
 disconnected. Loading registrations and changing wind controls while playing
-retune a closed channel when its key opens. The channel retains its load while
-wind from an earlier key stroke is still on the way. Audio reset clears pipe
-delay lines when their next note begins.
+calculate each newly drawn pipe's wind load from its tuned diameter when the
+pallet opens. The resonator takes its tuning when that pipe's wind arrives.
+Audio reset releases all pipes at once; each pipe picks up its original
+turbulence seed when next given wind. The church's feedback lines read
+silence until the new performance has written them again.
 
 ### 0.12.1 — 2026-11-19 — gentler reeds, and in tune however their wind arrives
 

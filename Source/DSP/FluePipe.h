@@ -109,6 +109,11 @@ inline double PipeDiameter(double scaleHalftones, double hz) {
     return 0.1555 * std::pow(2.0, (scaleHalftones - halftones) / 16.0);
 }
 
+// Nominal wind consumption, relative to an 8' C principal.
+inline double PipeWindLoad(double radius, bool reed) {
+    return (reed ? 2.0 : 4.0) * radius * radius / (0.1555 * 0.1555);
+}
+
 namespace detail {
 
 // y += g (x - y) at w radians per sample: its gain and phase lag.
@@ -422,7 +427,7 @@ struct FluePipe {
         SetTouch(1.0, true);
         SetRelease(1.0);
         // Wind through the flue: its area goes with the diameter squared.
-        air = 4.0 * radius * radius / (0.1555 * 0.1555);
+        air = PipeWindLoad(radius, false);
         // The mouth is a small source: a flow Q changing at dQ/dt makes a
         // pressure rho / (4 pi d) dQ/dt at d metres. With the flow as the
         // pipe's area times its wave over rho c, that is r^2 / (4 d c) of the

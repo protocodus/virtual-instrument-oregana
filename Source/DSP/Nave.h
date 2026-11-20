@@ -158,7 +158,6 @@ public:
 
     void Clear() {
         for (std::size_t i = 0; i < kLines; ++i) {
-            lineBuffer[i].fill(0.0f);
             airIn[i] = airOut[i] = shelfOut[i] = 0.0f;
             for (std::size_t term = 0; term < kLossTerms; ++term) loss[term][i] = wanted[term][i];
             // Each line starts its drift at its own phase, the golden angle apart.
@@ -171,7 +170,10 @@ public:
         for (auto& buffer : earlyBuffer) buffer.fill(0.0f);
         earlyQuiet.fill(kEarlySize);
         reflected = {};
+        // A feedback line reads silence until that sample has been written
+        // in this run. Discard its old room tail without clearing 4 MiB.
         write = 0;
+        linesFilled = false;
         untilTurn = 0;
         earlyLeft = earlyRight = late = 0.0f;
         for (auto& ear : directBuffer) ear.fill(0.0f);
@@ -326,6 +328,7 @@ public:
         }
 #endif
         write = (write + 1) & (kLineSize - 1);
+        if (write == 0) linesFilled = true;
 
         // The late field's width glides (10 ms): taken at once, a thrown Width clicked.
         lateMid += kWidthGlide * (lateMidAsked - lateMid);
@@ -479,6 +482,13 @@ private:
             stored[lane] = buffer[from[lane]];
             stored[lane + 4] = buffer[from[lane] + 1];
         }
+        if (!linesFilled) {
+            // The extra sample after the last address mirrors address zero.
+            for (int lane = 0; lane < 4; ++lane) {
+                if (from[lane] >= write) stored[lane] = 0.0f;
+                if (((from[lane] + 1) & (kLineSize - 1)) >= write) stored[lane + 4] = 0.0f;
+            }
+        }
         Float4 older, newer;
         __builtin_memcpy(&older, stored, sizeof older);
         __builtin_memcpy(&newer, stored + 4, sizeof newer);
@@ -493,8 +503,8 @@ private:
         const float between = read - static_cast<float>(at);
         const auto& buffer = lineBuffer[i];
         const auto first = static_cast<std::size_t>(at & (kLineSize - 1));
-        const float older = buffer[first];
-        const float newer = buffer[first + 1];
+        const float older = linesFilled || static_cast<int>(first) < write ? buffer[first] : 0.0f;
+        const float newer = linesFilled || ((at + 1) & (kLineSize - 1)) < write ? buffer[first + 1] : 0.0f;
         return older + between * (newer - older);
     }
 
@@ -610,6 +620,7 @@ private:
     Asked asked;
     float fade = 1.0f;
     int write = 0, untilTurn = 0;
+    bool linesFilled = false;
     float earlyPole = 0.0f, latePole = 0.0f, earlyLeft = 0.0f, earlyRight = 0.0f, late = 0.0f;
     static constexpr float kWidthGlide = 1.0f / 480.0f;
     float lateMid = 0.7071f, lateSide = 0.7071f, lateMidAsked = 0.7071f, lateSideAsked = 0.7071f;

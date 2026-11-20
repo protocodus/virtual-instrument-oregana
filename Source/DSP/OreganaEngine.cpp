@@ -271,6 +271,8 @@ Engine::Engine() {
             s.outDelay = static_cast<std::uint8_t>(plan.reed ? 0 : kRowSamples * fold[s.row & 3]);
             s.apart = kRanks[rank].cents != 0.0f;
             s.radius = static_cast<float>(0.5 * PipeDiameter(plan.flue.scale, plan.hz));
+            s.baseHz = plan.hz;
+            s.scale = plan.reed ? plan.tongue.scale : plan.flue.scale;
             const double metres = kDivisionMetres[division] + kRowMetres * (rank - kDivisionRank[static_cast<std::size_t>(division)])
                 + kOffRowMetres * Unit(PipePlace(rank, key), kOffRow);
             s.delay = static_cast<std::uint16_t>(std::lround(metres / kSoundSpeed * kPipeRate));
@@ -369,21 +371,7 @@ Engine::Engine() {
 }
 
 void Engine::Reset() {
-    for (std::size_t i = 0; i < slots.size(); ++i) {
-        Slot& s = slots[i];
-        s.active = s.resting = s.coupled = false;
-        s.offered = s.share = 0.0f;
-        s.lastDue = 0;
-        if (s.index < 0) continue;
-        // Each pipe's turbulence is its own.
-        const std::uint32_t seed = Hash(static_cast<std::uint32_t>(PipePlace(s.rank, s.key)) + 0x51ED270Bu) | 1u;
-        s.waver = 0.0f;
-        s.waverRandom = Hash(seed) | 1u;
-        // Take clears the delay lines and filters before a silent pipe
-        // speaks. A reset silences every slot, so only reseed it here.
-        if (s.reed) reeds[static_cast<std::size_t>(s.index)].random = seed;
-        else flues[static_cast<std::size_t>(s.index)].random = seed;
-    }
+    ++playGeneration;
     active.clear();
     pending.clear();
     now = 0;
@@ -637,10 +625,15 @@ void Engine::UpdateChannel(int division, int key, int late, bool pallet) {
     for (int rank = firstRank; rank < endRank; ++rank) {
         const int index = kRankFirst[static_cast<std::size_t>(rank)] + key;
         if (!speaks(rank, index)) continue;
-        // A silent pipe made for an earlier tuning is remade here and not
-        // when its wind arrives: the wind it takes is part of the load.
+        // A silent pipe's diameter at this tuning affects the pallet's
+        // load now. Its resonator can wait until the wind arrives at the
+        // pipe's own sample, or until the ordinary background tuning pass.
         Slot& s = slots[static_cast<std::size_t>(index)];
-        if (!s.active && s.epoch != epoch) Design(index);
+        if ((s.generation != playGeneration || !s.active) && s.airEpoch != epoch) {
+            const double radius = 0.5 * PipeDiameter(s.scale, TunedHz(s));
+            s.air = static_cast<float>(PipeWindLoad(radius, s.reed));
+            s.airEpoch = epoch;
+        }
         taken += s.air;
     }
     const float load = taken / fullAir[d][k];
@@ -657,6 +650,19 @@ void Engine::UpdateChannel(int division, int key, int late, bool pallet) {
 // moves, not through one open already (FluePipe::SetTouch, SetRelease).
 void Engine::Offer(int index, float given, int late, bool pallet) {
     Slot& s = slots[static_cast<std::size_t>(index)];
+    if (s.generation != playGeneration) {
+        // Reset releases every pipe at once. A silent one has no wind to
+        // withdraw. Restore its key and turbulence state when it next speaks.
+        if (given == 0.0f) return;
+        s.generation = playGeneration;
+        s.active = s.resting = s.coupled = false;
+        s.offered = s.share = s.waver = 0.0f;
+        s.lastDue = 0;
+        const std::uint32_t seed = Hash(static_cast<std::uint32_t>(PipePlace(s.rank, s.key)) + 0x51ED270Bu) | 1u;
+        s.waverRandom = Hash(seed) | 1u;
+        if (s.reed) reeds[static_cast<std::size_t>(s.index)].random = seed;
+        else flues[static_cast<std::size_t>(s.index)].random = seed;
+    }
     if (given == s.offered) return;
     s.offered = given;
     // The key's touch goes with its wind: the same key struck on another
@@ -735,6 +741,10 @@ double Engine::PipeHz(int rank, int note) const {
     return s.index < 0 ? 0.0 : PlanPipe(rank, key).hz * std::pow(2.0, (Cents(s) + (s.reed ? 0.0 : 2.95 * bendAir)) / 1200.0);
 }
 
+double Engine::TunedHz(const Slot& s) const {
+    return s.baseHz * Max(std::pow(2.0, Cents(s) / 1200.0), kLowestRatio);
+}
+
 // Makes a pipe as the controls now have it: the builder's plan, the tuner's
 // regulation, and the pipe's own share of each imperfection.
 void Engine::Design(int index) {
@@ -745,24 +755,23 @@ void Engine::Design(int index) {
     const double voicing = controls[kVoicing];
     const double speech = std::pow(2.0, 0.6 * voicing * Spread(place, kSpeech));
     const double noise = 1.0 + 0.5 * voicing * Spread(place, kNoise);
-    double ratio = std::pow(2.0, Cents(s) / 1200.0);
-    ratio = Max(ratio, kLowestRatio);
+    const double hz = TunedHz(s);
     if (s.reed) {
         plan.tongue.speech *= speech;
         plan.tongue.noise *= noise;
         ReedPipe& pipe = reeds[static_cast<std::size_t>(s.index)];
-        pipe.Design(plan.tongue, plan.hz * ratio, regulated.tuning);
+        pipe.Design(plan.tongue, hz, regulated.tuning);
         s.air = static_cast<float>(pipe.air);
     } else {
         plan.flue.speech *= speech;
         plan.flue.noise *= noise;
         plan.flue.chiff *= 1.0 + 0.6 * voicing * Spread(place, kChiff);
         FluePipe& pipe = flues[static_cast<std::size_t>(s.index)];
-        pipe.Design(plan.flue, plan.hz * ratio, regulated.tuning);
+        pipe.Design(plan.flue, hz, regulated.tuning);
         s.air = static_cast<float>(pipe.air);
     }
     s.gain = kMaster * static_cast<float>(plan.level * std::pow(10.0, 3.0 * voicing * Spread(place, kLevel) / 20.0)) / regulated.rms;
-    s.epoch = epoch;
+    s.epoch = s.airEpoch = epoch;
 }
 
 // Every key's place between the two ears at the width as it has arrived, and
@@ -1013,7 +1022,7 @@ void Engine::Tick() {
                 const int rank = s.rank + (side == 0 ? -rows : rows);
                 if (rank < firstRank || rank >= endRank) break;
                 const Slot& near = slots[static_cast<std::size_t>(kRankFirst[static_cast<std::size_t>(rank)] + s.key)];
-                if (near.index < 0 || near.reed || !near.active || near.resting || near.apart
+                if (near.index < 0 || near.reed || near.generation != playGeneration || !near.active || near.resting || near.apart
                     || flues[static_cast<std::size_t>(near.index)].wind <= 0.0f)
                     continue;
                 const double metres = Max(kRowMetres * rows, static_cast<double>(s.radius + near.radius) + kClearance);
@@ -1049,7 +1058,7 @@ void Engine::Tick() {
     // they are silent; one that is asked to speak first is remade then.
     for (int made = 0, seen = 0; stale > 0 && made < 2 && seen < 256; ++seen, --stale) {
         Slot& s = slots[static_cast<std::size_t>(redesignAt)];
-        if (s.index >= 0 && !s.active && s.epoch != epoch) {
+        if (s.index >= 0 && (s.generation != playGeneration || !s.active) && s.epoch != epoch) {
             Design(redesignAt);
             ++made;
         }
