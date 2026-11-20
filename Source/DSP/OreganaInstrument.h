@@ -68,6 +68,8 @@ public:
         Sync();
     }
 
+    void SetMasterTune(double cents) { engine.SetMasterTune(cents); }
+
     // The pitch wheel, -1 .. 1: the air's warmth (Engine::SetBend).
     void SetBend(double bend) { engine.SetBend(bend); }
 

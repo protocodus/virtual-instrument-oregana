@@ -107,6 +107,7 @@ public:
     Engine();
     void Reset();                         // silence, every key up, the wind at rest
     void SetControls(const Controls& controls);
+    void SetMasterTune(double cents);      // host tuning, independent of the organ's Pitch setting
     const Controls& GetControls() const { return controls; }
 
     void Midi(const std::uint8_t* bytes, int size);
@@ -201,6 +202,7 @@ private:
     double Cents(const Slot& slot) const;
 
     Controls controls;
+    double masterTuneCents = 0.0, masterTuneRatio = 1.0;
     std::vector<Slot> slots;
     std::vector<FluePipe> flues;
     std::vector<ReedPipe> reeds;

@@ -317,7 +317,7 @@ private:
         Controls played;
         for (int i = 0; i < kControlCount; ++i) played[i] = FromNormalized(i, values[static_cast<std::size_t>(i)]);
         // Reason's master tune, -100 to +100 cents, on the organ's pitch.
-        played[kPitch] *= std::pow(2.0, (200.0 * values[kMasterTune] - 100.0) / 1200.0);
+        instrument->SetMasterTune(200.0 * values[kMasterTune] - 100.0);
         instrument->SetControls(played, Unit(values[kModWheel]), Unit(values[kExpression]));
     }
 

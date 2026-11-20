@@ -155,6 +155,22 @@ void PipesSoundAtTheirPitch() {
            bench.organ->PipeHz(1, 69));
     Expect(Abs(CentsBetween(bench.organ->PipeHz(1, 60), 415.0 * std::pow(2.0, -9.0 / 12.0)) - 11.73) < 1.0e-6, "PipesSoundAtTheirPitch",
            "Werckmeister's c is 11.73 cents above equal", CentsBetween(bench.organ->PipeHz(1, 60), 415.0 * std::pow(2.0, -9.0 / 12.0)));
+    // Host tuning is independent of both ends of the organ's Pitch control.
+    for (const double cents : {-100.0, 100.0}) {
+        const double pitch = cents < 0.0 ? 415.0 : 466.0;
+        const double expected = pitch * std::pow(2.0, cents / 1200.0);
+        Bench endpoint;
+        endpoint.Set(kPitch, pitch);
+        endpoint.organ->SetMasterTune(cents);
+        endpoint.Draw({kHwOctave8});
+        endpoint.organ->Reset();
+        endpoint.organ->KeyDown(kHauptwerk, 69, 80);
+        Expect(endpoint.organ->GetControls()[kPitch] == pitch &&
+               Abs(CentsBetween(endpoint.organ->PipeHz(1, 69), expected)) < 1e-6,
+               "MasterTune", "patch pitch and host tuning survive reset independently", expected);
+        const double off = CentsBetween(endpoint.Play(2.0).Hz(expected), expected);
+        Expect(Abs(off) < 1.5, "MasterTune", "a sounding pipe follows the host past the panel endpoint", off);
+    }
     // A mutation is tuned pure to its key.
     Expect(Abs(bench.organ->PipeHz(6, 60) / bench.organ->PipeHz(1, 60) - 3.0) < 1.0e-9, "PipesSoundAtTheirPitch", "the Quinte 2 2/3' is a pure twelfth",
            bench.organ->PipeHz(6, 60) / bench.organ->PipeHz(1, 60));

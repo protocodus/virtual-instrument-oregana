@@ -59,9 +59,9 @@ constexpr int kHearRows = 2;
 constexpr int kLongestHearing = 48;    // samples: a ring's length less a hearing block
 
 // The flattest a pipe is ever made against its regulated pitch (a1 at 415 Hz
-// in meantone, a cold church and the worst drift come to 0.907), and what its
-// delay lines are given room for.
-constexpr double kLowestRatio = 0.89, kRoomRatio = 0.88;
+// in meantone, a cold church and the worst drift come to 0.907 before the
+// host can lower concert pitch another semitone). Leave room in every delay.
+constexpr double kLowestRatio = 0.84, kRoomRatio = 0.83;
 constexpr int kRoomSpare = 4;
 
 constexpr double kStepSeconds = FluePipe::kTick / kPipeRate;
@@ -437,6 +437,15 @@ void Engine::SetControls(const Controls& next) {
     Apply(before, false);
 }
 
+void Engine::SetMasterTune(double cents) {
+    cents = cents == cents ? Clamp(cents, -100.0, 100.0) : 0.0;
+    if (cents == masterTuneCents) return;
+    masterTuneCents = cents;
+    masterTuneRatio = std::pow(2.0, cents / 1200.0);
+    ++epoch;
+    stale = kPipeCount;
+}
+
 void Engine::Apply(const Controls& before, bool all) {
     const auto changed = [&](int index) { return all || controls[index] != before[index]; };
 
@@ -728,7 +737,7 @@ bool Engine::Take(int index, float given, bool pallet, float moved) {
 // pull of its resonator, which is, is left out.
 double Engine::Cents(const Slot& s) const {
     const auto& temperament = kTemperaments[static_cast<std::size_t>(controls[kTemperament])];
-    double cents = 1200.0 * std::log2(controls[kPitch] / 440.0) + temperament.cents[static_cast<unsigned>(kFirstNote + s.key) % 12u]
+    double cents = 1200.0 * std::log2((controls[kPitch] * masterTuneRatio) / 440.0) + temperament.cents[static_cast<unsigned>(kFirstNote + s.key) % 12u]
         + controls[kTuning] * (s.reed ? 20.0 : 10.0) * Spread(PipePlace(s.rank, s.key), kDrift);
     if (!s.reed) cents += 2.95 * controls[kTemperature];
     return cents;
