@@ -4,6 +4,25 @@ What was put to the ear, what each letter was, which the owner chose and what
 that licensed. A measurement that settles a question is quoted where the
 question is, not here.
 
+## Low-wind speech, harmonic flutes, reeds and wind-off tremulant (2026-11-22, 0.12.4)
+
+Objective measurements settled six physical-model defects on `0.12.3` (`3e0a4ed`);
+a 7-pair A/B listening set (`A` = shipping `0.12.3`, `B` = candidate `0.12.4`)
+was rendered to verify each fix by ear before accepting `0.12.4`:
+
+| Set | Material & What Was Heard | Matching & Trims | Outcome (`A` -> `B`) |
+| --- | --- | --- | --- |
+| `01-harmonic-flute-low-wind` | `Flute harmonique` B3 -> C4..C6 at `pressure=0.6`, `blower=0` | Unmatched (`A` `-56.7`, `B` `-48.1` dBFS) | C4–C6 RMS `-65.5 -> -46.8` dBFS; **B** chosen |
+| `02-harmonic-flute-timbre` | `Flute harmonique` B3–C4–C#4–D4 attacks + G#6..D#7 chromatic run | Whole-file RMS `-40.24` dBFS (`A` `+0.00`, `B` `-0.33` dB) | C4 onset `-45.1 -> -41.9` dBFS, smooth upper harmonics; **B** chosen |
+| `03-treble-and-bass-low-wind` | `Principal 16'` (C1, E1, C2) + `Siffloete 1'` (6.6–7.0 kHz) at `pressure=0.6`, `blower=0` | Unmatched (`A` `-47.3`, `B` `-43.2` dBFS) | 16' bass `-45.1 -> -39.7` dBFS, 1' treble `-61.4 -> -54.4` dBFS; **B** chosen |
+| `04-stopped-treble-pitch-bend` | `Rohrfloete 4'` + `Principal 4'` D7/F#7/G#7 under ±10 °C pitch bend | Whole-file RMS `-46.52` dBFS (`A` `-0.48`, `B` `+0.00` dB) | Unbent `Rohrfloete` beating removed; ±29.5c unison lock; **B** chosen |
+| `05-vox-humana-treble` | `Vox humana 8'` treble G5..C7 without tremulant | Whole-file RMS `-43.45` dBFS (`A` `+0.00`, `B` `-0.08` dB) | C7 formant mistuning `+73.8c -> 0.0c`, Q `6.2 -> 15`; **B** chosen |
+| `06-half-drawn-harmonic-flutes` | Half-drawn (`0.5`) `Flute harmonique 8'` + `Flute octaviante 4'` + `Octavin 2'` C3..C6 | Unmatched (`A` `-49.8`, `B` `-43.0` dBFS) | C4–C6 RMS `-56.7 -> -41.8` dBFS; **B** chosen |
+| `07-tremulant-wind-off` | `Krummhorn` + Positiv tremulant, `wind_supply=0` at `1.0 s` | Opening 0–1 s RMS `-28.51` dBFS (`A` `+0.00`, `B` `-0.01` dB) | Dead-organ tail `-63.6` (pk `-44.9`) -> `-134.9` dBFS (pk `-121.6`); **B** chosen |
+
+The owner confirmed **B** by ear (`2026-11-22`). All six fixes are licensed by the
+underlying physical measurements and confirmed audibly by the A/B set.
+
 ## Reed brightness (2026-11-19, 0.12.1)
 
 In the promo's full choruses 0.12.0's reeds stood 1.5 to 4 dB brighter above

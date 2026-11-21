@@ -1822,6 +1822,208 @@ void AirBendsTheFlues() {
     Expect(sharpest < 4.0, "AirBendsTheFlues", "the wheel swung and thrown under held flues does not click, the sharpest edge over its surroundings", sharpest);
 }
 
+void AcousticFixesHold() {
+    // 1. Harmonic flutes, top-octave flutes and 16' bass speak cleanly at 0.6
+    // wind, half drawn, and without semitone-to-semitone harmonic jumps.
+    struct LowWindPipe { int rank, note; };
+    const LowWindPipe lowWindPipes[] = {
+        { 0, 36 }, { 41, 60 }, { 41, 72 }, { 41, 84 }, { 41, 96 },
+        { 45, 48 }, { 45, 60 }, { 45, 72 }, { 32, 104 }, { 32, 108 }, { 9, 104 },
+    };
+    double worstDrop = 0.0;
+    for (const LowWindPipe& item : lowWindPipes) {
+        const int key = item.note - kFirstNote;
+        const PipePlan plan = PlanPipe(item.rank, key);
+        const double tuning = kPipeRegulation[static_cast<std::size_t>(RankFirstPipe(item.rank) + key)].tuning;
+        const std::size_t frames = static_cast<std::size_t>(Max(2.0, 120.0 / plan.hz) * kRate);
+        const std::vector<float> full = measure::Sound(plan, tuning, frames, 1.0);
+        const std::vector<float> low = measure::Sound(plan, tuning, frames, 0.6);
+        const double drop = Db(measure::Rms(low, frames / 2, frames) / measure::Rms(full, frames / 2, frames));
+        const double hz = measure::Hz(low, frames / 2, frames, measure::CoarseHz(low, frames - frames / 4, frames, plan.hz, kRate), kRate);
+        Expect(drop > -14.0 && Abs(CentsBetween(hz, plan.hz)) < 80.0, "AcousticFixesHold", "pipe speaks on low 0.6 wind, dB from nominal", drop);
+        worstDrop = Min(worstDrop, drop);
+    }
+    Expect(worstDrop > -14.0, "AcousticFixesHold", "all low-wind flues stay above -14 dB, worst dB", worstDrop);
+
+    double prevH[3] = {}, worstHarmStep = 0.0;
+    for (int note = 96; note <= 99; ++note) {
+        const int key = note - kFirstNote;
+        const PipePlan plan = PlanPipe(41, key);
+        const double tuning = kPipeRegulation[static_cast<std::size_t>(RankFirstPipe(41) + key)].tuning;
+        const std::size_t frames = static_cast<std::size_t>(kRate);
+        const std::vector<float> wave = measure::Sound(plan, tuning, frames, 1.0);
+        const double f1 = std::abs(measure::Component(wave, frames / 2, frames / 2, plan.hz, kRate));
+        double hDb[3];
+        for (int h = 0; h < 3; ++h) {
+            hDb[h] = Db(std::abs(measure::Component(wave, frames / 2, frames / 2, (h + 2) * plan.hz, kRate)) / f1);
+            if (note > 96) worstHarmStep = Max(worstHarmStep, Abs(hDb[h] - prevH[h]));
+            prevH[h] = hDb[h];
+        }
+    }
+    Expect(worstHarmStep < 2.0, "AcousticFixesHold", "harmonic flute upper register has smooth harmonics note to note, max step dB", worstHarmStep);
+
+    {
+        Bench half;
+        half.Set(kRecFluteHarmonique8, 0.5);
+        for (int note : { 60, 72, 84 }) half.organ->KeyDown(kRecit, note, 80);
+        const double level = half.Play(2.0).Rms(1.0, 2.0);
+        Expect(level > 1.0e-3, "AcousticFixesHold", "half-drawn Flute harmonique speaks across its harmonic compass, RMS", level);
+    }
+
+    // 2. Short-loop treble stopped flues (Rohrfloete 4' and Cornet V 8') follow pitch bend.
+    double worstShortBend = 0.0;
+    for (int note : { 101, 108 }) {
+        for (const double bend : { 1.0, -1.0 }) {
+            Bench bench;
+            bench.Draw({ kPosRohrfloete4 });
+            bench.organ->KeyDown(kPositiv, note, 80);
+            const double made = bench.organ->PipeHz(27, note);
+            bench.Play(0.8);
+            bench.organ->SetBend(bend);
+            const Take take = bench.Play(1.5);
+            const double tuned = bench.organ->PipeHz(27, note);
+            std::vector<float> mid(take.left.size());
+            for (std::size_t i = 0; i < mid.size(); ++i) mid[i] = take.left[i] + take.right[i];
+            const double off = CentsBetween(measure::Hz(mid, mid.size() / 2, mid.size(), tuned, kRate), made);
+            worstShortBend = Max(worstShortBend, Abs(off - 29.5 * bend));
+        }
+    }
+    {
+        const int key = 108 - kFirstNote;
+        const PipePlan plan = PlanPipe(8, key);
+        const double tuning = kPipeRegulation[static_cast<std::size_t>(RankFirstPipe(8) + key)].tuning;
+        FluePipe pipe;
+        pipe.Design(plan.flue, plan.hz, tuning);
+        std::vector<float> room(static_cast<std::size_t>(pipe.loopRoom + pipe.jetLength + pipe.upperRoom), 0.0f);
+        pipe.loop = room.data();
+        pipe.jet = pipe.loop + pipe.loopRoom;
+        pipe.upper = pipe.jet + pipe.jetLength;
+        // Positive stretch lengthens the air column and flattens pitch by 29.5 cents.
+        for (const float stretch : { static_cast<float>(FluePipe::kBendMost), -static_cast<float>(FluePipe::kBendMost) }) {
+            pipe.Clear();
+            pipe.SetBend(stretch);
+            pipe.wind = 1.0f;
+            std::vector<float> wave(kRate, 0.0f);
+            for (int i = 0; i < kRate; i += FluePipe::kTick) {
+                pipe.Tick(stretch);
+                pipe.Run(&wave[static_cast<std::size_t>(i)], FluePipe::kTick);
+            }
+            const double expected = plan.hz * std::pow(2.0, (stretch > 0.0f ? -29.5 : 29.5) / 1200.0);
+            const double off = CentsBetween(measure::Hz(wave, wave.size() / 2, wave.size(), expected, kRate), expected);
+            worstShortBend = Max(worstShortBend, Abs(off));
+        }
+    }
+    Expect(worstShortBend < 1.5, "AcousticFixesHold", "short-loop treble stopped flues follow +/-10C pitch bend, cents off", worstShortBend);
+
+    // 3. Flue onset under an already-open pallet / held coupler produces no sample-0 step impulse.
+    {
+        const int key = 84 - kFirstNote;
+        const PipePlan plan = PlanPipe(24, key); // Quintadena 8'
+        const double tuning = kPipeRegulation[static_cast<std::size_t>(RankFirstPipe(24) + key)].tuning;
+        FluePipe pipe;
+        pipe.Design(plan.flue, plan.hz, tuning);
+        pipe.puff = 0.0f;
+        std::vector<float> room(static_cast<std::size_t>(pipe.loopRoom + pipe.jetLength + pipe.upperRoom), 0.0f);
+        pipe.loop = room.data();
+        pipe.jet = pipe.loop + pipe.loopRoom;
+        pipe.upper = pipe.jet + pipe.jetLength;
+        pipe.Clear();
+        pipe.SetTouch(1.0, false);
+        pipe.wind = 1.0f;
+        std::vector<float> wave(kRate, 0.0f);
+        for (int i = 0; i < kRate; i += FluePipe::kTick) {
+            pipe.Tick();
+            pipe.Run(&wave[static_cast<std::size_t>(i)], FluePipe::kTick);
+        }
+        const double sample0 = Abs(static_cast<double>(wave[0])), steady = measure::Rms(wave, kRate / 2, kRate);
+        Expect(sample0 < 0.02 * steady, "AcousticFixesHold", "flue onset has no sample-0 Dirac step, sample0/steady", sample0 / Max(steady, 1.0e-30));
+
+        Bench held;
+        held.Draw({ kPosGedackt8, kPosQuintadena8 });
+        held.organ->KeyDown(kHauptwerk, 84, 90);
+        held.Play(0.2, 64);
+        held.Set(kCouplerPosHw, 1.0);
+        const Take after = held.Play(1.5, 64);
+        double onsetD2 = 0.0, steadyD2 = 0.0;
+        for (std::size_t i = 2; i < after.Frames(0.1); ++i)
+            onsetD2 = Max(onsetD2, static_cast<double>(Abs(after.left[i] - 2.0f * after.left[i - 1] + after.left[i - 2])));
+        for (std::size_t i = after.Frames(1.0); i < after.Frames(1.5); ++i)
+            steadyD2 = Max(steadyD2, static_cast<double>(Abs(after.left[i] - 2.0f * after.left[i - 1] + after.left[i - 2])));
+        Expect(onsetD2 < 2.0 * steadyD2, "AcousticFixesHold", "coupler drawn under held chord produces no sample-0 click, onsetD2/steadyD2", onsetD2 / Max(steadyD2, 1.0e-30));
+    }
+
+    // 4. Vox humana resonator tunes to 3x note and Contraposaune release has no boot backflow bounce.
+    {
+        const int key = 96 - kFirstNote;
+        const PipePlan plan = PlanPipe(38, key);
+        const double tuning = kPipeRegulation[static_cast<std::size_t>(RankFirstPipe(38) + key)].tuning;
+        ReedPipe p;
+        p.Design(plan.tongue, plan.hz, tuning);
+        const auto loopPhase = [&](double hz) {
+            const double w = 2.0 * kPi * hz / kRate;
+            double g = 0.0, l = 0.0;
+            detail::OnePole(p.lowpass, w, g, l);
+            return p.loopLength * w + (w - 2.0 * std::atan2(p.allpass * std::sin(w), 1.0 + p.allpass * std::cos(w))) + l;
+        };
+        double lo = plan.hz * 2.0, hi = Min(22000.0, plan.hz * 4.5);
+        for (int it = 0; it < 40; ++it) {
+            const double mid = 0.5 * (lo + hi);
+            if (loopPhase(mid) < kPi) lo = mid; else hi = mid;
+        }
+        const double resErr = Abs(CentsBetween(0.5 * (lo + hi), 3.0 * plan.hz));
+        Expect(resErr < 2.0, "AcousticFixesHold", "Vox humana C6 resonator sits at 3x note frequency, cents off", resErr);
+    }
+    {
+        const int key = 36 - kFirstNote;
+        const PipePlan plan = PlanPipe(65, key);
+        const double tuning = kPipeRegulation[static_cast<std::size_t>(RankFirstPipe(65) + key)].tuning;
+        ReedPipe p;
+        p.Design(plan.tongue, plan.hz, tuning);
+        std::vector<float> loop(static_cast<std::size_t>(p.loopLength), 0.0f), out(FluePipe::kTick, 0.0f);
+        p.loop = loop.data();
+        p.Clear();
+        p.wind = 1.0f;
+        float maxFootAfterRelease = 0.0f;
+        for (int i = 0; i < 3 * kRate; i += FluePipe::kTick) {
+            if (i >= kRate) p.wind = 0.0f;
+            p.Tick();
+            p.Run(out.data(), FluePipe::kTick);
+            if (i >= kRate + kRate / 2) maxFootAfterRelease = Max(maxFootAfterRelease, p.foot);
+        }
+        Expect(maxFootAfterRelease < 1.0e-4f, "AcousticFixesHold", "Contraposaune 32' boot does not bounce on release, max foot", maxFootAfterRelease);
+    }
+
+    // 5. Tremulant dies when wind supply is cut and AllKeysUp resets release touch.
+    {
+        Controls controls = kPresets[8].ToControls(); // Krummhorn + Positiv tremulant
+        controls[kBlower] = 1.0;
+        controls[kRoom] = 0.0;
+        controls[kAction] = 0.0;
+        Bench bench(controls);
+        for (int note : { 48, 55, 60, 64, 67 }) bench.organ->KeyDown(kHauptwerk, note, 100);
+        bench.Play(0.5);
+        bench.Set(kWindSupply, kWindOff);
+        for (int i = 0; i < 150 && bench.organ->Diag().supply > 0.0; ++i) bench.Play(0.1);
+        bench.Play(1.0);
+        const double deadPeak = bench.Play(1.0).Peak();
+        Expect(bench.organ->Diag().supply == 0.0 && deadPeak < 1.0e-4, "AcousticFixesHold", "tremulant falls silent when wind supply drains to zero, peak", deadPeak);
+    }
+    {
+        Bench slow, fast;
+        slow.Draw({ kHwOctave8 });
+        fast.Draw({ kHwOctave8 });
+        slow.organ->KeyDown(kHauptwerk, 60, 1);
+        fast.organ->KeyDown(kHauptwerk, 60, 127);
+        slow.Play(1.0);
+        fast.Play(1.0);
+        slow.organ->AllKeysUp();
+        fast.organ->AllKeysUp();
+        const Take a = slow.Play(0.2), b = fast.Play(0.2);
+        const double diff = Db(a.Rms(0.01, 0.05) / b.Rms(0.01, 0.05));
+        Expect(Abs(diff) < 0.05, "AcousticFixesHold", "AllKeysUp releases at neutral lift speed regardless of key-down velocity, dB apart", diff);
+    }
+}
+
 int main() {
     SilentUntilPlayed();
     PipesSoundAtTheirPitch();
@@ -1836,6 +2038,7 @@ int main() {
     FourPipesAreFourPipes();
     FeetEmpty();
     AirBendsTheFlues();
+    AcousticFixesHold();
     PipesHearEachOther();
     EveryKeySounds();
     StopsSlide();

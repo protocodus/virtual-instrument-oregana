@@ -105,8 +105,8 @@ struct Tremulant {
     // full organ) and what the motor lets out; taken before `reservoir`, its
     // division's, takes the same step. Off, the trunk rings down to the
     // reservoir and is then the reservoir to the bit.
-    void Step(bool on, double depth, double demand, const Reservoir& reservoir) {
-        running += start * ((on ? 1.0 : 0.0) - running);
+    void Step(bool on, double depth, double demand, const Reservoir& reservoir, double supply = 1.0) {
+        running += start * ((on && supply > 0.0 ? 1.0 : 0.0) - running);
         beat = false;
         if (running < 1.0e-6) {
             running = spilled = 0.0;
@@ -119,7 +119,10 @@ struct Tremulant {
             trunk.Step(demand);
             return;
         }
-        const double wind = Sqrt(Max(trunk.pressure, 0.0));
+        // The motor is driven by the supply head as well as the division's
+        // reservoir pressure, so lowering wind pressure slows it and cutting the
+        // wind lets it stop instead of spilling wind on a dead organ.
+        const double wind = Sqrt(Max(supply * trunk.pressure, 0.0));
         spilled = running * depth * spill * wind * 0.5 * (1.0 - cosine);
         trunk.Step(demand, spilled);
         // The motor turns as fast as its wind fills it. The step is under

@@ -61,7 +61,7 @@ struct ReedPipe {
     // The boot fills at `attack` through an opening pallet and at `refill`
     // under one open already (SetTouch); `rising` is the one in use.
     float attack = 1.0f, refill = 1.0f, rising = 1.0f, release = 1.0f, bootDrop = 0.2f;
-    int opening = 0;   // samples until an opening pallet stands open and the boot fills at `refill`
+    int opening = 0, openingTotal = 0;   // samples until an opening pallet stands open and the boot fills at `refill`
     double attackSeconds = 0.0, releaseSeconds = 0.0;
     float gainLeft = 0.0f, gainRight = 0.0f;
     double air = 0.0;
@@ -86,8 +86,12 @@ struct ReedPipe {
         const double radius = 0.5 * PipeDiameter(v.scale, hz);
         const double corner = Min(kSoundSpeed / (kTwoPi * radius), 0.45 * kPipeRate);
         const double lp = 1.0 - std::exp(-kTwoPi * corner / kPipeRate);
-        double lpGain, lpLag;
-        detail::OnePole(lp, wNote, lpGain, lpLag);
+        // Evaluate the resonator's open-end lowpass at its first resonance w
+        // rather than wNote so short resonators (Vox humana, length 3x) hold
+        // accurate resonator tuning and Q; radiation stays at wNote.
+        double lpGain, lpLag, noteLpGain, noteLpLag;
+        detail::OnePole(lp, w, lpGain, lpLag);
+        detail::OnePole(lp, wNote, noteLpGain, noteLpLag);
         // There and back takes half a period of a cylinder's first resonance.
         // A cone's lies at tan(kL) = -k x0 for a tip x0 beyond the shallot,
         // near a whole period.
@@ -101,16 +105,16 @@ struct ReedPipe {
             mass = 0.0f;
         }
         impedance = 1.0f / (1.0f + mass);
-        const double rest = pass - lpLag / wNote;
+        const double rest = pass - lpLag / w;
         loopLength = Max(1, static_cast<int>(std::lround(rest - 1.1)));
-        allpass = static_cast<float>(detail::AllpassFor(rest - loopLength, wNote));
+        allpass = static_cast<float>(detail::AllpassFor(rest - loopLength, w));
         lowpass = static_cast<float>(lp);
         const double perPeriod = 1.0 - kPi / v.q;
         const double walls = Min((v.cone ? perPeriod : std::sqrt(perPeriod)) / lpGain, 0.9999);
         loopGain = static_cast<float>(-walls);
         // What the open end radiates of the wave inside, at the note: all
         // that its low-pass does not turn back (Run, `out`).
-        radiates = static_cast<float>(std::sqrt(1.0 + lpGain * lpGain - 2.0 * lpGain * std::cos(lpLag)));
+        radiates = static_cast<float>(std::sqrt(1.0 + noteLpGain * noteLpGain - 2.0 * noteLpGain * std::cos(noteLpLag)));
 
         // The spring and its loss as the step takes them (velocity, then
         // place, the loss centred on the step): the tongue alone swings at
@@ -156,7 +160,8 @@ struct ReedPipe {
         attack = static_cast<float>(1.0 - std::exp(-1.0 / (attackSeconds * slowness * kPipeRate)));
         rising = pallet ? attack : refill;
         drain = bootDrop * rising;
-        opening = pallet ? static_cast<int>(3.0 * attackSeconds * slowness * kPipeRate) : 0;
+        openingTotal = pallet ? Max(FluePipe::kTick, static_cast<int>(3.0 * attackSeconds * slowness * kPipeRate)) : 0;
+        opening = openingTotal;
     }
     void SetRelease(double slowness) { release = static_cast<float>(1.0 - std::exp(-1.0 / (releaseSeconds * slowness * kPipeRate))); }
 
@@ -173,9 +178,15 @@ struct ReedPipe {
     void Tick() {
         // As a flue's (FluePipe::Tick).
         if (wind == 0.0f && foot < 1.0e-25f) foot = 0.0f;
-        if (opening > 0 && (opening -= FluePipe::kTick) <= 0) {
-            rising = refill;
-            drain = bootDrop * refill;
+        // Blend smoothly from `attack` to `refill` across the second half of
+        // the pallet's opening instead of stepping at `opening == 0`.
+        if (opening > 0) {
+            opening = Max(0, opening - FluePipe::kTick);
+            const float done = 1.0f - static_cast<float>(opening) / static_cast<float>(openingTotal);
+            const float blend = done > 0.5f ? 2.0f * done - 1.0f : 0.0f;
+            const float smooth = blend * blend * (3.0f - 2.0f * blend);
+            rising = attack + (refill - attack) * smooth;
+            drain = bootDrop * rising;
         }
         // A reed is judged by what it radiates. A bass resonator turns
         // nearly all of its wave back, so the wave inside outlasts the sound
@@ -230,9 +241,11 @@ struct ReedPipe {
             const float size = 0.5f * (Sqrt(kz * kz + 4.0f * k * k * Abs(across)) - kz);
             const float through = across < 0.0f ? -size : size;
             p = p0 + impedance * through;
-            // The boot fills through the toe hole and empties through the tongue.
+            // The boot fills through the toe hole and empties through the tongue;
+            // once the pallet shuts (`target == 0`), negative backflow from a
+            // ringing resonator must not pump phantom pressure into the boot.
             const float gap = target - pressure;
-            pressure += gap * (gap > 0.0f ? rise : fall) - drain * through;
+            pressure += gap * (gap > 0.0f ? rise : fall) - drain * (target > 0.0f ? through : Max(through, 0.0f));
             if (pressure < 0.0f) pressure = 0.0f;
             inMass = held + mass * p;
             loopBuffer[at] = p - returning;
@@ -306,7 +319,8 @@ struct ReedPipe {
             const Float4 through = Choose(across < zero, -size, size);
             p = p0 + impedanceC * through;
             const Float4 gap = target - pressure;
-            pressure += gap * Choose(gap > zero, rise, fall) - drainC * through;
+            const Float4 outFlow = Choose(target > zero, through, Where(through > zero, through));
+            pressure += gap * Choose(gap > zero, rise, fall) - drainC * outFlow;
             pressure = Unless(pressure < zero, pressure);
             inMass = held + massC * p;
             const Float4 leaving = p - returning;

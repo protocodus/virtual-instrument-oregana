@@ -168,7 +168,7 @@ struct FluePipe {
     int jetLength = 4;
     float jetNominal = 1.0f, jetLongest = 1.0f;   // transit at nominal wind and the longest kept, samples
     float follow = 0.0f;   // the jet's hold on the air's displacement (a leaky integrator's pole)
-    float jetLowpass = 1.0f, jetGain = 0.0f, offset = 0.0f, source = 0.0f, noise = 0.0f, puff = 0.0f;
+    float jetLowpass = 1.0f, jetGain = 0.0f, jetGainBase = 0.0f, jetDip = 0.0f, offset = 0.0f, source = 0.0f, noise = 0.0f, puff = 0.0f;
     float breathPole = 0.0f, breathFloor = 0.0f, breathLow = 0.0f;   // the turbulence's band and its strength there (kBreathLow)
     float integrated = 0.0f;   // the integrated breath's share of the turbulence
     float shed = 0.0f;
@@ -241,15 +241,13 @@ struct FluePipe {
         // 5 kHz the loop breaks up or falls silent where the swing passes
         // 2.5 half-widths or the lip sheds hard (ProbePipe, 5.3 to 8.4 kHz,
         // at drives 1.8 to 4). The top octave is voiced gently instead, which
-        // costs harmonics above 10 kHz only: it sheds half as much, and its
-        // lip comes to within kTopLip of the swing, for a lip far off the jet
-        // starts the pipe only by the shedding's help (a principal's 6 kHz
-        // pipe never spoke). With no shedding there, the top took 30 to 50
-        // ms to speak where its octave below takes 5 to 10.
+        // costs harmonics above 10 kHz only: drive caps at 2.2, shedding caps
+        // at 2.0 (rather than halving already gentle flutes below threshold
+        // at 0.6 wind), and its lip comes to within kTopLip of the swing.
         const double top = Clamp(std::log2(hz / 4186.0) * 2.0, 0.0, 1.0);
         const double drive = v.drive + top * (Min(v.drive, 2.2) - v.drive);
         const double lip = drive / v.drive * (v.offset + top * (Min(v.offset, kTopLip * v.drive) - v.offset));
-        const double shedding = v.shedding * (1.0 - 0.5 * top);
+        const double shedding = v.shedding + top * (Min(v.shedding, 2.0) - v.shedding);
         const double radius = 0.5 * PipeDiameter(v.scale, hz);
         const double corner = Min(v.corner * kSoundSpeed / (kTwoPi * radius), 0.45 * kPipeRate);
         const double lp = 1.0 - std::exp(-kTwoPi * corner / kPipeRate);
@@ -286,10 +284,70 @@ struct FluePipe {
         lowpass = static_cast<float>(lp);
         dcPole = static_cast<float>(dc);
         // The first resonance's Q is the loss of one period: one pass of an
-        // open pipe, two of a stopped one.
+        // open pipe, two halves of a stopped or harmonic one.
         const double perPeriod = 1.0 - kPi / v.q;
-        const double walls = Min((v.stopped ? std::sqrt(perPeriod) : perPeriod) / (lpGain * dcGain), 0.9999);
+        const bool isHarmonic = !v.stopped && v.harmonic > 0.0;
+        const double walls = Min((v.stopped || isHarmonic ? std::sqrt(perPeriod) : perPeriod) / (lpGain * dcGain), 0.9999);
         loopGain = static_cast<float>(v.stopped ? -walls : walls);
+
+        // Beyond a junction. Built before sizing the jet so the jet compensates
+        // for the junction's round-trip loss at the note. Neither a chimney
+        // nor a harmonic pipe's upper half is the tuner's to move: the builder
+        // cut them for the note.
+        double juncGain = 1.0;
+        if (v.stopped && v.chimney > 0.0) {
+            // A wave meeting a bore of s times the area turns back by
+            // (1 - s) / (1 + s). The chimney's top radiates as an opening of
+            // its own radius.
+            const double area = v.chimney * v.chimney;
+            const double bore = (1.0 - area) / (1.0 + area);
+            upFromBelow = static_cast<float>(1.0 + bore);
+            upFromAbove = static_cast<float>(-bore);
+            downFromBelow = static_cast<float>(bore);
+            downFromAbove = static_cast<float>(1.0 - bore);
+            const double opening = Min(kSoundSpeed / (kTwoPi * radius * v.chimney), 0.45 * kPipeRate);
+            const double upLp = 1.0 - std::exp(-kTwoPi * opening / kPipeRate);
+            double upLpGain, upLpLag;
+            detail::OnePole(upLp, w, upLpGain, upLpLag);
+            const double chimney = v.chimneyLength * kPi / w - upLpLag / w;
+            upperLength = Max(1, static_cast<int>(std::lround(chimney - 1.0)));
+            upperAllpass = static_cast<float>(detail::AllpassFor(Max(chimney - upperLength, 0.1), w));
+            upperLowpass = static_cast<float>(upLp);
+            upperGain = static_cast<float>(std::sqrt(perPeriod));
+        } else if (isHarmonic) {
+            // A hole that lets a share h of the pressure out turns a wave
+            // back by -h and passes 1 - h (a shunt on a line). Both halves of
+            // length L share the period's loss (sqrt each); the upper half uses
+            // the open top's physical lowpass and its allpass for fractional
+            // delay so harmonic timbre stays smooth from note to note.
+            const double h = v.harmonic;
+            upFromBelow = static_cast<float>(1.0 - h);
+            upFromAbove = static_cast<float>(-h);
+            downFromBelow = static_cast<float>(h);
+            downFromAbove = static_cast<float>(-(1.0 - h));
+            double topGain, topLag;
+            detail::OnePole(lp, w, topGain, topLag);
+            const double upperRest = (kTwoPi - topLag) / w;
+            upperLength = Max(1, static_cast<int>(std::lround(upperRest - 1.0)));
+            upperAllpass = static_cast<float>(detail::AllpassFor(upperRest - upperLength, w));
+            upperLowpass = static_cast<float>(lp);
+            upperGain = static_cast<float>(Min(std::sqrt(perPeriod) / topGain, 0.9999));
+        } else {
+            upperLength = 0;
+        }
+        if (upperLength > 0) {
+            double upG, upL;
+            detail::OnePole(upperLowpass, w, upG, upL);
+            const double apL = w - 2.0 * std::atan2(upperAllpass * std::sin(w), 1.0 + upperAllpass * std::cos(w));
+            const double ph = upperLength * w + apL + upL;
+            const double ur = -static_cast<double>(upperGain) * upG * std::cos(ph);
+            const double ui = static_cast<double>(upperGain) * upG * std::sin(ph);
+            const double nr = ur * upFromBelow, ni = ui * upFromBelow;
+            const double dr = 1.0 - ur * upFromAbove, di = -ui * upFromAbove;
+            const double d2 = dr * dr + di * di;
+            const double br = (nr * dr + ni * di) / d2, bi = (ni * dr - nr * di) / d2;
+            juncGain = std::hypot(downFromBelow + downFromAbove * br, downFromAbove * bi);
+        }
 
         // The jet drives the pipe by the rate of change of its flow at the
         // lip (the jet-drive source, at the head of this file), a compact
@@ -334,13 +392,17 @@ struct FluePipe {
         // (1 - g) / g, and what the lip sheds, `shedding` times as much: the
         // fundamental of r |r| is 8 / (3 pi) of its amplitude squared. The
         // source is sized for that, and the jet's gain for the swing asked for.
-        const double g = walls * lpGain * dcGain;
+        const double g = Min(walls * lpGain * dcGain * juncGain, 0.9999);
         const double fundamental = JetFundamental(drive, lip);
         const double returning = g / (1.0 + g), lost = (1.0 - g) / g;
         // The rate of change passes rateGain of the note, so the source is
         // sized at the note as a flow would be.
         source = static_cast<float>(returning * lost * (1.0 + shedding) / (fundamental * rateGain));
         shed = static_cast<float>(shedding * lost * 3.0 * kPi / (8.0 * returning));
+        // Store the unattenuated jet gain so Tick() can compensate the linear
+        // interpolation dip `sqrt(1 - 2 f (1 - f)(1 - cos w))` as wind moves.
+        jetGainBase = static_cast<float>(drive / (returning * followGain * jetLpGain));
+        jetDip = static_cast<float>(2.0 * (1.0 - std::cos(w)));
         jetGain = static_cast<float>(drive / (returning * followGain * jetLpGain * readGain));
         offset = static_cast<float>(lip);
         // The pipe hears the turbulence's rate of change, as it hears the
@@ -356,54 +418,6 @@ struct FluePipe {
         // threw a pipe to the octave below.
         breathLow = static_cast<float>(kBreathLow * (1.0 - top));
         puff = static_cast<float>(1.2 * v.chiff);
-
-        // Beyond a junction. Neither a chimney nor a harmonic pipe's upper
-        // half is the tuner's to move: the builder cut them for the note.
-        if (v.stopped && v.chimney > 0.0) {
-            // A wave meeting a bore of s times the area turns back by
-            // (1 - s) / (1 + s). The chimney's top radiates as an opening of
-            // its own radius.
-            const double area = v.chimney * v.chimney;
-            const double bore = (1.0 - area) / (1.0 + area);
-            upFromBelow = static_cast<float>(1.0 + bore);
-            upFromAbove = static_cast<float>(-bore);
-            downFromBelow = static_cast<float>(bore);
-            downFromAbove = static_cast<float>(1.0 - bore);
-            // Its length there and back is a whole number of samples and
-            // an allpass for the rest: cut to whole samples alone, it stepped
-            // the pipe's pitch by up to 4 cents as the organ was retuned.
-            const double chimney = v.chimneyLength * kPi / w;
-            upperLength = Max(1, static_cast<int>(std::lround(chimney - 1.0)));
-            upperAllpass = static_cast<float>(detail::AllpassFor(Max(chimney - upperLength, 0.1), w));
-            const double opening = Min(kSoundSpeed / (kTwoPi * radius * v.chimney), 0.45 * kPipeRate);
-            upperLowpass = static_cast<float>(1.0 - std::exp(-kTwoPi * opening / kPipeRate));
-            upperGain = static_cast<float>(std::sqrt(perPeriod));
-        } else if (!v.stopped && v.harmonic > 0.0) {
-            // A hole that lets a share h of the pressure out turns a wave
-            // back by -h and passes 1 - h (a shunt on a line). The loop above
-            // is the lower half, and its far end's turn of sign is taken here.
-            // The upper half is a period there and back with its top's lag:
-            // a whole number of samples and the lag of a one-pole made to
-            // fill the rest.
-            const double h = v.harmonic;
-            upFromBelow = static_cast<float>(1.0 - h);
-            upFromAbove = static_cast<float>(-h);
-            downFromBelow = static_cast<float>(h);
-            downFromAbove = static_cast<float>(-(1.0 - h));
-            double topGain, topLag;
-            detail::OnePole(lp, w, topGain, topLag);
-            const int whole = Max(2, static_cast<int>(std::floor((kTwoPi - topLag) / w)));
-            const double fill = Clamp(kTwoPi - whole * w, 0.02, 0.9 * 0.5 * (kPi - w));
-            // The line's allpass at 0 is one sample of the delay.
-            upperLength = whole - 1;
-            upperAllpass = 0.0f;
-            const double topPole = std::sin(fill) / std::sin(w + fill);
-            detail::OnePole(1.0 - topPole, w, topGain, topLag);
-            upperLowpass = static_cast<float>(1.0 - topPole);
-            upperGain = static_cast<float>(Min(perPeriod / topGain, 0.9999));
-        } else {
-            upperLength = 0;
-        }
 
         // The foot fills through the pallet and the toe, the faster the
         // smaller the pipe, and empties through the flue. The pallet's
@@ -457,7 +471,10 @@ struct FluePipe {
         for (int i = 0; i < upperRoom; ++i) upper[i] = 0.0f;
         loopAt = jetAt = upperAt = 0;
         mouthIn = mouthOut = allpassIn = allpassOut = lowpassOut = dcIn = dcOut = jetOut = radiationIn = radiationOut = upperOut = breathOut = breathSlow = breathSum = 0.0f;
-        displaced = jetShare = jetRate = 0.0f;
+        displaced = jetRate = 0.0f;
+        // Start from the jet's resting shape at offset so sample 0 does not
+        // differentiate a step from 0 to JetShape(offset).
+        jetShare = JetShape(offset);
         upperAllpassIn = upperAllpassOut = 0.0f;
         foot = wind = filledFrom = puffNow = 0.0f;
         jetTransit = jetLongest;
@@ -476,7 +493,7 @@ struct FluePipe {
 
     // The filters as the air's warmth has them: at rest exactly as made.
     void Warm(float stretch) {
-        const float s = loopPass > 0.0f ? stretch : 0.0f;
+        const float s = stretch;
         mouthAllpass = mouthWarm.At(s);
         allpass = allpassWarm.At(s);
         lowpass = lowpassWarm.At(s);
@@ -511,9 +528,12 @@ struct FluePipe {
         if (wind == 0.0f && foot < 1.0e-25f) foot = 0.0f;
         const float pressure = Max(foot, 1.0f / (kLongestJet * kLongestJet));
         // The jet's transit stretches with the air (MakeWarm).
-        const float nominal = jetNominal + jetPass * (loopPass > 0.0f ? stretch : 0.0f);
+        const float nominal = jetNominal + jetPass * stretch;
         const float target = Min(nominal / Sqrt(pressure), jetLongest);
         jetStep = Clamp((target - jetTransit) * (1.0f / kTick), -0.5f, 0.5f);
+        const float mid = Clamp(jetTransit + 0.5f * kTick * jetStep, 0.0f, jetLongest);
+        const float frac = mid - static_cast<float>(static_cast<int>(mid));
+        jetGain = jetGainBase / Sqrt(Max(1.0f - frac * (1.0f - frac) * jetDip, 0.25f));
         const float level = Abs(lowpassOut) + Abs(mouthOut) + Abs(allpassOut) + Abs(radiationOut) + foot;
         // A released pipe is let go when it has rung down to kPipeSilent, some
         // 105 dB under its own speech at the output (owner, 2026-11-13: 100 dB
@@ -995,7 +1015,17 @@ private:
         // newer than the shortest line to two older than the longest.
         const int most = static_cast<int>(pass * kBendMost);
         loopRoom = loopLength + most + 4;
-        loopPass = loopLength >= most + 3 ? static_cast<float>(pass) : 0.0f;
+        if (loopLength >= most + 3) {
+            loopPass = static_cast<float>(pass);
+        } else {
+            // Treble stopped loops of 1-2 samples cannot shift four-tap Bent()
+            // reads without colliding with writes; fold the bend's phase shift
+            // into the loop allpass slope so they still follow pitch bend.
+            loopPass = 0.0f;
+            const double c = allpass;
+            const double dPhaseDc = -2.0 * std::sin(w) / (1.0 + 2.0 * c * std::cos(w) + c * c);
+            allpassWarm.by += static_cast<float>(pass * w / dPhaseDc);
+        }
 
         upperRoom = 0;
         upperShare = 0.0f;

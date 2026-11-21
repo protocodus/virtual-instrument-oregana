@@ -33,13 +33,13 @@ chord of Bach's Toccata in D minor, BWV 565, on the Tutti.
 | # | Preset | Demo | Length | Peak |
 | --- | --- | --- | --- | --- |
 | 1 | Principal 8 | [01-principal-8.wav](Docs/audio/01-principal-8.wav) | 12.0 s | -14.8 dBFS |
-| 2 | Gedackt 8 | [02-gedackt-8.wav](Docs/audio/02-gedackt-8.wav) | 12.0 s | -17.6 dBFS |
+| 2 | Gedackt 8 | [02-gedackt-8.wav](Docs/audio/02-gedackt-8.wav) | 12.0 s | -17.9 dBFS |
 | 5 | Voix celeste | [05-voix-celeste.wav](Docs/audio/05-voix-celeste.wav) | 12.0 s | -13.6 dBFS |
-| 7 | Cornet | [07-cornet.wav](Docs/audio/07-cornet.wav) | 12.0 s | -16.2 dBFS |
-| 9 | Krummhorn | [09-krummhorn.wav](Docs/audio/09-krummhorn.wav) | 12.0 s | -17.9 dBFS |
-| 12 | Trompete | [12-trompete.wav](Docs/audio/12-trompete.wav) | 12.0 s | -12.0 dBFS |
-| 14 | Plenum | [14-plenum.wav](Docs/audio/14-plenum.wav) | 12.0 s | -12.6 dBFS |
-| 17 | Tutti | [17-tutti.wav](Docs/audio/17-tutti.wav) | 12.0 s | -9.1 dBFS |
+| 7 | Cornet | [07-cornet.wav](Docs/audio/07-cornet.wav) | 12.0 s | -16.3 dBFS |
+| 9 | Krummhorn | [09-krummhorn.wav](Docs/audio/09-krummhorn.wav) | 12.0 s | -17.8 dBFS |
+| 12 | Trompete | [12-trompete.wav](Docs/audio/12-trompete.wav) | 12.0 s | -12.3 dBFS |
+| 14 | Plenum | [14-plenum.wav](Docs/audio/14-plenum.wav) | 12.0 s | -11.9 dBFS |
+| 17 | Tutti | [17-tutti.wav](Docs/audio/17-tutti.wav) | 12.0 s | -8.4 dBFS |
 
 <!-- audio-demos-end -->
 
@@ -54,6 +54,14 @@ of them, and one phrase with the imperfection controls at none, as loaded
 and plenty.
 
 ## Version history
+
+### 0.12.4 — 2026-11-21 — low-wind speech, harmonic flutes, reeds and wind-off tremulant
+
+- **Every flue pipe now speaks from `Wind Pressure = 0.6` up.** Harmonic flutes (`Flute harmonique 8'`, `Flute octaviante 4'`, `Octavin 2'`) now split one period's wall loss evenly between both halves, use their open-top lowpass with fractional allpass delay instead of semitone-jumping the top pole, and size the jet against the junction's round-trip gain — restoring all 132 harmonic pipes at 0.6 wind and half-drawn stops, removing up to 7.3 dB note-to-note H4 steps and slow C4 attacks. Top-octave shedding caps at 2.0 instead of halving gentle flutes below threshold, `Tick()` compensates the jet delay-line linear-interpolation dip in real time, and `Stops.h` clamps family voicing interpolation to `[0, 1]` instead of extrapolating into collapse on 16' bass pipes (eliminating all 230 dead/stalling pipes across the organ at 0.6 wind).
+- **Short-loop treble stopped flues follow pitch bend, and flues start click-free.** Stopped loops shorter than 5 samples (`Rohrfloete 4'` above 4.4 kHz, `Cornet V 8'` 3.95–4.19 kHz) now apply pitch bend through the allpass slope, and `FluePipe::Clear()` initializes `jetShare` to `JetShape(offset)` so sample 0 under held keys or couplers injects no step impulse.
+- **Reed resonators, smooth boot opening and release backflow.** `ReedPipe::Design()` evaluates the resonator loop at its resonance rather than the note frequency (fixing `+73.8` cents mistuning and halved Q on treble `Vox humana 8'`), ramps smoothly across the second half of pallet opening instead of stepping 8x at `3 * attackSeconds`, and blocks negative resonator backflow from refilling an empty boot after key release.
+- **Tremulant and `AllKeysUp`.** `Tremulant::Step()` now tracks supply head (slowing with `Wind Pressure` and stopping cleanly when `Wind Supply = Off` instead of beating on a dead organ), and `Engine::AllKeysUp()` resets held key velocities to neutral release touch.
+- Regenerated `Source/DSP/PipeRegulation.h` (`0 pipes at fault`), updated the 11 factory presets whose `RenderOregana --levels` Volume trim moved by 1 dB, re-rendered the eight audio demos, and recorded the A/B set in [Docs/decisions.md](Docs/decisions.md).
 
 ### 0.12.3 — 2026-11-20 — Master tuning and repeated notes
 

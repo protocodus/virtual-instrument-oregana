@@ -456,9 +456,12 @@ inline PipePlan PlanPipe(int rank, int key) {
     plan.exists = true;
     plan.hz = note * plan.pitch;
 
-    // Octaves above 8' C, where the families' voicings are given.
+    // Octaves above 8' C, where the families' voicings are given. Clamp to
+    // the six-octave span so 16' bass pipes and top treble pipes keep valid
+    // voicing bounds (negative extrapolation pushed Principal 16' offset to
+    // 1.506 where JetShape's slope collapses at 0.6 wind).
     const double octaves = std::log2(plan.hz / 65.406);
-    const double t = Clamp(octaves / 6.0, -0.34, 1.17);
+    const double t = Clamp(octaves / 6.0, 0.0, 1.0);
     const auto at = [t](double low, double high) { return low + t * (high - low); };
     if (plan.reed) {
         const detail::ReedFamily& f = detail::Reed(spec.family);

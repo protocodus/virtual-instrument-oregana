@@ -863,6 +863,7 @@ void Engine::KeyUp(int division, int note, int velocity) {
 
 void Engine::AllKeysUp() {
     for (auto& division : played) division.fill(false);
+    touch.fill(1.0f);
     for (int key = 0; key < kManualKeys; ++key) UpdateKey(key);
 }
 
@@ -956,7 +957,7 @@ void Engine::Tick() {
         // stands (Tremulant::Step).
         Tremulant* const trembling = d == kPositiv ? &tremulants[0] : d == kRecit ? &tremulants[1] : nullptr;
         if (trembling != nullptr)
-            trembling->Step(controls[d == kPositiv ? kTremulantPos : kTremulantRec] >= 0.5, depth, demand[d] / fullWind[d], reservoirs[d]);
+            trembling->Step(controls[d == kPositiv ? kTremulantPos : kTremulantRec] >= 0.5, depth, demand[d] / fullWind[d], reservoirs[d], head);
         reservoirs[d].Step(demand[d] / fullWind[d]);
         unrestSlow[d] += kUnrestPole * (NextNoise(unrestRandom) - unrestSlow[d]);
         unrest[d] += kUnrestPole * (unrestSlow[d] - unrest[d]);
@@ -966,12 +967,12 @@ void Engine::Tick() {
         // the reservoir's own sag, dip, bounce and unrest reach the pipes.
         if (trembling != nullptr) p += head * (trembling->trunk.pressure - reservoirs[d].pressure);
         // The valve's thump, from the middle of its division: as loud as the
-        // beat is deep, a full one at 10 %, and heard with the wind's noise,
-        // while the organ is played and a little after.
+        // beat is deep, a full one at 10 %, and heard with the wind's noise
+        // only while supply head feeds the motor.
         if (d == kPositiv || d == kRecit) {
             const Tremulant& t = tremulants[d == kPositiv ? 0 : 1];
-            if (t.beat && controls[kBlower] > 0.0 && presence > 0.0f)
-                knocks.Strike(kTremulantBeat, kKnockLevel * controls[kBlower] * presence * t.running * Min(1.0, 10.0 * depth), 0.0);
+            if (t.beat && controls[kBlower] > 0.0 && presence > 0.0f && head > 0.0)
+                knocks.Strike(kTremulantBeat, kKnockLevel * controls[kBlower] * presence * Min(head, 1.5) * t.running * Min(1.0, 10.0 * depth), 0.0);
         }
         pressure[d] = static_cast<float>(Max(p, 0.0));
         diag.pressure[d] = pressure[d];
