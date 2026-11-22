@@ -23,7 +23,7 @@
 //              on its slider, so a wheel thrown over swells and does not step
 //   CC11       the swell pedal: 0 shut .. 127 open
 //   CC123      all keys up
-//   CC120      all keys up, and every hanging pallet freed (Ciphers)
+//   CC120      all keys up, and every hanging pallet freed at once (Ciphers)
 // Other channels play the Hauptwerk. Velocity is how fast the key opens the
 // pallet, which a tracker action passes on to the pipes' speech: it changes
 // the attack, never the level. A pipe organ has no sustaining pedal.
@@ -56,7 +56,9 @@
 //   Dead Pipes   pipes that do not speak at all
 //   Ciphers      pallets that hang part open when their key is let go, so
 //                the note whines on, flat and weak, on every stop drawn,
-//                until the stops go in or all sound is cut (CC120)
+//                for a few seconds while playing and within 0.75 s once no
+//                key is held (or immediately if it has already hung that
+//                long), until the stops go in or all sound is cut (CC120)
 //   Runnings     wind leaking from an open channel into the one a whole
 //                tone away on the chest, whose pipes whisper along
 // Tuning, Temperature, Voicing, Pitch and Temperament are the pipe maker's
@@ -225,6 +227,8 @@ private:
     // First sample after every wind change sent by this channel has arrived.
     std::array<std::array<std::uint64_t, kManualKeys>, kDivisions> windUntil {};
     std::array<std::array<float, kManualKeys>, kDivisions> hang {}, share {}, robbed {}, fullAir {};
+    std::array<std::array<int, kManualKeys>, kDivisions> hangTicks {}, hangMax {};
+    int hanging = 0;
     std::array<std::array<float, kManualKeys>, kDivisions> placeLeft {}, placeRight {};
     std::array<float, kManualKeys> touch {};
     // Each stop's slider, 0 shut .. 1 open, where its knob and the roller

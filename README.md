@@ -55,6 +55,10 @@ and plenty.
 
 ## Version history
 
+### 0.12.5 — 2026-11-22 — bounded ciphers without leftover notes
+
+- **Hanging pallets (`Ciphers`) settle shut on their own.** Sticking pallets now release within 2 to 5 s while other keys are played and shut within 0.75 s once no key is held across any division (or on the next tick if already hung that long), so no imperfection setting ever leaves an infinite note sounding after playing stops; pushing the stops in or sending CC120 still cuts hanging pipes immediately.
+
 ### 0.12.4 — 2026-11-21 — low-wind speech, harmonic flutes, reeds and wind-off tremulant
 
 - **Every flue pipe now speaks from `Wind Pressure = 0.6` up.** Harmonic flutes (`Flute harmonique 8'`, `Flute octaviante 4'`, `Octavin 2'`) now split one period's wall loss evenly between both halves, use their open-top lowpass with fractional allpass delay instead of semitone-jumping the top pole, and size the jet against the junction's round-trip gain — restoring all 132 harmonic pipes at 0.6 wind and half-drawn stops, removing up to 7.3 dB note-to-note H4 steps and slow C4 attacks. Top-octave shedding caps at 2.0 instead of halving gentle flutes below threshold, `Tick()` compensates the jet delay-line linear-interpolation dip in real time, and `Stops.h` clamps family voicing interpolation to `[0, 1]` instead of extrapolating into collapse on 16' bass pipes (eliminating all 230 dead/stalling pipes across the organ at 0.6 wind).
@@ -707,7 +711,7 @@ and each pipe keeps its own share of it whatever is played:
 | Wind Noise | the blower's hum (lower while it starts or runs down), the chests' hiss and the bellows' thud | 0.2 |
 | Action | how worn the action is: the knocks of keys, coupled pallets, pedals, stop knobs, the swell's shutters and the tremulant's valve, a slider's rub, and the couplers' lost motion | 0.25 |
 | Dead Pipes | pipes that do not speak, up to one in sixteen | none |
-| Ciphers | pallets that hang part open when their key is let go, up to one key in 25: the note whines on until its stops go in or all sound is cut | none |
+| Ciphers | pallets that hang part open when their key is let go, up to one key in 25: the note whines on for a few seconds while other keys are held and settles shut within 0.75 s once no key is played (so no note stays hanging indefinitely), or immediately if its stops go in or CC120 cuts all sound | none |
 | Runnings | wind leaking into the channel a whole tone away, whose pipes whisper along, up to one channel in twelve | none |
 
 Pitch (a1 from 415 to 466 Hz) and Temperament (equal, Werckmeister III,

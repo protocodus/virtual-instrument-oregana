@@ -463,21 +463,87 @@ void Imperfections() {
         bench.Play(0.1);
         Expect(bench.organ->Diag().pipes == all, "Imperfections", "and at 0 they all speak again", bench.organ->Diag().pipes);
     }
-    // Ciphers: some pallets hang when their key is let go, until all sound is cut.
+    // Ciphers: some pallets hang briefly when their key is let go, settle shut
+    // on their own after a few seconds while playing and within 0.75 s once no
+    // key is held, or at once when all sound is cut (CC120). Updated from the
+    // earlier infinite-hang check for owner request (2026-11-22): no note may
+    // linger infinitely after playing stops under any imperfection setting.
     {
+        // 1. Ciphers still hang while another key is held.
         Bench bench;
         bench.Set(kCiphers, 1.0);
         bench.Draw({ kHwOctave8 });
-        for (int note = kFirstNote; note < kFirstNote + kManualKeys; ++note) bench.organ->KeyDown(kHauptwerk, note, 80);
+        for (int note = 55; note < kFirstNote + kManualKeys; ++note) bench.organ->KeyDown(kHauptwerk, note, 80);
+        bench.Play(0.2);
+        for (int note = 55; note < kFirstNote + kManualKeys; ++note)
+            if (note != 60) bench.organ->KeyUp(kHauptwerk, note);
+        bench.Play(1.5);
+        const int heldHanging = bench.organ->Diag().pipes - 1;
+        Expect(heldHanging >= 1 && heldHanging <= 10, "Imperfections", "Ciphers at 1 leaves a few keys hanging while playing", heldHanging);
+        // 2. Already-hanging ciphers shut off when the last key lifts (no CC120).
+        bench.organ->AllKeysUp();
+        bench.Play(2.0);
+        Expect(bench.organ->Diag().pipes == 0, "Imperfections", "and already-hanging ciphers go off once no key is held", bench.organ->Diag().pipes);
+
+        // 3a. Freshly stuck ciphers on the final release stay briefly, then go off on their own without CC120.
+        for (int note = 60; note < kFirstNote + kManualKeys; ++note) bench.organ->KeyDown(kHauptwerk, note, 80);
         bench.Play(0.2);
         bench.organ->AllKeysUp();
-        bench.Play(4.0);
-        const int hanging = bench.organ->Diag().pipes;
-        Expect(hanging >= 1 && hanging <= 10, "Imperfections", "Ciphers at 1 leaves a few of 88 keys sounding", hanging);
+        bench.Play(0.5);
+        const int freshlyHanging = bench.organ->Diag().pipes;
+        Expect(freshlyHanging >= 1 && freshlyHanging <= 10, "Imperfections", "Ciphers at 1 briefly lingers after final release", freshlyHanging);
+        bench.Play(3.0);
+        Expect(bench.organ->Diag().pipes == 0, "Imperfections", "then settles shut cleanly without CC120", bench.organ->Diag().pipes);
+
+        // 3b. CC120 still cuts a freshly stuck cipher at once.
+        bench.organ->KeyDown(kHauptwerk, 73, 80);
+        bench.Play(0.1);
+        bench.organ->KeyUp(kHauptwerk, 73);
         const std::uint8_t cut[3] = { 0xB0, 120, 0 };
         bench.organ->Midi(cut, 3);
-        bench.Play(4.0);
-        Expect(bench.organ->Diag().pipes == 0, "Imperfections", "until all sound is cut", bench.organ->Diag().pipes);
+        bench.Play(0.5);
+        Expect(bench.organ->Diag().pipes == 0, "Imperfections", "and CC120 still cuts hanging ciphers immediately", bench.organ->Diag().pipes);
+
+        // 4. All imperfections maxed across all divisions/stops/couplers/tremulants: zero leftover pipes once idle.
+        for (const double deadPipes : { 0.0, 1.0 }) {
+            Bench extreme;
+            extreme.Set(kTuning, 1.0);
+            extreme.Set(kTemperature, 10.0);
+            extreme.Set(kVoicing, 1.0);
+            extreme.Set(kWind, 1.0);
+            extreme.Set(kBlower, 1.0);
+            extreme.Set(kAction, 1.0);
+            extreme.Set(kDeadPipes, deadPipes);
+            extreme.Set(kCiphers, 1.0);
+            extreme.Set(kRunnings, 1.0);
+            extreme.Set(kCrescendo, 1.0);
+            extreme.Set(kPressure, 1.5);
+            extreme.Set(kTremulantPos, 1.0);
+            extreme.Set(kTremulantRec, 1.0);
+            extreme.Set(kRoom, 0.0);
+            for (const int note : { 31, 71, 73, 86, 96, 97 }) extreme.organ->KeyDown(kHauptwerk, note, 80);
+            for (const int note : { 55, 57, 59 }) extreme.organ->KeyDown(kPositiv, note, 80);
+            for (const int note : { 45, 48, 71, 72, 73 }) extreme.organ->KeyDown(kRecit, note, 80);
+            for (const int note : { 25, 35, 37 }) extreme.organ->KeyDown(kPedal, note, 80);
+            extreme.Play(0.4);
+            extreme.organ->AllKeysUp();
+            // Wait 8 s: up to 0.75 s idle cipher settle plus ~6 s for 32' Pedal pipes to ring below kPipeSilent.
+            extreme.Play(8.0);
+            Expect(extreme.organ->Diag().pipes == 0, "Imperfections",
+                   deadPipes > 0.0 ? "all imperfections maxed (dead_pipes=1) leave no leftover pipes once idle"
+                                   : "all imperfections maxed (dead_pipes=0) leave no leftover pipes once idle",
+                   extreme.organ->Diag().pipes);
+            // Resting ciphers must not wake up again if wind goes off and returns.
+            extreme.organ->KeyDown(kHauptwerk, 73, 80);
+            extreme.Play(0.1);
+            extreme.Set(kWindSupply, kWindOff);
+            extreme.organ->AllKeysUp();
+            extreme.Play(2.0);
+            extreme.Set(kWindSupply, kWindBlower);
+            extreme.Play(2.0);
+            Expect(extreme.organ->Diag().pipes == 0, "Imperfections", "wind returning after idle does not wake a freed cipher",
+                   extreme.organ->Diag().pipes);
+        }
     }
     // Runnings: wind leaks into the channel a whole tone away.
     {

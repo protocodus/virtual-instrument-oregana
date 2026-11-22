@@ -43,7 +43,7 @@ enum Control : int {
     kBlower,                        // the wind's noise: the blower's hum, the chests' hiss and the bellows' thud, against an estimate
     kAction,                        // how worn the action is: its knocks, against an estimate, and the couplers' lost motion
     kDeadPipes,                     // pipes that no longer speak: 0 none .. 1 one in sixteen
-    kCiphers,                       // pallets that hang open when their key is let go: 0 none .. 1 one key in twenty-five
+    kCiphers,                       // pallets that hang open when their key is let go: 0 none .. 1 one key in twenty-five (settle shut on their own once no key is held)
     kRunnings,                      // wind leaking from a key's channel into its neighbour's: 0 none .. 1 one channel in twelve
     kVolume,                        // output level, dB
     kRoom,                          // where the listener is: 0 at the pipes (no church) .. 1 far down the nave (only the church)

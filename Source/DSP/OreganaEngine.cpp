@@ -184,6 +184,12 @@ constexpr double kRubLevel = 1.0, kShutterThrow = 0.1;
 constexpr float kPresenceRise = 0.00222f, kPresenceFall = 0.000333f;   // 0.3 s and 2 s
 
 constexpr double kDeadShare = 0.0625, kCipherShare = 0.04, kRunningShare = 0.083;
+// A sticking pallet eventually frees itself (2 to 5 s while other keys are
+// held) and closes once no key is played (immediately if it has already
+// hung for kCipherIdleSeconds, or after kCipherIdleSeconds if it stuck on
+// the final release), so no imperfection ever leaves an infinite note.
+constexpr double kCipherIdleSeconds = 0.75, kCipherHoldMin = 2.0, kCipherHoldMax = 5.0;
+constexpr int kCipherIdleTicks = static_cast<int>(kCipherIdleSeconds / kStepSeconds + 0.5);
 
 constexpr std::array<int, kRankCount + 1> RankFirsts() {
     std::array<int, kRankCount + 1> first {};
@@ -217,7 +223,7 @@ double Unit(int place, int what) {
 }
 // -1..1, mostly near 0.
 double Spread(int place, int what) { return Unit(place, what) + Unit(place, what + 64) - 1.0; }
-enum What { kDrift = 1, kLevel, kSpeech, kChiff, kNoise, kDead, kCipher, kCipherLeak, kRunning, kRunningLeak, kOffRow, kSlack, kSlider };
+enum What { kDrift = 1, kLevel, kSpeech, kChiff, kNoise, kDead, kCipher, kCipherLeak, kRunning, kRunningLeak, kOffRow, kSlack, kSlider, kCipherHold };
 // A pipe's and a key's place for those: by rank or division and note, so that
 // neither changes its character if the compass ever does.
 int PipePlace(int rank, int key) { return rank * 128 + kFirstNote + key; }
@@ -381,6 +387,8 @@ void Engine::Reset() {
         played[d].fill(false);
         open[d].fill(false);
         hang[d].fill(0.0f);
+        hangTicks[d].fill(0);
+        hangMax[d].fill(0);
         share[d].fill(0.0f);
         windUntil[d].fill(0);
         robbed[d].fill(1.0f);
@@ -392,6 +400,7 @@ void Engine::Reset() {
             for (auto& channel : rows) channel.fill(0.0f);
     }
     touch.fill(1.0f);
+    hanging = 0;
     for (Tremulant& t : tremulants) t.Reset();
     unrestRandom = 0x2545F491u;
     untilTick = 0;
@@ -469,10 +478,18 @@ void Engine::Apply(const Controls& before, bool all) {
     if (changed(kSwell)) SetSwell(controls[kSwell]);
     if (!all && changed(kCiphers)) {
         // A pallet that is no longer one to hang closes.
-        for (int d = 0; d < kDivisions; ++d)
-            for (int key = 0; key < kDivisionKeys[d]; ++key)
-                if (Unit(KeyPlace(d, key), kCipher) >= kCipherShare * controls[kCiphers])
-                    hang[static_cast<std::size_t>(d)][static_cast<std::size_t>(key)] = 0.0f;
+        for (int d = 0; d < kDivisions; ++d) {
+            const auto dd = static_cast<std::size_t>(d);
+            for (int key = 0; key < kDivisionKeys[d]; ++key) {
+                const auto k = static_cast<std::size_t>(key);
+                if (hang[dd][k] > 0.0f && Unit(KeyPlace(d, key), kCipher) >= kCipherShare * controls[kCiphers]) {
+                    hang[dd][k] = 0.0f;
+                    hangTicks[dd][k] = 0;
+                    hangMax[dd][k] = 0;
+                    --hanging;
+                }
+            }
+        }
     }
 
     if (changed(kTremulantRate)) {
@@ -592,9 +609,14 @@ void Engine::UpdateKey(int key, bool struck, int own) {
         moved[d] = true;
         // A pallet that hangs is pulled free by its key, and hangs again
         // when the key lets it go.
+        const auto dd = static_cast<std::size_t>(d);
         const int place = KeyPlace(d, key);
+        const bool wasHanging = hang[dd][k] > 0.0f;
         const bool hangs = !pulled[d] && Unit(place, kCipher) < kCipherShare * controls[kCiphers];
-        hang[static_cast<std::size_t>(d)][k] = hangs ? static_cast<float>(0.35 + 0.55 * Unit(place, kCipherLeak)) : 0.0f;
+        hang[dd][k] = hangs ? static_cast<float>(0.35 + 0.55 * Unit(place, kCipherLeak)) : 0.0f;
+        hangTicks[dd][k] = 0;
+        hangMax[dd][k] = hangs ? static_cast<int>((kCipherHoldMin + (kCipherHoldMax - kCipherHoldMin) * Unit(place, kCipherHold)) / kStepSeconds + 0.5) : 0;
+        hanging += (hangs ? 1 : 0) - (wasHanging ? 1 : 0);
         // A pallet a coupler moves knocks at its own chest, when the lost
         // motion is taken up; the key's own is in the key's knock.
         if (d != own && controls[kAction] > 0.0)
@@ -869,7 +891,12 @@ void Engine::AllKeysUp() {
 
 void Engine::AllSoundOff() {
     AllKeysUp();
-    for (auto& division : hang) division.fill(0.0f);
+    for (std::size_t d = 0; d < kDivisions; ++d) {
+        hang[d].fill(0.0f);
+        hangTicks[d].fill(0);
+        hangMax[d].fill(0);
+    }
+    hanging = 0;
     for (int d = 0; d < kDivisions; ++d)
         for (int key = 0; key < kDivisionKeys[d]; ++key) UpdateChannel(d, key);
 }
@@ -916,6 +943,32 @@ void Engine::Tick() {
         ++moving;
     }
     rub = static_cast<float>(kRubLevel * controls[kAction] * Min(moving, 3) / 3.0);
+
+    if (hanging > 0) {
+        bool anyPlayed = false;
+        for (int d = 0; d < kDivisions && !anyPlayed; ++d)
+            for (int key = 0; key < kDivisionKeys[d]; ++key)
+                if (played[static_cast<std::size_t>(d)][static_cast<std::size_t>(key)]) {
+                    anyPlayed = true;
+                    break;
+                }
+        for (int d = 0; d < kDivisions; ++d) {
+            const auto dd = static_cast<std::size_t>(d);
+            for (int key = 0; key < kDivisionKeys[d]; ++key) {
+                const auto k = static_cast<std::size_t>(key);
+                if (hang[dd][k] <= 0.0f) continue;
+                ++hangTicks[dd][k];
+                const int limit = anyPlayed ? hangMax[dd][k] : kCipherIdleTicks;
+                if (hangTicks[dd][k] >= limit) {
+                    hang[dd][k] = 0.0f;
+                    hangTicks[dd][k] = 0;
+                    hangMax[dd][k] = 0;
+                    --hanging;
+                    UpdateChannel(d, key);
+                }
+            }
+        }
+    }
 
     const double live = 2.0 * controls[kWind], depth = 0.01 * controls[kTremulantDepth];
     const float waverDepth = kWaverGain * static_cast<float>(live);

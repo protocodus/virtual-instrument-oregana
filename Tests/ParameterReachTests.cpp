@@ -143,11 +143,14 @@ public:
         // The ordinary held-note assertion applies when a registration can
         // reach the main mix. A silent organ at all-min is a valid result.
         limits.soundsWhileHeld = (stopDrawn || v[kModWheel] > 0 || v[kCrescendo] > 0) && audibleDivision;
-        // With the blower running or pallets stuck open the organ can sound
-        // after every key is released. A church can also have a long decay.
-        if ((v[kWindSupply] > 0 && v[kBlower] > 0) || v[kCiphers] > 0 || v[kRoom] > 0) {
+        // With the blower running the organ's mechanism hums after every key is
+        // released. A church can also have a long decay. Hanging ciphers close
+        // after 0.75 s idle and then ring down cleanly within 3 s of release.
+        if ((v[kWindSupply] > 0 && v[kBlower] > 0) || v[kRoom] > 0) {
             limits.releaseSeconds = -1;
         }
+        if (limits.releaseSeconds >= 0.0 && v[kCiphers] > 0)
+            limits.releaseSeconds = std::max(limits.releaseSeconds, 3.0);
         const bool treading = static_cast<int>(FromNormalized(kWindSupply, v[kWindSupply])) == kWindBellows
                            && (v[kTremulantPos] >= .5f || v[kTremulantRec] >= .5f);
         if (!audibleDivision && (v[kBlower] == 0 || treading)) {
