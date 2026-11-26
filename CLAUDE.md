@@ -232,7 +232,8 @@ cmake --build build-dsp --parallel 2
 ctest --test-dir build-dsp -L unit --output-on-failure
 ```
 
-Every test is `Oregana.<Suite>`: `Engine`, `Instrument`, `PipeRegulation`, `DspFuzzReplay`,
+Every test is `Oregana.<Suite>`: `Engine`, `Instrument`, `Churech` (the church
+as an effect, `Churech.h`), `PipeRegulation`, `DspFuzzReplay`,
 `DemoMidiSources` and `ParameterReach` (`unit`; every control of the Rack
 device, through the Instrument, changed while a chord is held and twice more
 by automation after long play, `OreganaParameterReachTests --reach`, where
@@ -293,6 +294,11 @@ build `OreganaDSPCxx17` for any `Source/DSP/` change, then run the `unit`,
 - The church's controls fade or glide (`Nave.h`): a new one must do the
   same, and `ChurchIsThePlayers` holds the decay in each band and the
   click-free turn.
+- The church has two front ends: the organ and Churech (`Churech.h`), the
+  same church as an effect, which the Churech Rack device wraps. Change
+  the church only in `Nave.h`, run `Oregana.Churech` with the organ's
+  suites, and keep Churech's own additions (places, duck, cuts, mix) in
+  `Churech.h`.
 - The factory registrations' Volume trims come from
   `build-dsp/RenderOregana --levels`; run it again after any change to the
   pipes' levels, the master level or the church.

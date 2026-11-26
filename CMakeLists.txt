@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(Oregana VERSION 0.13.0 LANGUAGES CXX)
+project(Oregana VERSION 0.14.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -35,6 +35,7 @@ endif()
 
 set(OREGANA_DSP_SOURCES Source/DSP/OreganaEngine.cpp)
 set(OREGANA_DSP_HEADERS
+    Source/DSP/Churech.h
     Source/DSP/DspMath.h
     Source/DSP/FluePipe.h
     Source/DSP/Mechanics.h
@@ -67,8 +68,9 @@ target_compile_options(OreganaDSP PRIVATE ${OREGANA_WARNINGS})
 # The Rack Extension toolchain is C++17 with -fno-builtin. Compiling the
 # shipping engine that way here keeps Source/DSP portable for a Rack adapter.
 if(NOT MSVC)
-    # Tests/InstrumentTests.cpp is there for the header-only playing layer.
-    add_library(OreganaDSPCxx17 OBJECT ${OREGANA_DSP_SOURCES} Tests/InstrumentTests.cpp)
+    # Tests/InstrumentTests.cpp and Tests/ChurechTests.cpp are there for the
+    # header-only playing layer and the Churech effect.
+    add_library(OreganaDSPCxx17 OBJECT ${OREGANA_DSP_SOURCES} Tests/InstrumentTests.cpp Tests/ChurechTests.cpp)
     target_include_directories(OreganaDSPCxx17 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Source")
     set_target_properties(OreganaDSPCxx17 PROPERTIES
         CXX_STANDARD 17
@@ -133,6 +135,13 @@ if(BUILD_TESTING)
     target_compile_options(OreganaInstrumentTests PRIVATE ${OREGANA_WARNINGS})
     add_test(NAME Oregana.Instrument COMMAND OreganaInstrumentTests)
     set_tests_properties(Oregana.Instrument PROPERTIES TIMEOUT 600)
+
+    # The church as an effect (Churech.h), which the Churech Rack device plays.
+    add_executable(OreganaChurechTests Tests/ChurechTests.cpp)
+    target_link_libraries(OreganaChurechTests PRIVATE OreganaDSP)
+    target_compile_options(OreganaChurechTests PRIVATE ${OREGANA_WARNINGS})
+    add_test(NAME Oregana.Churech COMMAND OreganaChurechTests)
+    set_tests_properties(Oregana.Churech PROPERTIES LABELS unit TIMEOUT 300)
 
     # U11: every control of the Rack device, through the Instrument, reaches
     # held and new notes after long play: the shared matrix's --reach

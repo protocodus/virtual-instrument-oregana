@@ -55,6 +55,10 @@ and plenty.
 
 ## Version history
 
+### 0.14.0 — 2026-11-26 — the church as an effect (Churech)
+
+- **Churech, the church for any sound.** `Churech.h` plays Oregana's own church (`Nave.h`, not a copy) as a stereo effect, which the Churech Rack Extension wraps: four buildings from a chapel to a cathedral, the sound's distance and the listener's seat, Width and the three decays, a pre-delay, low and high cuts after the church, a duck that draws the church down while the sound plays, Mix and Output. Off 48 kHz only the church's input and answer pass the shared resampler (`RateBridge.h`); the sound itself is never resampled or delayed. The organ sounds as it did.
+
 ### 0.13.0 — 2026-11-26 — a sound played in the church
 
 - **An audio input into the church.** A front end can now play another stereo sound into the organ's church: it is heard from the Hauptwerk at the console and takes the Room, the seat, the Volume and the output stage with the organ, but not the divisions' outputs or meters. Off 48 kHz it is resampled into the engine through the organ's own resampler kernel, flat to the same band, 64 engine samples (1.3 ms) later.
@@ -682,6 +686,30 @@ are typical of such a case, not a measured organ's.
 A new size or width fades in over 50 ms from the sound already in the
 church, so nothing clicks and the tail's pitch does not bend. It is a voiced
 church of the size such an organ stands in, not a model of a building.
+
+**Churech** (`Churech.h`). The same church as an effect for any sound,
+which the Churech Rack Extension plays. Whatever changes in `Nave.h` changes
+in both. The sound stands on the floor, 1.6 m up, at one of the four places
+the church hears apart, 4, 9, 14 and 19.5 m from the listener at Size 1;
+Distance shares it between the two places either side of the one asked
+for, and the sound's own level falls as one over that distance, so the far
+end of the nave is 13.8 dB quieter than the near one while the church keeps
+its level.
+
+| Control | What it does | As loaded |
+| --- | --- | --- |
+| Type | Chapel (Size 0.5, 1.6 s), Church (0.8, 2.8 s), Basilica (1.25, 4.5 s) or Cathedral (2, 7.5 s): voiced buildings, not measured ones | Church |
+| Decay | the building's decay, from half to twice | x1 |
+| Decay Bass, Decay Treble, Width, Seat | the church's own, as above | 1.3, 0.2, 0.8, on the axis |
+| Distance | the sound from the nearest place to the furthest | nearest |
+| Pre-delay | before the church, 0 to 200 ms, a new time faded in over 50 ms | 0 |
+| Low Cut, High Cut | 12 dB per octave after the church, 20 Hz to 1 kHz and 1 to 20 kHz | open |
+| Duck | the church drawn down by up to 24 dB as the sound rises from -40 to -16 dBFS, back in 0.4 s: voiced | off |
+| Mix | the sound against the church, at equal power | 0.3 |
+| Output | -24 to 12 dB | 0 dB |
+
+Once the church has rung out under -140 dB with no sound in, it is emptied
+and stops costing anything.
 
 **One keyboard.** The engine has a keyboard for each division, on MIDI
 channels 1 to 4. A front end with one stream of notes plays through
