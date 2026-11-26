@@ -17,21 +17,23 @@
 //               over as the further of the two.
 //   Expression  the swell pedal, on top of the Swell control: either can
 //               shut the box, and both must be open for it to be open.
-//   Rate        at 48 kHz the engine's samples go out as they are. At any
-//               other rate they are resampled through a windowed sinc of
-//               kTaps taps, flat to 18 kHz at 44.1 kHz and to 20 kHz above
-//               48 kHz, with its images 80 dB down; that costs kTaps / 2
+//   Rate        at 48 kHz the engine's samples go out as they are; at any
+//               other rate through RateBridge.h, which costs kTaps / 2
 //               engine samples of latency, which LatencySamples includes.
+//   Input       another sound played in the church (Engine::Render). Off
+//               48 kHz RateBridge spreads it into the engine kTaps / 2
+//               engine samples more than LatencySamples says, which is
+//               the organ's.
 //
 // JUCE-free, C++17, nothing allocated after construction. It holds the
 // engine: keep it on the heap.
 
 #include "OreganaEngine.h"
+#include "RateBridge.h"
 
 #include <array>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 
 namespace oregana {
 
@@ -44,9 +46,7 @@ public:
     // Not for the audio thread: designs the resampler for the host's rate
     // (44.1 to 192 kHz), then resets.
     void Prepare(double hostRate) {
-        rate = static_cast<std::uint32_t>(Clamp(hostRate == hostRate ? hostRate : kPipeRate, 44100.0, 192000.0) + 0.5);
-        direct = rate == kEngineRate;
-        if (!direct) Design();
+        bridge.Prepare(hostRate);
         Reset();
     }
 
@@ -55,8 +55,7 @@ public:
         for (auto& source : held) source.fill(0);
         for (auto& division : sent) division.fill(false);
         lift.fill(64);
-        for (auto& channel : history) channel.fill(0.0f);
-        phase = 0;
+        bridge.Reset();
         divisionsConnected = false;
     }
 
@@ -96,88 +95,35 @@ public:
         engine.AllSoundOff();
     }
 
-    // `divisions`: Engine::kDivisionOutputs more buffers, or none
-    // (Engine::Render).
-    void Render(float* left, float* right, int frames, float* const* divisions = nullptr) {
-        if (direct) {
-            engine.Render(left, right, frames, divisions);
-            return;
-        }
+    // `divisions`: Engine::kDivisionOutputs more buffers, or none; `input`:
+    // a left and a right buffer, or none (Engine::Render).
+    void Render(float* left, float* right, int frames, float* const* divisions = nullptr, const float* const* input = nullptr) {
         if (frames <= 0) return;
-        float* fresher[Engine::kDivisionOutputs];
+        float* out[2 + Engine::kDivisionOutputs] = { left, right };
         if (divisions != nullptr) {
             for (std::size_t n = 0; n < Engine::kDivisionOutputs; ++n) {
-                auto& channel = history[2 + n];
-                if (!divisionsConnected) engine.CopyDivisionHistory<kTaps>(n, channel.data());
-                fresher[n] = &channel[kTaps];
+                out[2 + n] = divisions[n];
+                if (!divisionsConnected && !bridge.Direct()) engine.CopyDivisionHistory<Bridge::kTaps>(n, bridge.History(static_cast<int>(2 + n)));
             }
         }
         divisionsConnected = divisions != nullptr;
-        const std::size_t channels = divisionsConnected ? history.size() : 2;
-        int done = 0;
-        while (frames > 0) {
-            const int count = Min(frames, kChunk);
-            // The engine's samples these frames pass, after the kTaps the
-            // last ones left.
-            const int fresh = static_cast<int>((phase + static_cast<std::uint64_t>(count) * kEngineRate) / rate);
-            engine.Render(&history[0][kTaps], &history[1][kTaps], fresh, divisions != nullptr ? fresher : nullptr);
-            int passed = 0;
-            for (int i = 0; i < count; ++i) {
-                phase += kEngineRate;
-                while (phase >= rate) {
-                    phase -= rate;
-                    ++passed;
-                }
-                const float at = static_cast<float>(phase) * phaseScale;
-                const int row = static_cast<int>(at);
-                const float mix = at - static_cast<float>(row);
-                const float* a = &kernel[static_cast<std::size_t>(row * kTaps)];
-                const float* b = a + kTaps;
-                const float* x = &history[0][static_cast<std::size_t>(passed)];
-                const float* y = &history[1][static_cast<std::size_t>(passed)];
-                float l = 0.0f, r = 0.0f;
-                for (int k = 0; k < kTaps; ++k) {
-                    const float c = a[k] + mix * (b[k] - a[k]);
-                    l += c * x[k];
-                    r += c * y[k];
-                }
-                left[i] = l;
-                right[i] = r;
-                if (divisions != nullptr)
-                    for (int n = 0; n < Engine::kDivisionOutputs; ++n) {
-                        const float* z = &history[static_cast<std::size_t>(2 + n)][static_cast<std::size_t>(passed)];
-                        float sum = 0.0f;
-                        for (int k = 0; k < kTaps; ++k) sum += (a[k] + mix * (b[k] - a[k])) * z[k];
-                        divisions[n][done + i] = sum;
-                    }
-            }
-            for (std::size_t n = 0; n < channels; ++n) {
-                float* samples = history[n].data();
-                std::memmove(samples, samples + fresh, kTaps * sizeof(float));
-            }
-            left += count;
-            right += count;
-            done += count;
-            frames -= count;
-        }
+        bridge.Render(input, out, divisionsConnected ? 2 + Engine::kDivisionOutputs : 2, frames,
+                      [&](const float* const* in, float* const* to, int n) { engine.Render(to[0], to[1], n, divisionsConnected ? to + 2 : nullptr, in); });
     }
 
     // What a front end reports to its host, samples at the host's rate: the
     // output stage's look-ahead and, off 48 kHz, half the resampler.
     int LatencySamples() const {
-        if (direct) return engine.LatencySamples();
-        return static_cast<int>((engine.LatencySamples() + kTaps / 2) * static_cast<double>(rate) / kPipeRate + 0.5);
+        if (bridge.Direct()) return engine.LatencySamples();
+        return static_cast<int>((engine.LatencySamples() + Bridge::kTaps / 2) * static_cast<double>(bridge.Rate()) / kPipeRate + 0.5);
     }
-    double SampleRate() const { return rate; }
+    double SampleRate() const { return bridge.Rate(); }
     const Engine& Organ() const { return engine; }
     // Each division's peak since the last call, for a front end's meters.
     std::array<float, kDivisions> TakePeaks() { return engine.TakePeaks(); }
 
 private:
-    static constexpr std::uint32_t kEngineRate = 48000;
-    static constexpr int kTaps = 64, kPhases = 256, kChunk = 64;
-    // The most engine samples kChunk frames pass, at 44.1 kHz.
-    static constexpr int kFresh = kChunk * 48000 / 44100 + 2;
+    using Bridge = RateBridge<2 + Engine::kDivisionOutputs>;
 
     // Each division's keys as the held ones and the two controls want them,
     // against what the engine was last told.
@@ -205,49 +151,12 @@ private:
         }
     }
 
-    // A Kaiser-windowed sinc (beta 8: 80 dB) at each of kPhases + 1 places
-    // between two engine samples. The band ends 1.9 kHz, half the window's
-    // transition, under the lower of the two Nyquist rates, and at 22 kHz
-    // when the host's is the higher: nothing an organ gives is lost above it.
-    void Design() {
-        const auto bessel = [](double x) {
-            double sum = 1.0, term = 1.0;
-            for (int k = 1; k < 40; ++k) {
-                term *= (0.5 * x / k) * (0.5 * x / k);
-                sum += term;
-            }
-            return sum;
-        };
-        const double beta = 8.0, half = 0.5 * kTaps;
-        const double corner = Min(22000.0, 0.5 * rate - 1900.0) / kPipeRate;
-        for (int row = 0; row <= kPhases; ++row) {
-            double taps[kTaps], sum = 0.0;
-            for (int k = 0; k < kTaps; ++k) {
-                // Tap k's sample stands this far from the output's moment.
-                const double d = k - half + 1.0 - static_cast<double>(row) / kPhases;
-                const double edge = 1.0 - (d / half) * (d / half);
-                const double window = edge > 0.0 ? bessel(beta * std::sqrt(edge)) / bessel(beta) : 0.0;
-                const double turn = kTwoPi * corner * d;
-                taps[k] = window * (Abs(turn) < 1.0e-9 ? 1.0 : std::sin(turn) / turn);
-                sum += taps[k];
-            }
-            for (int k = 0; k < kTaps; ++k) kernel[static_cast<std::size_t>(row * kTaps + k)] = static_cast<float>(taps[k] / sum);
-        }
-        phaseScale = static_cast<float>(kPhases) / static_cast<float>(rate);
-    }
-
     Engine engine;
     std::array<std::array<std::uint8_t, 128>, kSources> held {};    // each source's keys: the velocity it holds one with, or 0
     std::array<std::array<bool, 128>, kDivisions> sent {};
     std::array<std::uint8_t, 128> lift {};   // the velocity each key was last let go with
-    std::uint32_t rate = kEngineRate;
-    bool direct = true;
     bool divisionsConnected = false;
-    std::uint64_t phase = 0;                                        // the output's place between two engine samples, in 1 / rate
-    float phaseScale = 0.0f;
-    // The main pair, then the divisions' own outputs.
-    std::array<std::array<float, kTaps + kFresh>, 2 + Engine::kDivisionOutputs> history {};
-    std::array<float, (kPhases + 1) * kTaps> kernel {};
+    Bridge bridge;
 };
 
 } // namespace oregana
