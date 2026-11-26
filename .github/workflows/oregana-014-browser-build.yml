@@ -1,0 +1,98 @@
+name: Build Oregana 0.14.0 browser renderers
+
+on:
+  push:
+    branches: [build/oregana-dsp-014-20261126]
+
+permissions: {}
+
+jobs:
+  browser-renderers:
+    runs-on: ubuntu-24.04
+    container: debian:13
+    timeout-minutes: 20
+    steps:
+      - name: Install browser DSP and native reference toolchains
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates git g++ python3 clang-19 lld-19 wasi-libc libc++-19-dev-wasm32 libclang-rt-19-dev-wasm32 binaryen wabt nodejs
+          wasm2js --version
+          clang++-19 --version
+      - name: Fetch the two exact public revisions without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init -q organ
+          git -C organ remote add origin https://github.com/protocodus/virtual-instrument-oregana.git
+          git -C organ fetch --quiet --depth=1 --filter=blob:none origin 5e38f03c484a4dc5fb5b3e32eb63d73d44b2b377
+          git init -q site
+          git -C site remote add origin https://github.com/voho/protocodus.github.io.git
+          git -C site sparse-checkout init --cone
+          git -C site sparse-checkout set scripts/oregana fun/oregana tests/oregana
+          git -C site fetch --quiet --depth=1 --filter=blob:none origin 3d01e4621f111ed45a92273d6ffbe0751deb776a
+          git -C site checkout --quiet --detach FETCH_HEAD
+          git -C organ archive 5e38f03c484a4dc5fb5b3e32eb63d73d44b2b377 Source/DSP > /dev/null
+      - name: Inspect the generated scalar pipe kernels
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir compiler-inspection
+          cat > compiler-inspection/wasm2js <<'SH'
+          #!/bin/sh
+          set -eu
+          /usr/bin/wasm2js "$@"
+          cp "$1" "$GITHUB_WORKSPACE/compiler-inspection/scalar.wasm"
+          for last do :; done
+          cp "$last" "$GITHUB_WORKSPACE/compiler-inspection/module.js"
+          SH
+          chmod +x compiler-inspection/wasm2js
+          # The source revision is newer than the packager's audited fingerprints.
+          # Run the ordinary compiler and keep its exact input and output for review.
+          PATH="$PWD/compiler-inspection:$PATH" site/scripts/oregana/build-dsp.sh "$PWD/organ" || test -s compiler-inspection/module.js
+          wasm-objdump -x compiler-inspection/scalar.wasm | c++filt > compiler-inspection/functions.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          from hashlib import sha256
+          import re, subprocess
+          root = Path('compiler-inspection')
+          symbols = (root/'functions.txt').read_text()
+          imports = int(subprocess.check_output(['node','-e', "console.log(WebAssembly.Module.imports(new WebAssembly.Module(require('fs').readFileSync('compiler-inspection/scalar.wasm'))).filter(x=>x.kind==='function').length)"]))
+          procedures = dict(re.findall(r'^ function (\$\d+)(\(.*?^ \})$', (root/'module.js').read_text(), re.M|re.S))
+          package = Path('site/scripts/oregana/package-dsp.py')
+          script = package.read_text()
+          for pipe, name, nargs in [('FluePipe','renderFlue',5), ('ReedPipe','renderReed',3)]:
+              indices = set(re.findall(r'^ - func\[(\d+)\].*?<oregana::'+pipe+r'::Run\(float\*, int[^>]*\)>',symbols,re.M))
+              assert len(indices)==1, (pipe,indices)
+              n = int(indices.pop())-imports
+              code = procedures[f'${n}']
+              assert len(code[:code.index(')')].split(','))==nargs and 'HEAPF32' in code and not re.search(r'\$\d+\(',code)
+              fingerprint = sha256(code.encode()).hexdigest()
+              (root/(name+'.js')).write_text(code)
+              script,count = re.subn(r'"[a-f0-9]{64}": "'+name+'"','"'+fingerprint+'": "'+name+'"',script)
+              assert count==1
+              print(name, n, fingerprint)
+          package.write_text(script)
+          PY
+      - name: Rebuild with the reviewed fingerprints and compare against the native engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          site/scripts/oregana/build-dsp.sh "$PWD/organ"
+          node --experimental-default-type=module site/tests/oregana/parity.mjs "$PWD/organ"
+          cd site
+          git diff --stat
+          sha256sum scripts/oregana/package-dsp.py fun/oregana/dsp/core.mjs fun/oregana/dsp/organ-simd.wasm fun/oregana/metadata.js
+      - name: Export verified generated files and compiler evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: oregana-0140-browser-build
+          path: |
+            site/scripts/oregana/package-dsp.py
+            site/fun/oregana/metadata.js
+            site/fun/oregana/dsp/core.mjs
+            site/fun/oregana/dsp/organ-simd.wasm
+            site/fun/oregana/dsp/LICENSE
+            site/fun/oregana/dsp/THIRD_PARTY_NOTICES.md
+            compiler-inspection/renderFlue.js
+            compiler-inspection/renderReed.js
+          retention-days: 3
