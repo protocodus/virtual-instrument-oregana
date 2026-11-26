@@ -42,6 +42,7 @@ set(OREGANA_DSP_HEADERS
     Source/DSP/OreganaControls.h
     Source/DSP/OreganaEngine.h
     Source/DSP/OreganaInstrument.h
+    Source/DSP/RateBridge.h
     Source/DSP/OreganaPresets.h
     Source/DSP/OutputStage.h
     Source/DSP/PipeRegulation.h
