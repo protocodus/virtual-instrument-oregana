@@ -1136,7 +1136,7 @@ void Engine::Tick() {
     }
 }
 
-void Engine::RenderChunk(float* left, float* right, int frames, float* const* divisions, int offset) {
+void Engine::RenderChunk(float* left, float* right, int frames, float* const* divisions, const float* const* input, int offset) {
     for (auto& division : bus)
         for (auto& channel : division)
             for (int i = 0; i < frames; ++i) channel[static_cast<std::size_t>(i)] = 0.0f;
@@ -1363,6 +1363,10 @@ void Engine::RenderChunk(float* left, float* right, int frames, float* const* di
         apartAt = (apartAt + 1) & (kApartSize - 1);
         knocks.Process(sound[0], sound[1]);
         if (hum > 0.0f || hiss > 0.0f || rub > 0.0f) windNoise.Process(hum, hiss, rub, sound[0], sound[1]);
+        if (input != nullptr) {
+            sound[0] += input[0][offset + i];
+            sound[1] += input[1][offset + i];
+        }
         float roomLeft, roomRight;
         nave.Process(sound[0], sound[1], roomLeft, roomRight, apart);
         nave.Direct(sound[0], sound[1]);
@@ -1381,7 +1385,7 @@ std::array<float, kDivisions> Engine::TakePeaks() {
     return taken;
 }
 
-void Engine::Render(float* left, float* right, int frames, float* const* divisions) {
+void Engine::Render(float* left, float* right, int frames, float* const* divisions, const float* const* input) {
     int from = 0;
     while (frames > 0) {
         if (untilTick == 0) {
@@ -1389,7 +1393,7 @@ void Engine::Render(float* left, float* right, int frames, float* const* divisio
             untilTick = kChunk;
         }
         const int chunk = Min(frames, untilTick);
-        RenderChunk(left, right, chunk, divisions, from);
+        RenderChunk(left, right, chunk, divisions, input, from);
         from += chunk;
         left += chunk;
         right += chunk;

@@ -22,6 +22,10 @@
 //               kTaps taps, flat to 18 kHz at 44.1 kHz and to 20 kHz above
 //               48 kHz, with its images 80 dB down; that costs kTaps / 2
 //               engine samples of latency, which LatencySamples includes.
+//   Input       another sound played in the church (Engine::Render). Off
+//               48 kHz it reaches the engine through the same kernel turned
+//               round, kTaps engine samples later: kTaps / 2 more than
+//               LatencySamples says, which is the organ's.
 //
 // JUCE-free, C++17, nothing allocated after construction. It holds the
 // engine: keep it on the heap.
@@ -56,6 +60,7 @@ public:
         for (auto& division : sent) division.fill(false);
         lift.fill(64);
         for (auto& channel : history) channel.fill(0.0f);
+        for (auto& channel : inbox) channel.fill(0.0f);
         phase = 0;
         divisionsConnected = false;
     }
@@ -96,11 +101,11 @@ public:
         engine.AllSoundOff();
     }
 
-    // `divisions`: Engine::kDivisionOutputs more buffers, or none
-    // (Engine::Render).
-    void Render(float* left, float* right, int frames, float* const* divisions = nullptr) {
+    // `divisions`: Engine::kDivisionOutputs more buffers, or none; `input`:
+    // a left and a right buffer, or none (Engine::Render).
+    void Render(float* left, float* right, int frames, float* const* divisions = nullptr, const float* const* input = nullptr) {
         if (direct) {
-            engine.Render(left, right, frames, divisions);
+            engine.Render(left, right, frames, divisions, input);
             return;
         }
         if (frames <= 0) return;
@@ -120,7 +125,41 @@ public:
             // The engine's samples these frames pass, after the kTaps the
             // last ones left.
             const int fresh = static_cast<int>((phase + static_cast<std::uint64_t>(count) * kEngineRate) / rate);
-            engine.Render(&history[0][kTaps], &history[1][kTaps], fresh, divisions != nullptr ? fresher : nullptr);
+            // Each input frame is spread over the kTaps engine samples the
+            // output frame at its moment is gathered from, kTaps / 2 + 1 on,
+            // so that the samples rendered now have all they will get.
+            if (input != nullptr) {
+                std::uint64_t at = phase;
+                int passed = 0;
+                for (int i = 0; i < count; ++i) {
+                    at += kEngineRate;
+                    while (at >= rate) {
+                        at -= rate;
+                        ++passed;
+                    }
+                    const float place = static_cast<float>(at) * phaseScale;
+                    const int row = static_cast<int>(place);
+                    const float mix = place - static_cast<float>(row);
+                    const float* a = &kernel[static_cast<std::size_t>(row * kTaps)];
+                    const float* b = a + kTaps;
+                    const float l = inputScale * input[0][done + i], r = inputScale * input[1][done + i];
+                    float* x = &inbox[0][static_cast<std::size_t>(passed)];
+                    float* y = &inbox[1][static_cast<std::size_t>(passed)];
+                    for (int k = 0; k < kTaps; ++k) {
+                        const float c = a[k] + mix * (b[k] - a[k]);
+                        x[k] += c * l;
+                        y[k] += c * r;
+                    }
+                }
+            }
+            // Taken with or without an input, so that what an input left
+            // when it was unplugged plays out rather than waiting for the next.
+            const float* const taken[2] = { inbox[0].data(), inbox[1].data() };
+            engine.Render(&history[0][kTaps], &history[1][kTaps], fresh, divisions != nullptr ? fresher : nullptr, taken);
+            for (auto& channel : inbox) {
+                std::memmove(channel.data(), channel.data() + fresh, (channel.size() - static_cast<std::size_t>(fresh)) * sizeof(float));
+                std::memset(channel.data() + channel.size() - fresh, 0, static_cast<std::size_t>(fresh) * sizeof(float));
+            }
             int passed = 0;
             for (int i = 0; i < count; ++i) {
                 phase += kEngineRate;
@@ -234,6 +273,9 @@ private:
             for (int k = 0; k < kTaps; ++k) kernel[static_cast<std::size_t>(row * kTaps + k)] = static_cast<float>(taps[k] / sum);
         }
         phaseScale = static_cast<float>(kPhases) / static_cast<float>(rate);
+        // The kernel sums to 1 over engine samples; an input frame stands
+        // for kEngineRate / rate of them.
+        inputScale = static_cast<float>(kEngineRate) / static_cast<float>(rate);
     }
 
     Engine engine;
@@ -244,9 +286,11 @@ private:
     bool direct = true;
     bool divisionsConnected = false;
     std::uint64_t phase = 0;                                        // the output's place between two engine samples, in 1 / rate
-    float phaseScale = 0.0f;
+    float phaseScale = 0.0f, inputScale = 1.0f;
     // The main pair, then the divisions' own outputs.
     std::array<std::array<float, kTaps + kFresh>, 2 + Engine::kDivisionOutputs> history {};
+    // The input as the engine is to take it, from its next sample on.
+    std::array<std::array<float, kTaps + kFresh>, 2> inbox {};
     std::array<float, (kPhases + 1) * kTaps> kernel {};
 };
 

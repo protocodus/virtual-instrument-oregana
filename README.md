@@ -55,6 +55,10 @@ and plenty.
 
 ## Version history
 
+### 0.13.0 — 2026-11-26 — a sound played in the church
+
+- **An audio input into the church.** A front end can now play another stereo sound into the organ's church: it is heard from the Hauptwerk at the console and takes the Room, the seat, the Volume and the output stage with the organ, but not the divisions' outputs or meters. Off 48 kHz it is resampled into the engine through the organ's own resampler kernel, flat to the same band, 64 engine samples (1.3 ms) later.
+
 ### 0.12.5 — 2026-11-22 — bounded ciphers without leftover notes
 
 - **Hanging pallets (`Ciphers`) settle shut on their own.** Sticking pallets now release within 2 to 5 s while other keys are played and shut within 0.75 s once no key is held across any division (or on the next tick if already hung that long), so no imperfection setting ever leaves an infinite note sounding after playing stops; pushing the stops in or sending CC120 still cuts hanging pipes immediately.
@@ -697,6 +701,11 @@ follows the bend within 0.7 cents. Fourteen of the 4,177 flues, all above
 samples go out untouched; at any other rate from 44.1 to 192 kHz they pass a
 64-tap windowed sinc, flat to 18 kHz at 44.1 kHz and to 20 kHz above 48 kHz
 with its images 80 dB down, by design and not yet measured.
+A sound played in (the input, `Render`'s last buffers) is added to the
+organ's own where the Hauptwerk stands, ahead of the church, so the Room,
+the seat, the Volume and the output stage take it as they take the pipes;
+off 48 kHz it reaches the engine through the same kernel turned round,
+64 engine samples late.
 
 **Imperfections.** An organ is thousands of hand-made pipes in an unheated
 building. Each of these controls turns one such thing from none to plenty,

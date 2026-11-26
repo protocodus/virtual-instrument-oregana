@@ -3,7 +3,7 @@
 // however the host cuts its blocks; the keyboard on the manual it is given;
 // the Pedal from the lowest key or below the split; a key held by two
 // sources; the mod wheel and the Crescendo control as the roller and
-// expression as the swell pedal; and every key of the piano on every factory registration's keyboard.
+// expression as the swell pedal; a sound played in at every rate; and every key of the piano on every factory registration's keyboard.
 #include "DSP/OreganaInstrument.h"
 #include "DSP/OreganaPresets.h"
 #include "../Tools/PipeMeasure.h"
@@ -374,6 +374,86 @@ void ReconnectingDivisionOutputs() {
     }
 }
 
+
+// Plays `in` (both channels) into the church through `rig`, in blocks of
+// `block`, and gives back the left output.
+std::vector<float> PlayIn(Rig& rig, const std::vector<float>& in, int block) {
+    std::vector<float> left(in.size()), right(in.size());
+    for (std::size_t done = 0; done < in.size();) {
+        const auto now = Min(in.size() - done, static_cast<std::size_t>(block));
+        const float* const input[2] = { &in[done], &in[done] };
+        rig.organ->Render(&left[done], &right[done], static_cast<int>(now), nullptr, input);
+        done += now;
+    }
+    return left;
+}
+
+double Rms(const std::vector<float>& x, std::size_t from) {
+    double sum = 0.0;
+    for (std::size_t i = from; i < x.size(); ++i) sum += static_cast<double>(x[i]) * x[i];
+    return std::sqrt(sum / static_cast<double>(x.size() - from));
+}
+
+void InputPlaysInTheChurch() {
+    // A sine played in comes out at its pitch and the same level at every
+    // rate, through the band the resampler keeps.
+    const auto sine = [](double hz, double rate) {
+        std::vector<float> x(static_cast<std::size_t>(rate));
+        for (std::size_t i = 0; i < x.size(); ++i) x[i] = static_cast<float>(0.05 * std::sin(kTwoPi * hz * static_cast<double>(i) / rate));
+        return x;
+    };
+    for (const double hz : { 1000.0, 15000.0 }) {
+        Rig reference;
+        const auto in = sine(hz, 48000.0);
+        const double level = Rms(PlayIn(reference, in, 37), in.size() / 2) / Rms(in, 0);
+        Expect(level > 0.1, "InputPlaysInTheChurch", "a sine played in at 48 kHz, out against in, dB", Db(level));
+        for (const double rate : { 44100.0, 88200.0, 96000.0, 192000.0 }) {
+            Rig rig(rate);
+            const auto here = sine(hz, rate);
+            const auto out = PlayIn(rig, here, 37);
+            char what[80];
+            std::snprintf(what, sizeof what, "%.0f Hz played in at %.0f Hz against 48 kHz, dB", hz, rate);
+            const double db = Db(Rms(out, out.size() / 2) / Rms(here, 0) / level);
+            Expect(Abs(db) < 0.1, "InputPlaysInTheChurch", what, db);
+            std::snprintf(what, sizeof what, "%.0f Hz played in at %.0f Hz, its pitch out, cents", hz, rate);
+            const double cents = 1200.0 * std::log2(measure::Hz(out, out.size() / 2, out.size(), hz, rate) / hz);
+            Expect(Abs(cents) < 0.5, "InputPlaysInTheChurch", what, cents);
+        }
+    }
+
+    // The same samples however the host cuts its blocks.
+    Rig a(44100.0), b(44100.0);
+    const auto in = sine(440.0, 44100.0);
+    Expect(PlayIn(a, in, 64) == PlayIn(b, in, 37), "InputPlaysInTheChurch", "the same samples in blocks of 64 and 37 at 44.1 kHz", 0.0);
+
+    // A click played in comes out kTaps engine samples and the output
+    // stage's look-ahead later.
+    for (const double rate : { 44100.0, 48000.0, 96000.0 }) {
+        Rig rig(rate);
+        std::vector<float> click(static_cast<std::size_t>(rate / 10));
+        click[100] = 0.5f;
+        const auto out = PlayIn(rig, click, 37);
+        std::size_t peak = 0;
+        for (std::size_t i = 0; i < out.size(); ++i)
+            if (Abs(out[i]) > Abs(out[peak])) peak = i;
+        const double late = static_cast<double>(peak) - 100.0;
+        const int lead = Rig().organ->LatencySamples();
+        const double expected = rate == 48000.0 ? lead : (lead + 64) * rate / 48000.0;
+        char what[64];
+        std::snprintf(what, sizeof what, "a click played in at %.0f Hz, samples late", rate);
+        Expect(Abs(late - expected) <= 1.0, "InputPlaysInTheChurch", what, late);
+    }
+
+    // The church rings on after the sound played in stops, and the organ
+    // with nothing played in is as it was.
+    Rig church;
+    church.Set(kRoom, 1.0);
+    std::vector<float> burst(48000);
+    for (std::size_t i = 0; i < 4800; ++i) burst[i] = static_cast<float>(0.2 * std::sin(0.37 * static_cast<double>(i)));
+    const auto rung = PlayIn(church, burst, 64);
+    Expect(Rms(rung, 24000) > 1.0e-3, "InputPlaysInTheChurch", "the church half a second after a burst played in, RMS", Rms(rung, 24000));
+}
+
 } // namespace
 
 int main() {
@@ -387,6 +467,7 @@ int main() {
     EveryKeySounds();
     DivisionOutputsAtEveryRate();
     ReconnectingDivisionOutputs();
+    InputPlaysInTheChurch();
     std::printf("%d failure(s)\n", failures);
     return failures ? 1 : 0;
 }

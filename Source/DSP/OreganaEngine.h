@@ -131,7 +131,11 @@ public:
     // Volume acts on it (owner, 2026-11-14). As late as the main output,
     // which is the same with or without them.
     static constexpr int kDivisionOutputs = 2 * kDivisions;
-    void Render(float* left, float* right, int frames, float* const* divisions = nullptr);
+    // With `input`, a left and a right buffer of `frames`: another sound
+    // played in the church from where the Hauptwerk stands, at the console,
+    // as it is. It takes the Room, the seat, the Volume and the output
+    // stage with the organ, and none of the divisions' outputs or meters.
+    void Render(float* left, float* right, int frames, float* const* divisions = nullptr, const float* const* input = nullptr);
 
     // The resampler can be connected in mid-note. Its input then needs the
     // last Frames samples the delayed division output would have delivered.
@@ -201,7 +205,7 @@ private:
     void Design(int slot);
     void Place(Slot& slot);
     void Tick();
-    void RenderChunk(float* left, float* right, int frames, float* const* divisions, int offset);
+    void RenderChunk(float* left, float* right, int frames, float* const* divisions, const float* const* input, int offset);
     double TunedHz(const Slot& s) const;
     double Cents(const Slot& slot) const;
 
