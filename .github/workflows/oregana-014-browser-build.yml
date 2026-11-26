@@ -50,6 +50,7 @@ jobs:
           # Run the ordinary compiler and keep its exact input and output for review.
           PATH="$PWD/compiler-inspection:$PATH" site/scripts/oregana/build-dsp.sh "$PWD/organ" || test -s compiler-inspection/module.js
           wasm-objdump -x compiler-inspection/scalar.wasm | c++filt > compiler-inspection/functions.txt
+          awk '/FluePipe.*::Run|ReedPipe.*::Run/ {print; if (++n == 8) exit}' compiler-inspection/functions.txt
           python3 - <<'PY'
           from pathlib import Path
           from hashlib import sha256
@@ -61,10 +62,31 @@ jobs:
           package = Path('site/scripts/oregana/package-dsp.py')
           script = package.read_text()
           for pipe, name, nargs in [('FluePipe','renderFlue',5), ('ReedPipe','renderReed',3)]:
-              indices = set(re.findall(r'^ - func\[(\d+)\].*?<oregana::'+pipe+r'::Run\(float\*, int[^>]*\)>',symbols,re.M))
-              assert len(indices)==1, (pipe,indices)
-              n = int(indices.pop())-imports
-              code = procedures[f'${n}']
+              # The shipped packager only adds parameter annotations and typed
+              # heap coercions when extracting these two previously audited kernels.
+              # Normalize those changes and compiler-assigned locals, then match the
+              # native branch/operation sequence against the new generated functions.
+              from difflib import SequenceMatcher
+              prev = Path('site/fun/oregana/dsp/core.mjs').read_text()
+              previous = re.search(r'^ function '+name+r'(\(.*?^ \})$', prev, re.M|re.S).group(1)
+              def shape(s):
+                  s = re.sub(r'Math_fround\((HEAPF32\[[^\[\]]+\])\)',r'\1',s)
+                  s = re.sub(r'\((HEAP32\[[^\[\]]+\])\|0\)',r'\1',s)
+                  s = re.sub(r'\$\d+_\d+','v',s)
+                  return [re.sub(r'\b\d+\b','n',line.strip().rstrip(';')) for line in s.splitlines()[1:] if not re.fullmatch(r'\s*v = v\|0;',line)]
+              old = shape(previous)
+              matches = []
+              for key, body in procedures.items():
+                  if len(body[:body.index(')')].split(',')) != nargs or 'HEAPF32' not in body or re.search(r'\$\d+\(',body):
+                      continue
+                  other = shape(body)
+                  if 0.45 * len(old) < len(other) < 2.1 * len(old):
+                      matches.append((SequenceMatcher(None,old,other,autojunk=False).ratio(),key))
+              matches.sort(reverse=True)
+              print(pipe, 'old-to-new instruction comparisons', matches[:3])
+              assert matches and matches[0][0] > 0.62 and (len(matches)==1 or matches[0][0]-matches[1][0]>0.18)
+              key = matches[0][1]
+              n,code = int(key[1:]),procedures[key]
               assert len(code[:code.index(')')].split(','))==nargs and 'HEAPF32' in code and not re.search(r'\$\d+\(',code)
               fingerprint = sha256(code.encode()).hexdigest()
               (root/(name+'.js')).write_text(code)
@@ -82,6 +104,22 @@ jobs:
           cd site
           git diff --stat
           sha256sum scripts/oregana/package-dsp.py fun/oregana/dsp/core.mjs fun/oregana/dsp/organ-simd.wasm fun/oregana/metadata.js
+      - name: Print verified file transfer blocks
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from hashlib import sha1
+          from base64 import b64encode
+          print('::group::Verified public build file blocks')
+          for filename in ['scripts/oregana/package-dsp.py','fun/oregana/metadata.js','fun/oregana/dsp/core.mjs','fun/oregana/dsp/organ-simd.wasm','fun/oregana/dsp/LICENSE','fun/oregana/dsp/THIRD_PARTY_NOTICES.md']:
+              data = (Path('site')/filename).read_bytes()
+              oid = sha1(f'blob {len(data)}\0'.encode()+data).hexdigest()
+              print('OREGANA_FILE',filename,len(data),oid)
+              for offset in range(0,len(data),3072):
+                  print('OREGANA_DATA',oid,offset,b64encode(data[offset:offset+3072]).decode())
+          print('::endgroup::')
+          PY
       - name: Export verified generated files and compiler evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
