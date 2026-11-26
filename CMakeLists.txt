@@ -169,9 +169,17 @@ if(BUILD_TESTING)
     # SDK's -Wall -Wextra -Werror (its second build failed on an unused constant).
     find_program(OREGANA_CLANGXX NAMES clang++)
     if(OREGANA_CLANGXX)
+        # On Windows this Clang reads MSVC's STL, which refuses a Clang older
+        # than the one it was released with (STL1000: the runner's LLVM 20
+        # against an STL that wants 22). The check is of this code's globals,
+        # not of the STL, so it is let through.
+        set(OREGANA_STL_MISMATCH "")
+        if(WIN32)
+            set(OREGANA_STL_MISMATCH -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH)
+        endif()
         add_test(NAME Oregana.NoLoadTimeGlobals
             COMMAND ${OREGANA_CLANGXX} -std=c++17 -fsyntax-only -fno-builtin
-                    -Wall -Wextra -Werror -Wglobal-constructors
+                    -Wall -Wextra -Werror -Wglobal-constructors ${OREGANA_STL_MISMATCH}
                     -I${CMAKE_CURRENT_SOURCE_DIR}/Source/DSP
                     ${CMAKE_CURRENT_SOURCE_DIR}/Source/DSP/OreganaEngine.cpp)
         set_tests_properties(Oregana.NoLoadTimeGlobals PROPERTIES LABELS unit)
