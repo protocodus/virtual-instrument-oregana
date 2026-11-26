@@ -1,7 +1,7 @@
 // Instrument contracts: at 48 kHz the engine's own samples; at any other
 // rate the same pitch and level, the stated latency and the same samples
 // however the host cuts its blocks; the keyboard on the manual it is given;
-// the Pedal from the lowest key or below the split; a key held by two
+// a split between two manuals; the Pedal from the lowest key or below the split; a key held by two
 // sources; the mod wheel and the Crescendo control as the roller and
 // expression as the swell pedal; a sound played in at every rate; and every key of the piano on every factory registration's keyboard.
 #include "DSP/OreganaInstrument.h"
@@ -454,12 +454,58 @@ void InputPlaysInTheChurch() {
     Expect(Rms(rung, 24000) > 1.0e-3, "InputPlaysInTheChurch", "the church half a second after a burst played in, RMS", Rms(rung, 24000));
 }
 
+void SplitBetweenManuals() {
+    // With a Lower Manual named, the keys below middle C play it and the
+    // rest the Keyboard's; the Pedal's Split still takes the keys below c
+    // from both, and a held key goes over when the Lower Manual changes.
+    Rig rig;
+    rig.Set(kPosGedackt8, 1.0);
+    rig.Set(kKeyboard, kRecit);
+    rig.Set(kLowerManual, 1 + kPositiv);
+    const auto heard = [&](int note) {
+        rig.organ->KeyDown(note, 80);
+        rig.Play(0.5);
+        const double level = rig.Play(0.3);
+        rig.organ->AllKeysUp();
+        rig.Play(1.5);
+        return level;
+    };
+    const double below = heard(kManualSplit - 1), at = heard(kManualSplit);
+    Expect(below > 100.0 * kSilent, "SplitBetweenManuals", "b below middle C on the lower manual's Gedackt", below);
+    Expect(at < kSilent, "SplitBetweenManuals", "middle C on the Keyboard's manual, nothing drawn", at);
+    rig.Set(kLowerManual, kLowerOff);
+    const double off = heard(kManualSplit - 1);
+    Expect(off < kSilent, "SplitBetweenManuals", "b with the Lower Manual off: the Keyboard's manual", off);
+
+    // Three zones: the Pedal below c, the Positiv to middle C, the Recit above.
+    rig.Set(kLowerManual, 1 + kPositiv);
+    rig.Set(kPedalMode, kPedalSplit);
+    const double pedal = heard(kSplitNote - 1), lower = heard(kSplitNote);
+    Expect(pedal < kSilent, "SplitBetweenManuals", "below c with the Pedal's Split: the Pedal, nothing drawn", pedal);
+    Expect(lower > 100.0 * kSilent, "SplitBetweenManuals", "c with the Pedal's Split: the lower manual", lower);
+
+    // A held key goes over when the Lower Manual changes under it.
+    rig.Set(kPedalMode, kPedalOff);
+    rig.Set(kLowerManual, kLowerOff);
+    rig.organ->KeyDown(55, 80);
+    rig.Play(0.5);
+    rig.Set(kLowerManual, 1 + kPositiv);
+    rig.Play(1.0);
+    const double over = rig.Play(0.3);
+    Expect(over > 100.0 * kSilent, "SplitBetweenManuals", "a held g once the Lower Manual is the Positiv", over);
+    rig.Set(kLowerManual, kLowerOff);
+    rig.Play(1.5);
+    const double back = rig.Play(0.3);
+    Expect(back < kSilent, "SplitBetweenManuals", "and once it is off again", back);
+}
+
 } // namespace
 
 int main() {
     EngineRateIsTheEngine();
     OtherRates();
     KeyboardPlaysItsManual();
+    SplitBetweenManuals();
     PedalFromTheKeyboard();
     NotesBelowCompassLeaveBassAlone();
     TwoSourcesHoldOneKey();

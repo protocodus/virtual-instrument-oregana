@@ -1657,10 +1657,10 @@ void EveryControlTells() {
     int silent = 0;
     const char* which = "";
     for (int i = 0; i < kControlCount; ++i) {
-        // The keyboard's manual and the Pedal's keys are the Instrument's
+        // The keyboard's manuals, its lower manual and the Pedal's keys are the Instrument's
         // (Oregana.Instrument holds them); a cipher tells only on the one key
         // in 25 that hangs, after it is let go (Imperfections).
-        if (i == kKeyboard || i == kPedalMode || i == kCiphers) continue;
+        if (i == kKeyboard || i == kPedalMode || i == kLowerManual || i == kCiphers) continue;
         const Take take = thrown.Play(i, thrown.Other(i), 0.0, 0.0, 2.5);
         double sum = 0.0;
         for (std::size_t n = 0; n < take.left.size(); ++n) {

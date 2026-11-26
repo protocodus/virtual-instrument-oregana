@@ -7,8 +7,10 @@
 // stream of notes and any rate: both front ends play through it, so they
 // agree.
 //
-//   Keys        every key plays the manual the Keyboard control names, and
-//               the Pedal as Pedal Keys says (OreganaControls.h). A key may
+//   Keys        every key plays the manual the Keyboard control names, or
+//               below middle C the Lower Manual if one is named, and
+//               the Pedal as Pedal Keys says (OreganaControls.h): its Split
+//               takes the keys below kSplitNote from either manual. A key may
 //               be held by more than one source at once (a keyboard and a
 //               CV gate): it rises when the last one lets go.
 //   Mod wheel   the crescendo roller (owner, 2026-11-13): at rest only
@@ -130,6 +132,7 @@ private:
     void Sync() {
         const Controls& controls = engine.GetControls();
         const int manual = static_cast<int>(controls[kKeyboard]), pedal = static_cast<int>(controls[kPedalMode]);
+        const int lower = static_cast<int>(controls[kLowerManual]) - 1;
         const auto velocity = [&](int note) {
             const auto n = static_cast<std::size_t>(note);
             return Max(held[0][n], held[1][n]);
@@ -141,7 +144,8 @@ private:
             const int down = velocity(note);
             const bool split = pedal == kPedalSplit && note < kSplitNote;
             for (int d = 0; d < kDivisions; ++d) {
-                const bool want = down && (d == kPedal ? split || (pedal == kPedalBass && note == lowest) : d == manual && !split);
+                const int plays = lower >= 0 && note < kManualSplit ? lower : manual;
+                const bool want = down && (d == kPedal ? split || (pedal == kPedalBass && note == lowest) : d == plays && !split);
                 bool& is = sent[static_cast<std::size_t>(d)][static_cast<std::size_t>(note)];
                 if (want == is) continue;
                 is = want;

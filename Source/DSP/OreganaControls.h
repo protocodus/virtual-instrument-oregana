@@ -79,6 +79,10 @@ enum Control : int {
     kSoloPositiv,
     kSoloRecit,
     kSoloPedal,
+    // A split of the keyboard into two manuals (a buyer's wish, 2026-11-26):
+    // the keys below kManualSplit play the manual kLowerManual names, the
+    // rest the one kKeyboard does (OreganaInstrument.h).
+    kLowerManual,                   // kLowerOff, or 1 + the manual: Hauptwerk, Positiv or Recit
     kControlCount
 };
 
@@ -95,6 +99,9 @@ enum WindSupply : int { kWindOff, kWindBlower, kWindBellows, kWindSupplies };
 // MIDI has a channel for each division and takes no notice.
 enum PedalMode : int { kPedalOff, kPedalBass, kPedalSplit, kPedalModes };
 constexpr int kSplitNote = 48;   // c: the Pedal keeps its organ octave C to H and all below it
+constexpr int kLowerOff = 0;
+// Middle C, fixed (owner, 2026-11-26: chosen over a movable split).
+constexpr int kManualSplit = 60;
 
 enum class Curve { kLinear, kLog, kStepped };
 
@@ -179,6 +186,7 @@ constexpr std::array<ControlInfo, kControlCount> MakeControlInfo() {
         { "solo_positiv", "Positiv Solo", 0.0, 1.0, 0.0, 2, Curve::kStepped, "" },
         { "solo_recit", "Recit Solo", 0.0, 1.0, 0.0, 2, Curve::kStepped, "" },
         { "solo_pedal", "Pedal Solo", 0.0, 1.0, 0.0, 2, Curve::kStepped, "" },
+        { "lower_manual", "Lower Manual", 0.0, 3.0, static_cast<double>(kLowerOff), 4, Curve::kStepped, "" },
     };
     for (int i = kStopCount; i < kControlCount; ++i) info[static_cast<std::size_t>(i)] = rest[i - kStopCount];
     return info;

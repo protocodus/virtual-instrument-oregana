@@ -303,6 +303,14 @@ public:
         // once the pipes' regulation was written again (2026-11-18).
         case kTremulantDepth:
             return Rule(Reach::Held, "", alone({ { kPosGedackt8, drawn }, { kCouplerPosHw, drawn }, { kTremulantPos, drawn } }));
+        // The held chord lies below middle C, on the Keyboard's manual (the
+        // Hauptwerk, as loaded) unless a Lower Manual is named. Naming the
+        // Keyboard's own manual is no split, so whichever manual the
+        // Keyboard plays, one of the three is silent by design; Exempt
+        // excuses only a value with no effect, and the Positiv and the Recit
+        // are held to every check.
+        case kLowerManual:
+            return Rule(Reach::Exempt, "the Lower Manual naming the Keyboard's own manual, the Hauptwerk, is no split");
         default: return {};
         }
     }

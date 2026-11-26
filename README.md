@@ -55,6 +55,10 @@ and plenty.
 
 ## Version history
 
+### 0.14.0 — 2026-11-26 — a keyboard split between two manuals
+
+- **Lower Manual.** A new control (Off, Hauptwerk, Positiv, Recit; Off as loaded) splits the one keyboard at middle C: the keys below it play the manual it names and the rest the Keyboard's, so one hand can accompany on one manual while the other plays a solo on another. The Pedal's Split still takes every key below c, making three zones. Sessions and patches saved before load with it off and play as they did.
+
 ### 0.13.0 — 2026-11-26 — a sound played in the church
 
 - **An audio input into the church.** A front end can now play another stereo sound into the organ's church: it is heard from the Hauptwerk at the console and takes the Room, the seat, the Volume and the output stage with the organ, but not the divisions' outputs or meters. Off 48 kHz it is resampled into the engine through the organ's own resampler kernel, flat to the same band, 64 engine samples (1.3 ms) later.
@@ -685,7 +689,9 @@ church of the size such an organ stands in, not a model of a building.
 
 **One keyboard.** The engine has a keyboard for each division, on MIDI
 channels 1 to 4. A front end with one stream of notes plays through
-`OreganaInstrument.h`: every key plays the manual Keyboard names, and Pedal
+`OreganaInstrument.h`: every key plays the manual Keyboard names, or, with a
+Lower Manual named, every key below middle C plays that one (the left hand
+on one manual and the right on another); Pedal
 Keys gives the Pedal nothing, the lowest key held up to g1 (an automatic
 pedal, as loaded), or every key below c, which then plays no manual. A key
 moves with either control while it is held. The mod wheel is the crescendo roller,
