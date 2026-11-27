@@ -55,6 +55,10 @@ and plenty.
 
 ## Version history
 
+### 0.15.0 — 2026-11-27 — cruciform two-box church and organ loft
+
+- **Coupled golden-ratio cruciform model (`Nave + Transept/Crossing`) and Organ Loft.** Upgrades `Nave.h` and `Churech.h` with four scaled cruciform church topologies (Chapel, Church, Basilica, Cathedral), an Organ Loft elevation control (`"from the top"` gallery placement beneath the crossing vault), dedicated `Mod` and `Early` controls, lossless living `Freeze`, external stereo `Sidechain` ducking (`-36 dBFS` threshold, up to `24 dB` GR), wet `-1 dBFS` `SoftLimit` with `SafetyCeiling`, Cathedral early-reflection taper, `9.2 kHz` stone sheen lift, zero-latency native `44.1` and `48 kHz` processing, and true crossfaded `Low Cut` and `High Cut` bypass.
+
 ### 0.14.0 — 2026-11-26 — the church as an effect (Churech)
 
 - **Churech, the church for any sound.** `Churech.h` plays Oregana's own church (`Nave.h`, not a copy) as a stereo effect, which the Churech Rack Extension wraps: four buildings from a chapel to a cathedral, the sound's distance and the listener's seat, Width and the three decays, a pre-delay, low and high cuts after the church, a duck that draws the church down while the sound plays, Mix and Output. Off 48 kHz only the church's input and answer pass the shared resampler (`RateBridge.h`); the sound itself is never resampled or delayed. The organ sounds as it did.
