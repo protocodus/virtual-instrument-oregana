@@ -55,6 +55,10 @@ and plenty.
 
 ## Version history
 
+### 0.15.2 — 2026-11-27 — coherent stereo early reflections, smart Freeze capture, DC blocker
+
+- **Stereo early reflections, Freeze, and DC safety (`Nave.h` and `Churech.h`).** Replaces alternating early difference signs in `Nave::Reflect()` with coherent ipsilateral/contralateral stereo projection (`0.65 * width`, raising hard-panned early L/R separation above `8 dB` while preserving zero-comb mono sum), enables Freeze armed on silence to capture a played phrase (`160 ms` fill before latching) while sleeping cleanly at `0%` CPU on silence, defers `Shape` rebuilds while frozen so switching `Type` mid-Freeze stays steady, and adds a `5 Hz` pre-church DC/subsonic blocker ahead of pre-delay and Freeze.
+
 ### 0.15.1 — 2026-11-27 — Churech dry purity, stereo-linked limiter, CV design caching, bright treble & wide mod
 
 - **Churech refinements (`Nave.h` and `Churech.h`).** Keeps `Mix = 0%` bit-exact unity dry regardless of `Distance` or `Seat` (engaging depth cues cleanly across `0..15%`), replaces static output clipping with a zero-latency `-0.3 dBFS` stereo-linked peak limiter, caches 32-line FDN filter designs and dirty-flags `Set`/`Stand`/`SetCharacter` under batch-rate CV modulation, opens air HF decay above `0.25x` up to `8.0 s`, and widens late modulation depth above `25%` up to `12x` while keeping `<= 0.25` identical for Oregana's pipe stops.

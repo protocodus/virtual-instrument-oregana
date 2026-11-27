@@ -87,6 +87,7 @@ public:
         dryShadowPole = static_cast<float>(std::exp(-kTwoPi * 5500.0 / rate));
         limAttack = static_cast<float>(1.0 - std::exp(-1.0 / (0.00015 * rate)));
         limRelease = static_cast<float>(1.0 - std::exp(-1.0 / (0.070 * rate)));
+        dcPole = static_cast<float>(std::exp(-kTwoPi * 5.0 / churchRate));
         roomSet = false;
         Clear();
     }
@@ -196,6 +197,8 @@ public:
         for (auto& ch : preDelay) ch.fill(0.0f);
         delayAt = tailGuard = 0;
         lowState = highState = {};
+        dcPrevIn.fill(0.0f);
+        dcPrevOut.fill(0.0f);
         dryShadowState.fill(0.0f);
         duckEnv = duckSustain = 0.0f;
         untilHostTurn = 0;
@@ -394,9 +397,16 @@ private:
             }
             --untilChurchTurn;
 
+            const float cleanL = Settled(inL - dcPrevIn[0] + dcPole * dcPrevOut[0]);
+            const float cleanR = Settled(inR - dcPrevIn[1] + dcPole * dcPrevOut[1]);
+            dcPrevIn[0] = inL;
+            dcPrevOut[0] = cleanL;
+            dcPrevIn[1] = inR;
+            dcPrevOut[1] = cleanR;
+
             const auto at = static_cast<std::size_t>(delayAt);
-            preDelay[0][at] = inL;
-            preDelay[1][at] = inR;
+            preDelay[0][at] = cleanL;
+            preDelay[1][at] = cleanR;
             const auto readAt = (at - static_cast<std::size_t>(delay)) & (kPreDelaySize - 1);
             float heardL = preDelay[0][readAt], heardR = preDelay[1][readAt];
             if (delayFade < delayFadeSpan) {
@@ -444,7 +454,7 @@ private:
             outRight[i] = ears[1];
             if (inL != 0.0f || inR != 0.0f) tailGuard = Max(delay, delayBefore) + static_cast<int>(0.12 * churchRate);
             else if (tailGuard > 0) --tailGuard;
-            const bool isQuiet = !freezeActive && tailGuard == 0 && inL == 0.0f && inR == 0.0f && Abs(ears[0]) < kFloor && Abs(ears[1]) < kFloor;
+            const bool isQuiet = (!freezeActive || nave.IsResting()) && tailGuard == 0 && inL == 0.0f && inR == 0.0f && Abs(ears[0]) < kFloor && Abs(ears[1]) < kFloor;
             quietFor = isQuiet ? quietFor + 1 : 0;
             if (quietFor >= kQuiet) Rest();
         }
@@ -454,6 +464,8 @@ private:
         nave.Clear();
         for (auto& ch : preDelay) ch.fill(0.0f);
         lowState = highState = {};
+        dcPrevIn.fill(0.0f);
+        dcPrevOut.fill(0.0f);
         dryShadowState.fill(0.0f);
         limEnv = 0.0f;
         tailGuard = 0;
@@ -485,7 +497,8 @@ private:
     double lastWidth = -1.0, lastSeat = 0.0, lastMod = -1.0, lastEarlyKnob = -1.0, lastDist = -1.0, lastLoft = -1.0;
     float dry = 1.0f, wetGain = 0.0f, dryAsked = 1.0f, wetAsked = 0.0f;
     float hostGlide = 0.0f, churchGlide = 0.0f;
-    float dryShadowPole = 0.0f;
+    float dryShadowPole = 0.0f, dcPole = 0.9993f;
+    std::array<float, 2> dcPrevIn {}, dcPrevOut {};
     std::array<float, 2> drySeatGain { { 1.0f, 1.0f } }, drySeatGainAsked { { 1.0f, 1.0f } };
     std::array<float, 2> dryShadow { { 0.0f, 0.0f } }, dryShadowAsked { { 0.0f, 0.0f } }, dryShadowState { { 0.0f, 0.0f } };
     int untilHostTurn = 0, untilChurchTurn = 0, quietFor = 0;

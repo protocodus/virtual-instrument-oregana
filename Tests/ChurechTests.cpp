@@ -263,7 +263,7 @@ void TrueStereoPreservesImage() {
     const std::size_t earlyEnd = static_cast<std::size_t>(0.08 * 48000);
     const double leftBiasDb = 10.0 * std::log10((sumSq(fromLeft.left, 0, earlyEnd) + 1.0e-30) / (sumSq(fromLeft.right, 0, earlyEnd) + 1.0e-30));
     const double rightBiasDb = 10.0 * std::log10((sumSq(fromRight.right, 0, earlyEnd) + 1.0e-30) / (sumSq(fromRight.left, 0, earlyEnd) + 1.0e-30));
-    Expect(leftBiasDb > 2.0 && rightBiasDb > 2.0, "TrueStereo", "early reflections preserve left/right source separation, dB", Min(leftBiasDb, rightBiasDb));
+    Expect(leftBiasDb > 8.0 && rightBiasDb > 8.0, "TrueStereo", "early reflections preserve strong left/right source separation, dB", Min(leftBiasDb, rightBiasDb));
 
     const std::size_t lateStart = static_cast<std::size_t>(0.2 * 48000), lateEnd = static_cast<std::size_t>(1.5 * 48000);
     double dot = 0.0, eL = 0.0, eR = 0.0;
@@ -666,6 +666,111 @@ void WideModulationDepthAtFull() {
     }
 }
 
+void FreezeArmedOnSilenceCapturesChord() {
+    auto ch = std::make_unique<Churech>();
+    ch->Prepare(48000);
+    Churech::Controls c = Wet();
+    c.type = Churech::kChapel;
+    c.freeze = true;
+    ch->Set(c);
+    const int block = 64;
+    std::vector<float> zero(block, 0.0f), burst(block), ol(block), orr(block);
+    float silentPeak = 0.0f;
+    for (int k = 0; k < 20; ++k) {
+        ch->Process(zero.data(), zero.data(), ol.data(), orr.data(), block);
+        for (int i = 0; i < block; ++i) silentPeak = Max(silentPeak, Max(Abs(ol[static_cast<std::size_t>(i)]), Abs(orr[static_cast<std::size_t>(i)])));
+    }
+    Expect(silentPeak == 0.0f, "FreezeArmSilence", "armed Freeze emits exact silence before sound arrives", silentPeak);
+
+    std::uint32_t rng = 77;
+    for (int k = 0; k < 263; ++k) {
+        for (int i = 0; i < block; ++i) burst[static_cast<std::size_t>(i)] = 0.25f * NextNoise(rng);
+        ch->Process(burst.data(), burst.data(), ol.data(), orr.data(), block);
+    }
+    auto measureRms = [&](int batches) {
+        double p = 0.0;
+        for (int k = 0; k < batches; ++k) {
+            ch->Process(zero.data(), zero.data(), ol.data(), orr.data(), block);
+            for (int i = 0; i < block; ++i)
+                p += static_cast<double>(ol[static_cast<std::size_t>(i)]) * ol[static_cast<std::size_t>(i)]
+                     + static_cast<double>(orr[static_cast<std::size_t>(i)]) * orr[static_cast<std::size_t>(i)];
+        }
+        return std::sqrt(p / (2.0 * block * batches));
+    };
+    (void)measureRms(263);
+    const double earlyRms = measureRms(300);
+    (void)measureRms(1500);
+    const double lateRms = measureRms(300);
+    const double driftDb = Db(lateRms / (earlyRms + 1.0e-30));
+    Expect(earlyRms > 1.0e-3 && Abs(driftDb) < 0.3, "FreezeArmCapture",
+           "Freeze armed on silence captures played chord and holds 2+ s in Chapel, dB drift", driftDb);
+}
+
+void FreezeTypeSwitchStaysSteady() {
+    auto ch = std::make_unique<Churech>();
+    ch->Prepare(48000);
+    Churech::Controls c = Wet();
+    c.type = Churech::kChurch;
+    ch->Set(c);
+    const int block = 64;
+    std::vector<float> zero(block, 0.0f), burst(block), ol(block), orr(block);
+    std::uint32_t rng = 99;
+    for (int k = 0; k < 250; ++k) {
+        for (int i = 0; i < block; ++i) burst[static_cast<std::size_t>(i)] = 0.25f * NextNoise(rng);
+        ch->Process(burst.data(), burst.data(), ol.data(), orr.data(), block);
+    }
+    c.freeze = true;
+    ch->Set(c);
+    auto stats = [&](int batches) {
+        double p = 0.0;
+        float prev = 0.0f, jump = 0.0f;
+        for (int k = 0; k < batches; ++k) {
+            ch->Process(zero.data(), zero.data(), ol.data(), orr.data(), block);
+            for (int i = 0; i < block; ++i) {
+                const float v = ol[static_cast<std::size_t>(i)];
+                p += static_cast<double>(v) * v;
+                if (k > 0 || i > 0) jump = Max(jump, Abs(v - prev));
+                prev = v;
+            }
+        }
+        return std::pair<double, float> { std::sqrt(p / (block * batches)), jump };
+    };
+    (void)stats(250);
+    const auto before = stats(200);
+    c.type = Churech::kCathedral;
+    ch->Set(c);
+    const auto after = stats(300);
+    const double shiftDb = Db(after.first / (before.first + 1.0e-30));
+    c.freeze = false;
+    ch->Set(c);
+    (void)stats(3000);
+    const auto released = stats(200);
+    Expect(Abs(shiftDb) < 0.5 && after.second < 2.0f * before.second && released.first < before.first * 0.4,
+           "FreezeTypeSwitch", "switching Type during Freeze stays steady and releases cleanly, dB", shiftDb);
+}
+
+void DcOffsetBlockedInFreeze() {
+    auto ch = std::make_unique<Churech>();
+    ch->Prepare(48000);
+    Churech::Controls c = Wet();
+    c.type = Churech::kChurch;
+    c.decayBass = 2.0;
+    ch->Set(c);
+    const int block = 64;
+    std::vector<float> dc(block, 0.2f), zero(block, 0.0f), ol(block), orr(block);
+    for (int k = 0; k < 500; ++k) ch->Process(dc.data(), dc.data(), ol.data(), orr.data(), block);
+    c.freeze = true;
+    ch->Set(c);
+    double sum = 0.0;
+    const int batches = 300;
+    for (int k = 0; k < batches; ++k) {
+        ch->Process(zero.data(), zero.data(), ol.data(), orr.data(), block);
+        for (int i = 0; i < block; ++i) sum += static_cast<double>(ol[static_cast<std::size_t>(i)]);
+    }
+    const double mean = Abs(sum / (block * batches));
+    Expect(mean < 0.02, "DcOffsetBlocked", "5 Hz pre-blocker stops DC accumulation before Freeze", mean);
+}
+
 } // namespace
 
 int main() {
@@ -692,6 +797,9 @@ int main() {
     StereoLinkedLimiterPreservesBalance();
     BrightTrebleRelaxesAirCap();
     WideModulationDepthAtFull();
+    FreezeArmedOnSilenceCapturesChord();
+    FreezeTypeSwitchStaysSteady();
+    DcOffsetBlockedInFreeze();
     std::printf("%s: %d failure(s)\n", failures == 0 ? "CHURECH_PASS" : "CHURECH_FAIL", failures);
     return failures == 0 ? 0 : 1;
 }

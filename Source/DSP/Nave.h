@@ -101,6 +101,7 @@ public:
     static constexpr int kFadeSamples = 2400;
 
     static double LineScale(double size) { return size <= 1.0 ? size : std::pow(size, kLineSizeExponent); }
+    bool IsResting() const { return resting; }
 
     void SetSampleRate(double hz) {
         const double safeHz = Clamp(hz, 22050.0, 192000.0);
@@ -127,7 +128,6 @@ public:
     void Set(double rt60, double bass, double treble, double size, double width, double seat = 0.0) {
         const BuildingSpec& spec = kArchitecturesSpec[static_cast<std::size_t>(architecture)];
         const double sr = sampleRate;
-        const double lineScale = LineScale(size);
         const double modOver = Max(0.0, (modDepth - 0.25) / 0.75);
         // Preserve <= 0.25 mod scaling bit-exact for Oregana while opening Churech up to 12x (+-12.4 cents).
         const double modScale = modDepth <= 0.25 ? (modDepth * 4.0) : (1.0 + 3.0 * modOver + 8.0 * modOver * modOver);
@@ -137,6 +137,7 @@ public:
                                 || rt60 != lastDesignRt60 || bass != lastDesignBass || treble != lastDesignTreble
                                 || size != lastDesignSize || modDepth != lastDesignMod || sr != lastDesignSr;
         if (needDesign) {
+            const double lineScale = LineScale(size);
             const double k = std::tan(kPi * kBassCorner / sr), fit = std::tan(kPi * kTrebleFit / sr);
             const double surfFactor = Clamp(treble * 1.15, 0.05, 0.96);
             const double tranFactor = std::sqrt(spec.tranDecayRatio);
@@ -209,13 +210,13 @@ public:
 
         const double w = Clamp(width, 0.0, 1.0);
         const double rho = std::pow(1.0 - w, 1.5);
-        const double sizeEnergyNorm = std::sqrt(lineScale / size);
         const double m0 = std::sqrt(0.5 * (1.0 + rho));
         const double s0 = std::sqrt(0.5 * (1.0 - rho));
         const double lostSideShare = 1.0 - (1.0 - kSideBassMix) * (1.0 - kSideBassMix);
         midBassBoostAsked = static_cast<float>(0.5 * (std::sqrt(1.0 + lostSideShare * (s0 * s0) / (m0 * m0)) - 1.0));
-        lateMidAsked = static_cast<float>(sizeEnergyNorm * m0);
-        lateSideAsked = static_cast<float>(sizeEnergyNorm * s0);
+        lateM0Asked = m0;
+        lateS0Asked = s0;
+        ApplyWidthForSize((!resting && freezeMix > 0.5f && shapes[1].size > 0.0) ? shapes[1].size : size);
         lateInWidthAsked = static_cast<float>(w);
 
         // Orthogonal zero-comb early width: th = 0.82 * w keeps M and S flat with constant stereo power.
@@ -249,7 +250,9 @@ public:
             elevation = elevationAsked;
             coupCos = coupCosAsked;
             coupSin = coupSinAsked;
-            freezeMix = freezeAsked ? 1.0f : 0.0f;
+            freezeMix = 0.0f;
+            freezeLatched = false;
+            freezeCaptureCount = 0;
         }
     }
 
@@ -306,7 +309,10 @@ public:
         elevation = elevationAsked;
         coupCos = coupCosAsked;
         coupSin = coupSinAsked;
-        freezeMix = freezeAsked ? 1.0f : 0.0f;
+        freezeMix = 0.0f;
+        freezeLatched = false;
+        freezeCaptureCount = 0;
+        fdnRmsSq = 0.0f;
         resting = true;
         quietFor = 0;
     }
@@ -328,18 +334,36 @@ public:
 
         const std::size_t ahead = static_cast<std::size_t>(write & (kAhead - 1));
         if (ahead == 0) {
-            if (fade >= 1.0f && (asked.size != shapes[1].size || asked.width != shapes[1].width || asked.seat != shapes[1].seat
-                                 || asked.arch != shapes[1].arch || asked.useArch != shapes[1].useArch
-                                 || asked.rateRatio != shapes[1].rateRatio || asked.placesRev != shapes[1].placesRev)) {
+            if (fade >= 1.0f && freezeMix <= 0.5f && (asked.size != shapes[1].size || asked.width != shapes[1].width
+                                                      || asked.seat != shapes[1].seat || asked.arch != shapes[1].arch
+                                                      || asked.useArch != shapes[1].useArch
+                                                      || asked.rateRatio != shapes[1].rateRatio
+                                                      || asked.placesRev != shapes[1].placesRev)) {
                 shapes[0] = shapes[1];
                 Build(shapes[1], asked);
+                ApplyWidthForSize(shapes[1].size);
                 fade = 0.0f;
             }
             Reflect(shapes[1], reflected[0], overhead[0]);
             if (fade < 1.0f) Reflect(shapes[0], reflected[1], overhead[1]);
         }
         const bool fading = fade < 1.0f;
-        const float freezeTarget = freezeAsked ? 1.0f : 0.0f;
+        float freezeTarget = 0.0f;
+        if (!freezeAsked) {
+            freezeLatched = false;
+            freezeCaptureCount = 0;
+        } else if (freezeLatched) {
+            freezeTarget = 1.0f;
+        } else if (freezeCaptureCount == 0 && fdnRmsSq > 1.0e-7f) {
+            freezeLatched = true;
+            freezeTarget = 1.0f;
+        } else {
+            ++freezeCaptureCount;
+            if (freezeCaptureCount >= static_cast<int>(0.16 * sampleRate)) {
+                freezeLatched = true;
+                freezeTarget = 1.0f;
+            }
+        }
         freezeMix += freezeStep * (freezeTarget - freezeMix);
         if (Abs(freezeTarget - freezeMix) < freezeStep) freezeMix = freezeTarget;
         const float freezeKeep = freezeMix;
@@ -685,6 +709,12 @@ private:
         return (i & 8u) ? tranLong[i & 7u].data() : tranShort[i & 7u].data();
     }
 
+    void ApplyWidthForSize(double s) {
+        const double sizeEnergyNorm = std::sqrt(LineScale(s) / s);
+        lateMidAsked = static_cast<float>(sizeEnergyNorm * lateM0Asked);
+        lateSideAsked = static_cast<float>(sizeEnergyNorm * lateS0Asked);
+    }
+
     void Build(Shape& shape, const Asked& to) const {
         const BuildingSpec& spec = kArchitecturesSpec[static_cast<std::size_t>(to.arch)];
         shape.size = to.size;
@@ -909,13 +939,12 @@ private:
             }
             if (earlyDiffQuiet[source] < kEarlySize) {
                 const float* const dbuf = earlyDiffBuffer[source].data();
-                const float dScale = static_cast<float>(0.42 * shape.width);
+                const float sideScale = static_cast<float>(0.65 * shape.width);
                 for (int i = 0; i < shape.count; ++i) {
                     const Reflection& r = shape.reflections[source][static_cast<std::size_t>(i)];
                     const float* const fl = dbuf + ((write - r.left) & (kEarlySize - 1));
                     const float* const fr = dbuf + ((write - r.right) & (kEarlySize - 1));
-                    const float alt = (i & 1) ? -dScale : dScale;
-                    const float gl = alt * r.leftGain, gr = -alt * r.rightGain;
+                    const float gl = sideScale * r.leftGain, gr = -sideScale * r.rightGain;
                     if (r.overhead) {
                         ol0 += gl * Load4(fl);     ol1 += gl * Load4(fl + 4);
                         ol2 += gl * Load4(fl + 8); ol3 += gl * Load4(fl + 12);
@@ -953,13 +982,12 @@ private:
             }
             if (earlyDiffQuiet[source] < kEarlySize) {
                 const float* const dbuf = earlyDiffBuffer[source].data();
-                const float dScale = static_cast<float>(0.42 * shape.width);
+                const float sideScale = static_cast<float>(0.65 * shape.width);
                 for (int i = 0; i < shape.count; ++i) {
                     const Reflection& r = shape.reflections[source][static_cast<std::size_t>(i)];
-                    const float alt = (i & 1) ? -dScale : dScale;
                     auto& target = r.overhead ? over : walls;
-                    Add(target[0].data(), alt * r.leftGain, dbuf + ((write - r.left) & (kEarlySize - 1)));
-                    Add(target[1].data(), -alt * r.rightGain, dbuf + ((write - r.right) & (kEarlySize - 1)));
+                    Add(target[0].data(), sideScale * r.leftGain, dbuf + ((write - r.left) & (kEarlySize - 1)));
+                    Add(target[1].data(), -sideScale * r.rightGain, dbuf + ((write - r.right) & (kEarlySize - 1)));
                 }
             }
         }
@@ -1000,7 +1028,10 @@ private:
 
     void Turn() {
         const double apDepth = 0.22 + 0.36 * modDepth;
+        double rmsSum = 0.0;
         for (std::size_t i = 0; i < kLines; ++i) {
+            const double ai = static_cast<double>(airIn[i]);
+            rmsSum += ai * ai;
             const double c = driftCos[i] * turnCos[i] - driftSin[i] * turnSin[i];
             const double s = driftSin[i] * turnCos[i] + driftCos[i] * turnSin[i];
             const double norm = 1.5 - 0.5 * (c * c + s * s);
@@ -1013,6 +1044,7 @@ private:
             freezeApC[i] = static_cast<float>(apC);
             for (std::size_t term = 0; term < kLossTerms; ++term) loss[term][i] += 0.25f * (wanted[term][i] - loss[term][i]);
         }
+        fdnRmsSq = static_cast<float>(rmsSum / static_cast<double>(kLines));
     }
 
     // Tiered FDN storage: 1.50 MiB total across 32 lines (vs 4.20 MiB flat).
@@ -1044,8 +1076,9 @@ private:
     std::uint32_t placesRev = 0;
     double sampleRate = kPipeRate, rateRatio = 1.0, modDepth = 0.25, headSpan = kHeadSamples;
     float fade = 1.0f, fadeStep = 1.0f / kFadeSamples;
-    float freezeMix = 0.0f, freezeStep = 1.0f / 1920.0f;
-    bool freezeAsked = false;
+    float freezeMix = 0.0f, freezeStep = 1.0f / 1920.0f, fdnRmsSq = 0.0f;
+    bool freezeAsked = false, freezeLatched = false;
+    int freezeCaptureCount = 0;
     int write = 0, untilTurn = 0, quietFor = 0, quietLimit = kLongCap;
     bool shortFilled = false, longFilled = false, resting = true;
 
@@ -1053,6 +1086,7 @@ private:
     float stEarlyL = 0.0f, stEarlyR = 0.0f, stOverL = 0.0f, stOverR = 0.0f;
     float stMidLow = 0.0f, stLateL = 0.0f, stLateR = 0.0f, stMidBass = 0.0f, stSideBass = 0.0f;
     float widthGlide = 1.0f / 480.0f;
+    double lateM0Asked = 0.7071067811865476, lateS0Asked = 0.7071067811865476;
     float lateMid = 0.7071f, lateSide = 0.7071f, lateMidAsked = 0.7071f, lateSideAsked = 0.7071f;
     float lateInWidth = 1.0f, lateInWidthAsked = 1.0f;
     float midBassBoost = 0.0f, midBassBoostAsked = 0.0f;
