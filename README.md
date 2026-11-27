@@ -55,6 +55,10 @@ and plenty.
 
 ## Version history
 
+### 0.15.1 — 2026-11-27 — Churech dry purity, stereo-linked limiter, CV design caching, bright treble & wide mod
+
+- **Churech refinements (`Nave.h` and `Churech.h`).** Keeps `Mix = 0%` bit-exact unity dry regardless of `Distance` or `Seat` (engaging depth cues cleanly across `0..15%`), replaces static output clipping with a zero-latency `-0.3 dBFS` stereo-linked peak limiter, caches 32-line FDN filter designs and dirty-flags `Set`/`Stand`/`SetCharacter` under batch-rate CV modulation, opens air HF decay above `0.25x` up to `8.0 s`, and widens late modulation depth above `25%` up to `12x` while keeping `<= 0.25` identical for Oregana's pipe stops.
+
 ### 0.15.0 — 2026-11-27 — cruciform two-box church and organ loft
 
 - **Coupled golden-ratio cruciform model (`Nave + Transept/Crossing`) and Organ Loft.** Upgrades `Nave.h` and `Churech.h` with four scaled cruciform church topologies (Chapel, Church, Basilica, Cathedral), an Organ Loft elevation control (`"from the top"` gallery placement beneath the crossing vault), dedicated `Mod` and `Early` controls, lossless living `Freeze`, external stereo `Sidechain` ducking (`-36 dBFS` threshold, up to `24 dB` GR), wet `-1 dBFS` `SoftLimit` with `SafetyCeiling`, Cathedral early-reflection taper, `9.2 kHz` stone sheen lift, zero-latency native `44.1` and `48 kHz` processing, and true crossfaded `Low Cut` and `High Cut` bypass.

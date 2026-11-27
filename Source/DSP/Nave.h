@@ -107,6 +107,7 @@ public:
         if (Abs(safeHz - sampleRate) < 0.1) return;
         sampleRate = safeHz;
         rateRatio = sampleRate / kPipeRate;
+        designValid = false;
     }
 
     void SetArchitecture(int arch) {
@@ -126,56 +127,85 @@ public:
     void Set(double rt60, double bass, double treble, double size, double width, double seat = 0.0) {
         const BuildingSpec& spec = kArchitecturesSpec[static_cast<std::size_t>(architecture)];
         const double sr = sampleRate;
-        const double k = std::tan(kPi * kBassCorner / sr), fit = std::tan(kPi * kTrebleFit / sr);
         const double lineScale = LineScale(size);
-
-        const double surfFactor = Clamp(treble * 1.15, 0.05, 0.96);
-        const double tranFactor = std::sqrt(spec.tranDecayRatio);
-        const double rtNave = Max(0.2, rt60 / tranFactor);
-        const double rtTran = Max(0.2, rt60 * tranFactor);
         const double modOver = Max(0.0, (modDepth - 0.25) / 0.75);
-        const double modScale = modDepth <= 0.25 ? (modDepth * 4.0) : (1.0 + 2.0 * modOver + 3.0 * modOver * modOver);
-        const double speedScale = 1.0 + 0.5 * modOver;
+        // Preserve <= 0.25 mod scaling bit-exact for Oregana while opening Churech up to 12x (+-12.4 cents).
+        const double modScale = modDepth <= 0.25 ? (modDepth * 4.0) : (1.0 + 3.0 * modOver + 8.0 * modOver * modOver);
+        const double speedScale = 1.0 + 0.6 * modOver;
 
-        for (std::size_t i = 0; i < kLines; ++i) {
-            const double lineRt = i < kBoxLines ? rtNave : rtTran;
-            const double surfTopRt = lineRt * surfFactor;
-            const double surf4kRt = lineRt / (1.0 + kTrebleShare * (1.0 / surfFactor - 1.0));
-            const double eff4kRt = 1.0 / (1.0 / surf4kRt + 1.0 / kAirRt4k);
-            const double effTopRt = 1.0 / (1.0 / surfTopRt + 1.0 / kAirRtTop);
-            const double safe4kRt = Min(eff4kRt, lineRt * 0.98);
-            const double safeTopRt = Min(effTopRt, safe4kRt * 0.75);
+        const bool needDesign = !designValid || architecture != lastDesignArch || useArchScale != lastDesignUseArch
+                                || rt60 != lastDesignRt60 || bass != lastDesignBass || treble != lastDesignTreble
+                                || size != lastDesignSize || modDepth != lastDesignMod || sr != lastDesignSr;
+        if (needDesign) {
+            const double k = std::tan(kPi * kBassCorner / sr), fit = std::tan(kPi * kTrebleFit / sr);
+            const double surfFactor = Clamp(treble * 1.15, 0.05, 0.96);
+            const double tranFactor = std::sqrt(spec.tranDecayRatio);
+            const double rtNave = Max(0.2, rt60 / tranFactor);
+            const double rtTran = Max(0.2, rt60 * tranFactor);
+            // Preserve calibrated 1.3 s air HF ceiling at <= 0.25 treble while relaxing up to 8.0 s for bright halls.
+            const double trebleOver = Clamp((treble - 0.25) / 0.35, 0.0, 1.0);
+            const double airTopRt = kAirRtTop + 6.7 * trebleOver * trebleOver;
 
-            const double lenSec = lineScale * kLineSamples[i] / kPipeRate;
-            const double cost = -3.0 * lenSec / lineRt, mid = std::pow(10.0, cost);
-            const double low = std::sqrt(std::pow(10.0, cost * (1.0 / bass - 1.0)));
-            const double a0 = 1.0 + k / low;
-            const double top = std::pow(10.0, -3.0 * lenSec * (1.0 / safeTopRt - 1.0 / lineRt));
-            const double at = std::pow(10.0, -3.0 * lenSec * (1.0 / safe4kRt - 1.0 / lineRt));
-            const double num = Max(at * at - top * top, 1.0e-12);
-            const double den = Max(1.0 - at * at, 1.0e-12);
-            const double corner = fit * std::sqrt(num / den);
-            const double designed[kLossTerms] = { mid * (1.0 + k * low) / a0, mid * (k * low - 1.0) / a0, (k / low - 1.0) / a0,
-                                                  (top + corner) / (1.0 + corner), (corner - top) / (1.0 + corner),
-                                                  (corner - 1.0) / (1.0 + corner) };
-            for (std::size_t term = 0; term < kLossTerms; ++term) wanted[term][i] = static_cast<float>(designed[term]);
+            for (std::size_t i = 0; i < kLines; ++i) {
+                const double lineRt = i < kBoxLines ? rtNave : rtTran;
+                const double surfTopRt = lineRt * surfFactor;
+                const double surf4kRt = lineRt / (1.0 + kTrebleShare * (1.0 / surfFactor - 1.0));
+                const double eff4kRt = 1.0 / (1.0 / surf4kRt + 1.0 / kAirRt4k);
+                const double effTopRt = 1.0 / (1.0 / surfTopRt + 1.0 / airTopRt);
+                const double safe4kRt = Min(eff4kRt, lineRt * 0.98);
+                const double safeTopRt = Min(effTopRt, safe4kRt * 0.75);
 
-            const double share = static_cast<double>((i * 7u) % kLines) / (kLines - 1);
-            const double step = kTwoPi * (kSlowestDrift + share * (kFastestDrift - kSlowestDrift)) * speedScale * kTurn / sr;
-            turnCos[i] = std::cos(step);
-            turnSin[i] = std::sin(step);
+                const double lenSec = lineScale * kLineSamples[i] / kPipeRate;
+                const double cost = -3.0 * lenSec / lineRt, mid = std::pow(10.0, cost);
+                const double low = std::sqrt(std::pow(10.0, cost * (1.0 / bass - 1.0)));
+                const double a0 = 1.0 + k / low;
+                const double top = std::pow(10.0, -3.0 * lenSec * (1.0 / safeTopRt - 1.0 / lineRt));
+                const double at = std::pow(10.0, -3.0 * lenSec * (1.0 / safe4kRt - 1.0 / lineRt));
+                const double num = Max(at * at - top * top, 1.0e-12);
+                const double den = Max(1.0 - at * at, 1.0e-12);
+                const double corner = fit * std::sqrt(num / den);
+                const double designed[kLossTerms] = { mid * (1.0 + k * low) / a0, mid * (k * low - 1.0) / a0, (k / low - 1.0) / a0,
+                                                      (top + corner) / (1.0 + corner), (corner - top) / (1.0 + corner),
+                                                      (corner - 1.0) / (1.0 + corner) };
+                for (std::size_t term = 0; term < kLossTerms; ++term) wanted[term][i] = static_cast<float>(designed[term]);
+
+                const double share = static_cast<double>((i * 7u) % kLines) / (kLines - 1);
+                const double step = kTwoPi * (kSlowestDrift + share * (kFastestDrift - kSlowestDrift)) * speedScale * kTurn / sr;
+                turnCos[i] = std::cos(step);
+                turnSin[i] = std::sin(step);
+            }
+
+            const double lateHz = useArchScale ? kLateArchCorner : kLateCorner;
+            earlyPole = static_cast<float>(std::exp(-kTwoPi * kEarlyCorner / sr));
+            latePole = static_cast<float>(std::exp(-kTwoPi * lateHz / sr));
+            sideBassPole = static_cast<float>(std::exp(-kTwoPi * kSideBassCorner / sr));
+            sideScatPole = static_cast<float>(std::exp(-kTwoPi * kEarlySideCorner / sr));
+            overShelfPole = static_cast<float>(std::exp(-kTwoPi * kOverShelfCorner / sr));
+            widthGlide = static_cast<float>(1.0 / (0.01 * sr));
+            fadeStep = static_cast<float>(1.0 / (0.05 * sr));
+            freezeStep = static_cast<float>(1.0 / (0.04 * sr));
+            quietLimit = static_cast<int>(kLongCap);
+
+            earlySidePreDelayLag = Max(1, static_cast<int>(kEarlySidePreDelay * rateRatio + 0.5));
+            for (std::size_t kStage = 0; kStage < kEarlyCommonSamples.size(); ++kStage)
+                earlyCommonLag[kStage] = Max(1, static_cast<int>(kEarlyCommonSamples[kStage] * rateRatio + 0.5));
+            for (std::size_t kStage = 0; kStage < kEarlySideSamples.size(); ++kStage)
+                earlySideLag[kStage] = Max(1, static_cast<int>(kEarlySideSamples[kStage] * rateRatio + 0.5));
+            for (std::size_t kStage = 0; kStage < 4; ++kStage) {
+                diffuserLagL[kStage] = Max(1, static_cast<int>(kDiffuserSamplesL[kStage] * rateRatio + 0.5));
+                diffuserLagR[kStage] = Max(1, static_cast<int>(kDiffuserSamplesR[kStage] * rateRatio + 0.5));
+            }
+
+            lastDesignArch = architecture;
+            lastDesignUseArch = useArchScale;
+            lastDesignRt60 = rt60;
+            lastDesignBass = bass;
+            lastDesignTreble = treble;
+            lastDesignSize = size;
+            lastDesignMod = modDepth;
+            lastDesignSr = sr;
+            designValid = true;
         }
-
-        const double lateHz = useArchScale ? kLateArchCorner : kLateCorner;
-        earlyPole = static_cast<float>(std::exp(-kTwoPi * kEarlyCorner / sr));
-        latePole = static_cast<float>(std::exp(-kTwoPi * lateHz / sr));
-        sideBassPole = static_cast<float>(std::exp(-kTwoPi * kSideBassCorner / sr));
-        sideScatPole = static_cast<float>(std::exp(-kTwoPi * kEarlySideCorner / sr));
-        overShelfPole = static_cast<float>(std::exp(-kTwoPi * kOverShelfCorner / sr));
-        widthGlide = static_cast<float>(1.0 / (0.01 * sr));
-        fadeStep = static_cast<float>(1.0 / (0.05 * sr));
-        freezeStep = static_cast<float>(1.0 / (0.04 * sr));
-        quietLimit = static_cast<int>(kLongCap);
 
         const double w = Clamp(width, 0.0, 1.0);
         const double rho = std::pow(1.0 - w, 1.5);
@@ -198,16 +228,6 @@ public:
         coupSinAsked = static_cast<float>(std::sin(spec.coupling));
         driftPeak = static_cast<float>(modScale * kDriftSamples * rateRatio);
         headSpan = kHeadSamples * rateRatio;
-
-        earlySidePreDelayLag = Max(1, static_cast<int>(kEarlySidePreDelay * rateRatio + 0.5));
-        for (std::size_t kStage = 0; kStage < kEarlyCommonSamples.size(); ++kStage)
-            earlyCommonLag[kStage] = Max(1, static_cast<int>(kEarlyCommonSamples[kStage] * rateRatio + 0.5));
-        for (std::size_t kStage = 0; kStage < kEarlySideSamples.size(); ++kStage)
-            earlySideLag[kStage] = Max(1, static_cast<int>(kEarlySideSamples[kStage] * rateRatio + 0.5));
-        for (std::size_t kStage = 0; kStage < 4; ++kStage) {
-            diffuserLagL[kStage] = Max(1, static_cast<int>(kDiffuserSamplesL[kStage] * rateRatio + 0.5));
-            diffuserLagR[kStage] = Max(1, static_cast<int>(kDiffuserSamplesR[kStage] * rateRatio + 0.5));
-        }
 
         const double maxSeat = useArchScale ? Max(2.5, 0.5 * spec.naveWide - 1.5) : kSeatMost;
         asked = { size, w, Clamp(seat, -maxSeat, maxSeat), architecture, useArchScale, rateRatio, placesRev };
@@ -1017,6 +1037,10 @@ private:
 
     int architecture = kArchChurch;
     bool useArchScale = false;
+    bool designValid = false, lastDesignUseArch = false;
+    int lastDesignArch = -1;
+    double lastDesignRt60 = 0.0, lastDesignBass = 0.0, lastDesignTreble = 0.0;
+    double lastDesignSize = 0.0, lastDesignMod = -1.0, lastDesignSr = 0.0;
     std::uint32_t placesRev = 0;
     double sampleRate = kPipeRate, rateRatio = 1.0, modDepth = 0.25, headSpan = kHeadSamples;
     float fade = 1.0f, fadeStep = 1.0f / kFadeSamples;

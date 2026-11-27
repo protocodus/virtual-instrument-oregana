@@ -154,12 +154,14 @@ void LargerRingsLonger() {
 }
 
 void DistanceLowersTheSound() {
+    // Since 0.15.1, Mix = 0% stays bit-exact unity dry regardless of Distance;
+    // the gain-compensated direct attenuation engages cleanly across 0..15% Mix.
     Churech::Controls near, far;
-    near.mix = far.mix = 0.0;
+    near.mix = far.mix = 0.25;
+    near.earlyLevel = far.earlyLevel = 0.0;
     far.distance = 1.0;
-    const double drop = Db(Play(far, Tone, 0.5).Rms(0.1, 0.5) / Play(near, Tone, 0.5).Rms(0.1, 0.5));
-    // Gain-compensated musical curve gently recedes dry sound ~2.6 dB at Distance 100%.
-    Expect(drop < -2.0 && drop > -3.5, "Distance", "the furthest place lowers dry sound ~2.6 dB", drop);
+    const double drop = Db(Play(far, Tone, 0.03).Rms(0.005, 0.03) / Play(near, Tone, 0.03).Rms(0.005, 0.03));
+    Expect(drop < -2.0 && drop > -3.5, "Distance", "the furthest place lowers direct insert level ~2.6 dB", drop);
 
     // On an insert (Mix 30%), overall track loudness stays balanced within 2.5 dB across Distance.
     Churech::Controls insNear, insFar;
@@ -303,14 +305,15 @@ void LoftAndSeat() {
     for (std::size_t i = 0; i < tf.left.size(); ++i) diff += Abs(tf.left[i] - tl.left[i]);
     Expect(diff > 0.05, "Loft", "organ loft reflections differ markedly from floor source", diff);
 
-    // Seat moves the direct sound on dry mixes (mono-safe ILD + head-shadow), while Seat = 0 leaves dry bit-exact.
+    // Seat moves direct sound on active inserts (mono-safe ILD + head-shadow), while Mix = 0% stays unity dry.
     Churech::Controls dryCenter, dryRight;
-    dryCenter.mix = dryRight.mix = 0.0;
+    dryCenter.mix = dryRight.mix = 0.20;
+    dryCenter.earlyLevel = dryRight.earlyLevel = 0.0;
     dryRight.seat = 1.0;
-    const Take tr = Play(dryRight, Tone, 0.3);
-    const double dryRatio = Db(tr.Rms(0.1, 0.3) / Play(dryCenter, Tone, 0.3).Rms(0.1, 0.3));
+    const Take tr = Play(dryRight, Tone, 0.03);
+    const double dryRatio = Db(tr.Rms(0.005, 0.03) / Play(dryCenter, Tone, 0.03).Rms(0.005, 0.03));
     double earDiff = 0.0;
-    for (std::size_t i = tr.At(0.1); i < tr.At(0.3); ++i) earDiff += Abs(tr.left[i] - tr.right[i]);
+    for (std::size_t i = tr.At(0.005); i < tr.At(0.03); ++i) earDiff += Abs(tr.left[i] - tr.right[i]);
     Expect(earDiff > 1.0 && Abs(dryRatio) < 4.0, "SeatDirect", "off-axis seat shapes direct left/right level and shadow", earDiff);
 }
 
@@ -454,25 +457,32 @@ void DryPathPureAtZeroMix() {
     Churech::Controls c;
     c.mix = 0.0;
     c.outputDb = 0.0;
+    // Since 0.15.1, Distance, Seat, and Loft never alter the dry path at Mix = 0%.
+    c.distance = 1.0;
+    c.seat = 1.0;
+    c.loft = 0.0;
     auto hotSine = [](std::size_t i, int rate) {
         return 0.96f * static_cast<float>(std::sin(kTwoPi * 440.0 * static_cast<double>(i) / rate));
     };
     const Take t = Play(c, hotSine, 0.2);
     double maxErr = 0.0;
     for (std::size_t i = 0; i < t.left.size(); ++i)
-        maxErr = Max(maxErr, static_cast<double>(Abs(t.left[i] - hotSine(i, 48000))));
-    Expect(maxErr == 0.0, "DryPurity", "-0.35 dBFS signal at Mix 0% is bit-exact clean", maxErr);
+        maxErr = Max(maxErr, static_cast<double>(Max(Abs(t.left[i] - hotSine(i, 48000)), Abs(t.right[i] - hotSine(i, 48000)))));
+    Expect(maxErr == 0.0, "DryPurity", "-0.35 dBFS signal at Mix 0% is bit-exact clean even at Distance 100% / Seat R100", maxErr);
 }
 
 void SeatMonoSafeAndFastGlide() {
+    // Measure direct-path Seat before Cathedral's 65.9 ms FDN onset (earlyLevel = 0.0, Mix = 20%).
     Churech::Controls centered, offAxis;
-    centered.mix = offAxis.mix = 0.0;
+    centered.type = offAxis.type = Churech::kCathedral;
+    centered.mix = offAxis.mix = 0.20;
+    centered.earlyLevel = offAxis.earlyLevel = 0.0;
     offAxis.seat = 1.0;
     auto notchTone = [](std::size_t i, int rate) {
         return 0.4f * static_cast<float>(std::sin(kTwoPi * 1412.0 * static_cast<double>(i) / rate));
     };
-    const Take tc = Play(centered, notchTone, 0.2, 48000, 64);
-    const Take ts = Play(offAxis, notchTone, 0.2, 48000, 64);
+    const Take tc = Play(centered, notchTone, 0.064, 48000, 64);
+    const Take ts = Play(offAxis, notchTone, 0.064, 48000, 64);
     auto monoRms = [](const Take& t, double a, double b) {
         double p = 0.0;
         for (std::size_t i = t.At(a); i < t.At(b); ++i) {
@@ -481,16 +491,16 @@ void SeatMonoSafeAndFastGlide() {
         }
         return std::sqrt(p / static_cast<double>(Max<std::size_t>(t.At(b) - t.At(a), 1)));
     };
-    const double monoDropDb = Db(monoRms(ts, 0.05, 0.2) / monoRms(tc, 0.05, 0.2));
+    const double monoDropDb = Db(monoRms(ts, 0.005, 0.060) / monoRms(tc, 0.005, 0.060));
     Expect(monoDropDb > -3.0, "SeatMonoSafe", "Seat = 1.0 preserves mono sum at 1412 Hz without comb notch, dB", monoDropDb);
 
-    // Check fast 20 ms glide even at 192 kHz.
-    const Take swept192 = Play(centered, notchTone, 0.2, 192000, 64, &offAxis, 0.05);
-    const Take settled192 = Play(offAxis, notchTone, 0.2, 192000, 64);
+    // Check fast 20 ms glide even at 192 kHz (0.045..0.064 s stays before 65.9 ms Cathedral FDN onset).
+    const Take swept192 = Play(centered, notchTone, 0.065, 192000, 64, &offAxis, 0.020);
+    const Take settled192 = Play(offAxis, notchTone, 0.065, 192000, 64);
     double lateDiff192 = 0.0;
-    for (std::size_t i = swept192.At(0.08); i < swept192.At(0.15); ++i)
+    for (std::size_t i = swept192.At(0.045); i < swept192.At(0.064); ++i)
         lateDiff192 = Max(lateDiff192, static_cast<double>(Abs(swept192.right[i] - settled192.right[i])));
-    Expect(lateDiff192 < 1.0e-4, "SeatGlide192", "192 kHz Seat transition finishes within 30 ms", lateDiff192);
+    Expect(lateDiff192 < 1.0e-4, "SeatGlide192", "192 kHz Seat transition finishes within 25 ms", lateDiff192);
 }
 
 void LivingFreezeAndIdleSleep() {
@@ -536,6 +546,126 @@ void LivingFreezeAndIdleSleep() {
     Expect(Abs(driftDb) < 0.2 && wfCorr < 0.5, "FreezeAlive", "lossless modulated Freeze evolves naturally without losing level", wfCorr);
 }
 
+void CvDirtyFlagMatchesFreshSet() {
+    auto chSingle = std::make_unique<Churech>();
+    auto chRepeated = std::make_unique<Churech>();
+    chSingle->Prepare(48000);
+    chRepeated->Prepare(48000);
+    Churech::Controls base = Wet();
+    base.mix = 0.45;
+    chSingle->Set(base);
+    chRepeated->Set(base);
+    const int block = 64, batches = 300;
+    std::vector<float> in(block), lA(block), rA(block), lB(block), rB(block);
+    double maxDiff = 0.0;
+    for (int b = 0; b < batches; ++b) {
+        for (int i = 0; i < block; ++i) in[static_cast<std::size_t>(i)] = Tone(static_cast<std::size_t>(b * block + i), 48000);
+        chRepeated->Set(base);
+        chSingle->Process(in.data(), in.data(), lA.data(), rA.data(), block);
+        chRepeated->Process(in.data(), in.data(), lB.data(), rB.data(), block);
+        for (int i = 0; i < block; ++i)
+            maxDiff = Max(maxDiff, static_cast<double>(Max(Abs(lA[static_cast<std::size_t>(i)] - lB[static_cast<std::size_t>(i)]),
+                                                           Abs(rA[static_cast<std::size_t>(i)] - rB[static_cast<std::size_t>(i)]))));
+    }
+    Expect(maxDiff == 0.0, "CvDirtyFlagParity", "repeated Set() with fixed room params is bit-exact with single Set()", maxDiff);
+
+    // Modulating Mix at batch rate leaves FDN untouched and glides cleanly without clicks.
+    chRepeated->Prepare(48000);
+    float prevL = 0.0f, maxJump = 0.0f;
+    Churech::Controls lfo = base;
+    for (int b = 0; b < 400; ++b) {
+        const double phase = static_cast<double>(b) * 64.0 / 48000.0 * 2.0;
+        const double tri = 1.0 - 2.0 * Abs((phase - std::floor(phase)) - 0.5);
+        lfo.mix = 0.05 + 0.80 * tri;
+        chRepeated->Set(lfo);
+        for (int i = 0; i < block; ++i) in[static_cast<std::size_t>(i)] = Tone(static_cast<std::size_t>(b * block + i), 48000);
+        chRepeated->Process(in.data(), in.data(), lB.data(), rB.data(), block);
+        for (int i = 0; i < block; ++i) {
+            if (b > 0 || i > 0) maxJump = Max(maxJump, Abs(lB[static_cast<std::size_t>(i)] - prevL));
+            prevL = lB[static_cast<std::size_t>(i)];
+        }
+    }
+    Expect(maxJump < 0.05f, "CvMixLfoSmooth", "batch-rate Mix LFO glides without FDN clicks", maxJump);
+}
+
+void StereoLinkedLimiterPreservesBalance() {
+    auto ch = std::make_unique<Churech>();
+    ch->Prepare(48000);
+    Churech::Controls c;
+    c.mix = 0.0;
+    c.outputDb = 0.0;
+    ch->Set(c);
+    const int block = 64, batches = 200;
+    std::vector<float> inL(block), inR(block), outL(block), outR(block);
+    float peak = 0.0f;
+    double pL = 0.0, pR = 0.0;
+    for (int b = 0; b < batches; ++b) {
+        for (int i = 0; i < block; ++i) {
+            const double s = std::sin(kTwoPi * 330.0 * static_cast<double>(b * block + i) / 48000.0);
+            inL[static_cast<std::size_t>(i)] = static_cast<float>(1.6 * s);
+            inR[static_cast<std::size_t>(i)] = static_cast<float>(0.4 * s);
+        }
+        ch->Process(inL.data(), inR.data(), outL.data(), outR.data(), block);
+        for (int i = 0; i < block; ++i) {
+            peak = Max(peak, Max(Abs(outL[static_cast<std::size_t>(i)]), Abs(outR[static_cast<std::size_t>(i)])));
+            if (b >= 40) {
+                pL += static_cast<double>(outL[static_cast<std::size_t>(i)]) * outL[static_cast<std::size_t>(i)];
+                pR += static_cast<double>(outR[static_cast<std::size_t>(i)]) * outR[static_cast<std::size_t>(i)];
+            }
+        }
+    }
+    const double ratio = std::sqrt(pL / (pR + 1.0e-30));
+    Expect(peak < 1.0f && Abs(ratio - 4.0) < 0.04, "StereoLinkedLimiter",
+           "peak limiter caps asymmetric +4 dBFS signal while preserving 4:1 L/R balance", ratio);
+}
+
+void BrightTrebleRelaxesAirCap() {
+    Churech::Controls dark = Wet(), bright = Wet();
+    dark.type = bright.type = Churech::kCathedral;
+    dark.decayTreble = 0.2;
+    bright.decayTreble = 0.6;
+    const Take td = Play(dark, Burst, 2.2), tb = Play(bright, Burst, 2.2);
+    auto hfTailRms = [](const Take& t) {
+        double p = 0.0;
+        const std::size_t a = t.At(1.0), b = t.At(2.0);
+        for (std::size_t i = Max<std::size_t>(a, 2); i < b; ++i) {
+            const double d2L = static_cast<double>(t.left[i]) - 2.0 * t.left[i - 1] + t.left[i - 2];
+            const double d2R = static_cast<double>(t.right[i]) - 2.0 * t.right[i - 1] + t.right[i - 2];
+            p += d2L * d2L + d2R * d2R;
+        }
+        return std::sqrt(p / static_cast<double>(Max<std::size_t>(b - a, 1)));
+    };
+    const double liftDb = Db(hfTailRms(tb) / hfTailRms(td));
+    Expect(liftDb > 6.0, "BrightTrebleAir", "Cathedral 0.6x Treble retains > +6 dB late HF energy vs 0.2x, dB", liftDb);
+}
+
+void WideModulationDepthAtFull() {
+    for (int type : { static_cast<int>(Churech::kChapel), static_cast<int>(Churech::kCathedral) }) {
+        const int sr = (type == Churech::kChapel) ? 44100 : 48000;
+        Churech::Controls normal = Wet(), wideMod = Wet();
+        normal.type = wideMod.type = type;
+        normal.modulation = 0.25;
+        wideMod.modulation = 1.0;
+        const Take tn = Play(normal, Burst, 2.0, sr), tw = Play(wideMod, Burst, 2.0, sr);
+        double peak = 0.0, diffSq = 0.0, refSq = 0.0;
+        const std::size_t a = tw.At(1.0), b = tw.At(1.8);
+        for (std::size_t i = 0; i < tw.left.size(); ++i) {
+            const float l = tw.left[i], r = tw.right[i];
+            if (!(l == l && r == r)) peak = 999.0;
+            peak = Max(peak, static_cast<double>(Max(Abs(l), Abs(r))));
+        }
+        for (std::size_t i = a; i < b; ++i) {
+            const double dl = tw.left[i] - tn.left[i], dr = tw.right[i] - tn.right[i];
+            diffSq += dl * dl + dr * dr;
+            refSq += tn.left[i] * tn.left[i] + tn.right[i] * tn.right[i];
+        }
+        const double relDiff = std::sqrt(diffSq / (refSq + 1.0e-30));
+        char what[80];
+        std::snprintf(what, sizeof what, "type %d at %d Hz Mod 100%% is bounded and distinct vs 25%%", type, sr);
+        Expect(peak < 1.0 && relDiff > 0.1, "WideModulation", what, relDiff);
+    }
+}
+
 } // namespace
 
 int main() {
@@ -558,6 +688,10 @@ int main() {
     DryPathPureAtZeroMix();
     SeatMonoSafeAndFastGlide();
     LivingFreezeAndIdleSleep();
+    CvDirtyFlagMatchesFreshSet();
+    StereoLinkedLimiterPreservesBalance();
+    BrightTrebleRelaxesAirCap();
+    WideModulationDepthAtFull();
     std::printf("%s: %d failure(s)\n", failures == 0 ? "CHURECH_PASS" : "CHURECH_FAIL", failures);
     return failures == 0 ? 0 : 1;
 }

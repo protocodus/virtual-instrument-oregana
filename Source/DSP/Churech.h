@@ -85,6 +85,9 @@ public:
         duckGlide = static_cast<float>(1.0 / (0.01 * rate));
         meterDecay = static_cast<float>(std::exp(-1.0 / (0.28 * rate)));
         dryShadowPole = static_cast<float>(std::exp(-kTwoPi * 5500.0 / rate));
+        limAttack = static_cast<float>(1.0 - std::exp(-1.0 / (0.00015 * rate)));
+        limRelease = static_cast<float>(1.0 - std::exp(-1.0 / (0.070 * rate)));
+        roomSet = false;
         Clear();
     }
 
@@ -92,7 +95,7 @@ public:
         const int clampedType = Clamp(c.type, 0, kTypes - 1);
         const Building& building = kBuildings[static_cast<std::size_t>(clampedType)];
         const Nave::BuildingSpec& spec = Nave::kArchitecturesSpec[static_cast<std::size_t>(clampedType)];
-        nave.SetArchitecture(clampedType);
+        if (!roomSet || clampedType != lastType) nave.SetArchitecture(clampedType);
 
         const double listenerY = 0.78 * spec.naveLong;
         const double nearY = Max(spec.fromWall + 2.0, listenerY - 3.8);
@@ -100,24 +103,54 @@ public:
         const double loft = Clamp(c.loft, 0.0, 1.0);
         const double sourceZ = 1.6 + loft * (spec.loftHeight - 1.6);
         const double higherP = sourceZ - spec.loftHeight;
-        for (int p = 0; p < kPlaces; ++p) {
-            const double frac = static_cast<double>(p) / (kPlaces - 1);
-            const double yP = nearY - (nearY - farY) * frac;
-            nave.Stand(p, yP - spec.fromWall, higherP);
+        const bool needStand = !roomSet || clampedType != lastType || Abs(loft - lastStandLoft) >= 0.015;
+        if (needStand) {
+            for (int p = 0; p < kPlaces; ++p) {
+                const double frac = static_cast<double>(p) / (kPlaces - 1);
+                const double yP = nearY - (nearY - farY) * frac;
+                nave.Stand(p, yP - spec.fromWall, higherP);
+            }
+            lastStandLoft = loft;
         }
 
         const double d = Clamp(c.distance, 0.0, 1.0);
         const double earlyDistScale = 1.0 - 0.55 * d;
         const double lateDistScale = 1.0 + 0.20 * d;
         const double earlyKnob = Clamp(c.earlyLevel, 0.0, 2.0);
+        const double mod = Clamp(c.modulation, 0.0, 1.0);
         freezeActive = c.freeze;
 
-        nave.SetCharacter(Clamp(c.modulation, 0.0, 1.0), earlyKnob * earlyDistScale, lateDistScale, loft, freezeActive);
+        const bool needChar = !roomSet || mod != lastMod || earlyKnob != lastEarlyKnob || d != lastDist
+                              || loft != lastLoft || freezeActive != lastFreeze;
+        if (needChar) {
+            nave.SetCharacter(mod, earlyKnob * earlyDistScale, lateDistScale, loft, freezeActive);
+        }
+
+        const double decay = Clamp(c.decay, 0.5, 2.0);
+        const double decayBass = Clamp(c.decayBass, 0.5, 2.0);
+        const double decayTreble = Clamp(c.decayTreble, 0.1, 0.6);
         const double maxSeat = Max(2.5, 0.5 * spec.naveWide - 1.5);
         const double seatMeters = Clamp(c.seat, -1.0, 1.0) * maxSeat;
         const double w = Clamp(c.width, 0.0, 1.0);
-        nave.Set(building.decay * Clamp(c.decay, 0.5, 2.0), Clamp(c.decayBass, 0.5, 2.0), Clamp(c.decayTreble, 0.1, 0.6),
-                 building.size, w, seatMeters);
+        const bool needNaveSet = !roomSet || clampedType != lastType || decay != lastDecay || decayBass != lastBass
+                                 || decayTreble != lastTreble || w != lastWidth || seatMeters != lastSeat
+                                 || mod != lastMod || (resting && (needStand || needChar));
+        if (needNaveSet) {
+            nave.Set(building.decay * decay, decayBass, decayTreble, building.size, w, seatMeters);
+        }
+
+        lastType = clampedType;
+        lastDecay = decay;
+        lastBass = decayBass;
+        lastTreble = decayTreble;
+        lastWidth = w;
+        lastSeat = seatMeters;
+        lastMod = mod;
+        lastEarlyKnob = earlyKnob;
+        lastDist = d;
+        lastLoft = loft;
+        lastFreeze = freezeActive;
+        roomSet = true;
 
         const double at = d * (kPlaces - 1);
         const int nearIdx = Min(static_cast<int>(at), kPlaces - 2);
@@ -126,11 +159,12 @@ public:
         placeAsked[static_cast<std::size_t>(nearIdx)] = static_cast<float>(1.0 - fracFar);
         placeAsked[static_cast<std::size_t>(nearIdx + 1)] = static_cast<float>(fracFar);
 
-        // Gain-compensated depth curve: maintains insert mix loudness within ~1.5 dB while receding.
-        const double fromSound = 1.0 / (1.0 + 0.35 * d);
-        const double wetDistBoost = 1.0 + 0.45 * d;
+        // Gain-compensated depth curve + pure unity dry at Mix = 0% (engaged smoothly by Mix = 15%).
         const double out = std::pow(10.0, Clamp(c.outputDb, -24.0, 12.0) / 20.0);
         const double mix = Clamp(c.mix, 0.0, 1.0);
+        const double wetBlend = Clamp(mix / 0.15, 0.0, 1.0);
+        const double fromSound = 1.0 / (1.0 + 0.35 * d * wetBlend);
+        const double wetDistBoost = 1.0 + 0.45 * d;
         dryAsked = mix >= 1.0 ? 0.0f : static_cast<float>(out * fromSound * std::cos(0.5 * kPi * mix));
         wetAsked = mix <= 0.0 ? 0.0f : static_cast<float>(out * wetDistBoost * std::sin(0.5 * kPi * mix));
 
@@ -142,9 +176,9 @@ public:
         const std::size_t farEar = seatMeters > 0.0 ? 1 : 0;
         drySeatGainAsked = { { 1.0f, 1.0f } };
         dryShadowAsked = { { 0.0f, 0.0f } };
-        if (Abs(seatMeters) > 1.0e-6 && w > 1.0e-6) {
-            drySeatGainAsked[farEar] = static_cast<float>(Max(0.70, 1.0 - 0.35 * seatFar));
-            dryShadowAsked[farEar] = static_cast<float>(Clamp(0.45 * seatFar, 0.0, 0.38));
+        if (Abs(seatMeters) > 1.0e-6 && w > 1.0e-6 && wetBlend > 0.0) {
+            drySeatGainAsked[farEar] = static_cast<float>(Max(0.70, 1.0 - 0.35 * seatFar * wetBlend));
+            dryShadowAsked[farEar] = static_cast<float>(Clamp(0.45 * seatFar * wetBlend, 0.0, 0.38));
         }
 
         preDelayAsked = static_cast<int>(Clamp(c.preDelayMs, 0.0, kMostPreDelayMs) * 0.001 * churchRate + 0.5);
@@ -167,7 +201,7 @@ public:
         untilHostTurn = 0;
         untilChurchTurn = 0;
         quietFor = 0;
-        meterEnv[0] = meterEnv[1] = meterDuckEnv = 0.0f;
+        meterEnv[0] = meterEnv[1] = meterDuckEnv = limEnv = 0.0f;
         resting = true;
         Settle();
     }
@@ -222,8 +256,12 @@ public:
                 const float wetR = SoftLimit(wd * wetBuffer[1][static_cast<std::size_t>(i)]);
                 const float rawL = dry * seatedL + wetL;
                 const float rawR = dry * seatedR + wetR;
-                outLeft[i] = Settled(SafetyCeiling(rawL));
-                outRight[i] = Settled(SafetyCeiling(rawR));
+                const float stereoPeak = Max(Abs(rawL), Abs(rawR));
+                const float limCoeff = stereoPeak > limEnv ? limAttack : limRelease;
+                limEnv = Settled(limEnv + limCoeff * (stereoPeak - limEnv));
+                const float limGain = limEnv > kLimThresh ? (kLimThresh / limEnv) : 1.0f;
+                outLeft[i] = Settled(SafetyCeiling(rawL * limGain));
+                outRight[i] = Settled(SafetyCeiling(rawR * limGain));
 
                 const float aL = Abs(outLeft[i]), aR = Abs(outRight[i]);
                 meterEnv[0] = aL > meterEnv[0] ? aL : Settled(meterEnv[0] * meterDecay);
@@ -264,7 +302,8 @@ private:
     static constexpr float kDuckFloorDb = -36.0f, kDuckRangeDb = 36.0f, kDuckDepthDb = 24.0f;
     static constexpr float kCornerGlide = 0.25f;
     static constexpr float kLimitKnee = 0.8912509f, kLimitCeiling = 0.99f;         // -1.0 dBFS wet knee
-    static constexpr float kHeadroomKnee = 0.985f, kHeadroomCeiling = 0.999f;      // -0.13 dBFS true safety ceiling
+    static constexpr float kLimThresh = 0.9660509f;                                  // -0.3 dBFS stereo-linked peak limiter
+    static constexpr float kHeadroomKnee = 0.995f, kHeadroomCeiling = 0.999f;        // single-sample impulse safety guard
 
     struct Pass { float low = 0.0f, band = 0.0f; };
     struct Filter { float g = 0.0f, k = 1.41421356f; };
@@ -416,6 +455,7 @@ private:
         for (auto& ch : preDelay) ch.fill(0.0f);
         lowState = highState = {};
         dryShadowState.fill(0.0f);
+        limEnv = 0.0f;
         tailGuard = 0;
         resting = true;
         Settle();
@@ -438,6 +478,11 @@ private:
     float duckEnv = 0.0f, duckSustain = 0.0f, duckGain = 1.0f, duckTarget = 1.0f, duckAsked = 0.0f;
     float duckAttack = 0.005f, duckReleaseFast = 0.0002f, duckReleaseSlow = 0.00005f, duckSustainCoeff = 0.00006f, duckGlide = 1.0f / 480.0f;
     float meterEnv[2] { 0.0f, 0.0f }, meterDuckEnv = 0.0f, meterDecay = 0.9999f;
+    float limEnv = 0.0f, limAttack = 0.13f, limRelease = 0.0003f;
+    bool roomSet = false, lastFreeze = false;
+    int lastType = -1;
+    double lastStandLoft = -1.0, lastDecay = 0.0, lastBass = 0.0, lastTreble = 0.0;
+    double lastWidth = -1.0, lastSeat = 0.0, lastMod = -1.0, lastEarlyKnob = -1.0, lastDist = -1.0, lastLoft = -1.0;
     float dry = 1.0f, wetGain = 0.0f, dryAsked = 1.0f, wetAsked = 0.0f;
     float hostGlide = 0.0f, churchGlide = 0.0f;
     float dryShadowPole = 0.0f;
